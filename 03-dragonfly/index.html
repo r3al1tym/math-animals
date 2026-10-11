@@ -1,0 +1,1715 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Math-Animals 05: emperor dragonfly</title>
+<style>html,body{margin:0;background:#1b1712}body{min-height:100vh;display:flex;align-items:center;justify-content:center}canvas{display:block;width:720px;height:900px}</style>
+</head><body><canvas id="c" width="1080" height="1350"></canvas>
+<script>
+"use strict";
+// ===== math-animals kit v1 begin =====
+// The shared cabinet for Math-Animals. Every drawer is the same quartersawn oak under a glazed lid,
+// seen from straight above and lit by one window at the upper left. Its floor is a card mount; the
+// curator's construction is drawn on the card in graphite and one label is lettered in India ink.
+// A page pastes this block verbatim, then bakes its animal and composes each frame in seek(t).
+const W = 1080, H = 1350, DUR = 6, HERO = 5.2, BUILD_END = 4.5;
+
+// ---------- seeded randomness only: every mark comes from a stable string key ----------
+function hash(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rngFor(key) {
+  let a = hash(key);
+  return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function noiseFor(key) {
+  const r = rngFor(key), P = new Uint16Array(512), G = new Float32Array(512);
+  for (let i = 0; i < 256; i++) { P[i] = i; const a = r() * Math.PI * 2; G[2 * i] = Math.cos(a); G[2 * i + 1] = Math.sin(a); }
+  for (let i = 255; i > 0; i--) { const j = (r() * (i + 1)) | 0, t = P[i]; P[i] = P[j]; P[j] = t; }
+  for (let i = 0; i < 256; i++) P[i + 256] = P[i];
+  const g = (h, x, y) => G[2 * h] * x + G[2 * h + 1] * y;
+  return (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, Xi = xi & 255, Yi = yi & 255;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = P[P[Xi] + Yi], b = P[P[Xi + 1] + Yi], c = P[P[Xi] + Yi + 1], d = P[P[Xi + 1] + Yi + 1];
+    const x1 = g(a, xf, yf) + (g(b, xf - 1, yf) - g(a, xf, yf)) * u;
+    const x2 = g(c, xf, yf - 1) + (g(d, xf - 1, yf - 1) - g(c, xf, yf - 1)) * u;
+    return (x1 + (x2 - x1) * v) * 1.4;
+  };
+}
+const _nz = {}; const nzc = k => _nz[k] || (_nz[k] = noiseFor(k));
+function fbm(n, x, y, oct = 4) { let s = 0, a = 0.5, f = 1, t = 0; for (let i = 0; i < oct; i++) { s += a * n(x * f, y * f); t += a; a *= 0.5; f *= 2.03; } return s / t; }
+const clamp = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const hex = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const shade = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
+const rgba = (c, a = 1) => `rgba(${clamp(c[0], 0, 255) | 0},${clamp(c[1], 0, 255) | 0},${clamp(c[2], 0, 255) | 0},${a})`;
+function mk(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }
+const ease = t => { t = clamp(t); return 1 - Math.pow(1 - t, 3); };
+const ease5 = s => { s = clamp(s); return s * s * s * (s * (s * 6 - 15) + 10); };
+// Catmull-Rom through a pen's points, end points held
+function catmull(pts, seg = 8) {
+  if (pts.length < 3) return pts.map(p => p.slice());
+  const P = [pts[0], ...pts, pts[pts.length - 1]], out = [];
+  for (let i = 1; i < P.length - 2; i++) for (let k = 0; k < seg; k++) {
+    const t = k / seg, t2 = t * t, t3 = t2 * t, p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
+    const f = j => 0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3);
+    out.push([f(0), f(1)]);
+  }
+  out.push(pts[pts.length - 1].slice()); return out;
+}
+
+// ---------- light: one raking window, upper left ----------
+// Shadows fall down-right. A thing h px above the card throws its shadow h*K px along SH, and the
+// higher it is the softer the shadow. MM is the drawer's true scale.
+const SH = { x: 0.56, y: 0.83 }, K = 1.1, MM = 3.6; // px per millimetre across the whole drawer
+const SHC = 'rgb(44,30,20)'; // shadows multiply a warm brown into the card, so they stay warm and never go grey
+
+// ---------- the drawer: oak rails, inner walls in depth, glass edge ----------
+const RIM = 40, FRONT = 40, WALLV = 24, WALL_H = 22 * MM; // WALL_H: the drawer wall stands 22 mm above the card
+const FX0 = RIM + WALLV, FY0 = RIM + WALLV, FX1 = W - RIM - WALLV, FY1 = H - FRONT - WALLV; // the floor
+const OAK = { dark: hex('#3a2617'), mid: hex('#6b4628'), light: hex('#9a6c40') };
+function _oakAt(n1, n2, n3, u, v, piece) {
+  const wv = v + 6 * fbm(n1, u * 0.004 + piece, piece, 3) + 1.5 * n2(u * 0.02, piece);
+  const stripe = 0.5 + 0.5 * Math.sin(wv * 1.9 + 3 * n2(wv * 0.08, u * 0.003 + piece));
+  const col = mix(OAK.dark, OAK.mid, clamp(0.42 + fbm(n2, wv * 0.05 + piece, u * 0.006, 3) * 0.9 + stripe * 0.16));
+  const fleck = smooth(0.38, 0.62, n3(u * 0.045 + piece, wv * 0.32)) * smooth(0.05, 0.35, n1(u * 0.012 + piece, wv * 0.05)); // ray fleck
+  return shade(mix(col, OAK.light, fleck * 0.55), 1 + fleck * 0.04);
+}
+// The frame canvas covers everything but the floor (FX0, FY0)-(FX1, FY1), which it leaves clear.
+function renderFrame() {
+  const c = mk(W, H), ctx = c.getContext('2d'), img = ctx.createImageData(W, H), D = img.data;
+  const n1 = nzc('oak1'), n2 = nzc('oak2'), n3 = nzc('oak3');
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (x >= FX0 && x < FX1 && y >= FY0 && y < FY1) continue;
+    const k = (y * W + x) * 4; let col;
+    if (x >= RIM && x < W - RIM && y >= RIM && y < H - FRONT) {
+      // an inner wall face: t runs from the rim (0) down to the floor (1)
+      const tl = (x - RIM) / WALLV, tr = (W - RIM - 1 - x) / WALLV, tt = (y - RIM) / WALLV, tb = (H - FRONT - 1 - y) / WALLV;
+      const m = Math.min(tl, tr, tt, tb), side = m === tt ? 0 : m === tb ? 1 : m === tl ? 2 : 3, horiz = side < 2;
+      col = _oakAt(n1, n2, n3, horiz ? x : y, m * 9 + side * 40, 300 + side * 71);
+      const lit = side === 3 ? 1.0 : side === 1 ? 0.92 : side === 2 ? 0.46 : 0.4; // faces turned from the window go dark
+      col = shade(col, lit * (1 - 0.3 * smooth(0.6, 1, m)) * (1 - 0.12 * (1 - smooth(0, 0.15, m))));
+    } else {
+      const dt = (RIM - y) / RIM, db = (y - (H - FRONT)) / FRONT, dl = (RIM - x) / RIM, dr = (x - (W - RIM)) / RIM;
+      const m = Math.max(dt, db, dl, dr), side = m === dt ? 0 : m === db ? 1 : m === dl ? 2 : 3, horiz = side < 2;
+      col = _oakAt(n1, n2, n3, horiz ? x : y, horiz ? y : x, side * 97.3);
+      col = shade(col, 1 + Math.exp(-Math.pow((x * 0.55 + y * 0.83 - 300) / 560, 2)) * 0.09); // the rails' oiled sheen
+      const ins = side === 0 ? RIM - y : side === 1 ? y - (H - FRONT) + 1 : side === 2 ? RIM - x : x - (W - RIM) + 1;
+      if (ins <= 3) col = shade(mix(col, hex('#6f7a62'), 0.4), 0.8); // the glass edge, green in its thickness
+      const mt = [Math.abs(dt - dl), Math.abs(dt - dr), Math.abs(db - dl), Math.abs(db - dr)];
+      if (Math.min(...mt) * Math.min(RIM, FRONT) < 0.7 && m > 0) col = shade(col, 0.55); // mitred corners
+    }
+    D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+// ---------- the card mount ----------
+// Museum board cut to the drawer floor. Its tooth is baked once per pixel: short cotton fibres
+// pressed into a felted surface. Graphite catches on the crowns, ink wicks along the fibres, and
+// the raking window picks both out. The same field serves every pencil line and every letter.
+let _TOOTH = null, _FIB = null, _SHD = null, _AO = null, _TONE = 'white', _TSEED = '';
+function _bakeTooth(seed) {
+  if (_TOOTH && _TSEED === seed) return;
+  const T = new Float32Array(W * H), Fb = new Float32Array(W * H), n1 = nzc(seed + ':t1'), n2 = nzc(seed + ':t2'), n3 = nzc(seed + ':t3'), r = rngFor(seed + ':tw');
+  const F = mk(W, H), fc = F.getContext('2d'); fc.lineCap = 'round';
+  for (let i = 0; i < 12000; i++) { // fibres: short curling hairs, each a little ridge in the board
+    const x = r() * W, y = r() * H, a = r() * Math.PI, L = 4 + r() * r() * 30, bend = (r() - 0.5) * L * 0.5;
+    const dx = Math.cos(a) * L / 2, dy = Math.sin(a) * L / 2;
+    fc.strokeStyle = `rgba(0,0,0,${(0.3 + r() * 0.6).toFixed(2)})`; fc.lineWidth = 0.45 + r() * 0.7;
+    fc.beginPath(); fc.moveTo(x - dx, y - dy); fc.quadraticCurveTo(x - Math.sin(a) * bend, y + Math.cos(a) * bend, x + dx, y + dy); fc.stroke();
+  }
+  const fd = fc.getImageData(0, 0, W, H).data;
+  for (let k = 0; k < W * H; k++) {
+    const x = k % W, y = (k / W) | 0; Fb[k] = fd[k * 4 + 3] / 255;
+    T[k] = clamp(0.48 + 0.24 * n1(x * 0.7, y * 0.7) + 0.2 * n3(x * 0.33, y * 0.33) + 0.16 * n2(x * 0.12, y * 0.12) + (r() - 0.5) * 0.22 + 0.3 * Fb[k]);
+  }
+  _TOOTH = T; _FIB = Fb; _TSEED = seed;
+}
+// The board's surface tooth at a pixel: 1 on a fibre's crown, 0 down in a pit.
+function cardTooth(x, y) { _bakeTooth(_TSEED || 'card'); const i = x | 0, j = y | 0; return i < 0 || j < 0 || i >= W || j >= H ? 0.5 : _TOOTH[j * W + i]; }
+// Light on the card: the drawer walls' shadow s and the corners' occlusion ao, as baked by renderCard.
+function _lit(c, s, ao) { const k = 0.84 - ao; return mix(shade(c, 1 - ao), [c[0] * 0.86 * k, c[1] * 0.78 * k, c[2] * 0.68 * k], s); }
+// Any colour lying on the card at (x, y), put under the window light the card itself is under.
+function litAt(c, x, y) { if (!_SHD) return c; const i = x | 0, j = y | 0; if (i < 0 || j < 0 || i >= W || j >= H) return c; const k = j * W + i; return _lit(c, _SHD[k] / 255, _AO[k] / 255); }
+// ---------- the unit tray ----------
+// One card unit tray fills the drawer, as in 16-specimen: a narrow dark slot along the drawer walls,
+// the tray wall's cut card top, and its inner faces seen in depth (the camera is above the drawer's
+// centre, so each face shows toward the centre, foreshortened). Faces turned from the window go dark,
+// and the tray wall throws its own shadow across the floor inside the drawer wall's.
+const TRAY_SLOT = 4, TRAY_WALL = 3, TRAY_H = 12 * MM; // slot width px; the tray wall: 3 px of card, 12 mm high
+const _CXO = W / 2, _CYO = (FY0 + FY1) / 2, _faceW = d => d > 0 ? 0.0158 * d : 0;
+const _TRAY = (() => { const o = [FX0 + TRAY_SLOT, FY0 + TRAY_SLOT, FX1 - TRAY_SLOT, FY1 - TRAY_SLOT], i = [o[0] + TRAY_WALL, o[1] + TRAY_WALL, o[2] - TRAY_WALL, o[3] - TRAY_WALL];
+  return { o, i, f: [_faceW(_CXO - o[0]), _faceW(_CYO - o[1]), _faceW(o[2] - _CXO), _faceW(o[3] - _CYO)] }; })();
+// the tray floor, where the construction and the specimen lie
+const TX0 = Math.ceil(_TRAY.i[0] + _TRAY.f[0]), TY0 = Math.ceil(_TRAY.i[1] + _TRAY.f[1]), TX1 = Math.floor(_TRAY.i[2] - _TRAY.f[2]), TY1 = Math.floor(_TRAY.i[3] - _TRAY.f[3]);
+// One card tray filling the drawer floor: white museum board, or the matte black board web
+// collectors mount on (a black tray). opts: tone, seed, tray (false: a flat card to the walls).
+function renderCard(o = {}) {
+  const black = o.tone === 'black', seed = o.seed || 'card', tray = o.tray !== false;
+  _bakeTooth(seed); _TONE = black ? 'black' : 'white';
+  const c = mk(W, H), ctx = c.getContext('2d'), img = ctx.createImageData(W, H), D = img.data, T = _TOOTH, F = _FIB;
+  const n1 = nzc(seed + ':g1'), n2 = nzc(seed + ':g2'), nc = nzc(seed + ':cockle'), nm = nzc(seed + ':mottle'), ns = nzc('slot');
+  const base = black ? [hex('#302d2a'), hex('#262321')] : [hex('#f6f5f0'), hex('#e9e6dd')];
+  const fib = black ? hex('#6e675d') : hex('#fdfcf8'), SHEEN_K = hex('#6b665e'), LD = WALL_H * K, LT = TRAY_H * K;
+  // the tray wall in the board's own colours: the cut top catches the window, the inner faces show by side
+  const top = black ? hex('#5a544c') : hex('#f1ece0'), faceDark = black ? hex('#1a1815') : hex('#cfc6b6'), faceLit = black ? hex('#4a453e') : hex('#f4efe4');
+  const { o: TO, i: TI, f: TF } = _TRAY, [x0, y0, x1, y1] = tray ? [TX0, TY0, TX1, TY1] : [FX0, FY0, FX1, FY1];
+  _SHD = new Uint8Array(W * H); _AO = new Uint8Array(W * H);
+  // hard light, so a sharp edge; the fill from the room lifts the shadow a little away from the wall
+  const band = (d, len) => d < 0 ? 0 : (1 - smooth(len * 0.8, len * 1.1, d)) * (1 - 0.32 * clamp(d / len));
+  for (let y = FY0; y < FY1; y++) for (let x = FX0; x < FX1; x++) {
+    const k = y * W + x, sD = Math.max(band(y - FY0, LD * SH.y), band(x - FX0, LD * SH.x));
+    let col, s = sD, ao = 0;
+    const e = Math.min(x - TO[0], TO[2] - 1 - x, y - TO[1], TO[3] - 1 - y);
+    if (tray && e < 0) { // the slot between tray and drawer wall: the drawer's own floor, deep in shade
+      col = shade(mix(hex('#3a2a1d'), hex('#5a4030'), clamp(0.4 + ns(x * 0.4, y * 0.4))), 0.62); s = 1; ao = 0.3;
+    } else if (tray && e < TRAY_WALL) { // the tray wall's cut card top; its outer edge falls away
+      col = shade(top, (e < 1 ? 0.8 : 1) * (1 + (T[k] - 0.5) * 0.04));
+    } else if (tray && (x < TX0 || y < TY0 || x >= TX1 || y >= TY1)) {
+      // an inner face: t runs from the wall top (0) down to the floor (1); the faces meet in mitres
+      const tl = (x - TI[0]) / TF[0], tt = (y - TI[1]) / TF[1], tr = (TI[2] - 1 - x) / TF[2], tb = (TI[3] - 1 - y) / TF[3];
+      const m = Math.min(tl, tt, tr, tb), t = clamp(m);
+      col = m === tl ? shade(faceDark, 0.66 + 0.1 * t) : m === tt ? shade(faceDark, 0.7 + 0.1 * t) : m === tr ? shade(faceLit, 0.98) : shade(faceLit, 0.95);
+      col = shade(col, (1 - 0.1 * smooth(0.6, 1, t)) * (1 + (T[k] - 0.5) * (black ? 0.16 : 0.04))); s = sD * 0.7;
+      if (black) col = mix(col, fib, F[k] * 0.16); // the same board stands in the wall, its fibres showing
+    } else { // the floor: board with its fibres and formation
+      const g = n1(x * 0.5, y * 0.5) * 0.5 + n2(x * 0.07, y * 0.07) * 0.5;
+      col = mix(base[0], base[1], clamp(0.35 + g * 0.7));
+      col = mix(col, fib, F[k] * (black ? 0.17 : 0.2));
+      // raking light on the tooth and the fibres: slopes facing the window catch it. Formation: the
+      // pulp lies a little cloudy. Cockle: the board lifts a hair between its fixings.
+      const emb = (T[k + W + 1] - T[k - W - 1]) * 0.035 + (F[k + W + 1] - F[k - W - 1]) * 0.03 + (T[k] - 0.5) * 0.028;
+      if (black) {
+        // charcoal board: a multiply barely moves so dark a colour, so the window lies on the tooth's
+        // crowns and the fibres' backs as a warm grey sheen, and the pits sink. Formation is broader.
+        const rel = (T[k + W + 1] - T[k - W - 1]) * 0.3 + (F[k + W + 1] - F[k - W - 1]) * 0.14 + (T[k] - 0.5) * 0.36;
+        col = shade(col, 1 + 0.07 * fbm(nm, x * 0.018, y * 0.018, 3) + 0.03 * fbm(nc, x * 0.004, y * 0.004, 2) + Math.min(0, rel) * 0.4);
+        col = mix(col, SHEEN_K, clamp(rel * 0.7));
+      } else col = shade(col, 1 + emb + 0.017 * fbm(nm, x * 0.03, y * 0.03, 3) + 0.016 * fbm(nc, x * 0.004, y * 0.004, 2));
+      const dx = x - x0, dy = y - y0, dr = x1 - 1 - x, db = y1 - 1 - y, dm = Math.min(dx, dy, dr, db);
+      s = Math.max(sD, tray ? Math.max(band(dy, LT * SH.y), band(dx, LT * SH.x)) : 0);
+      ao = (1 - smooth(0, tray ? 9 : 11, dm)) * (tray ? 0.14 : 0.13) + (1 - smooth(0, 44, Math.hypot(Math.min(dx, dr), Math.min(dy, db)))) * 0.1;
+      if (!tray && dm < 1) ao += 0.22; // the card's cut edge against the wall
+    }
+    _SHD[k] = s * 255; _AO[k] = clamp(ao) * 255;
+    col = _lit(col, s, ao);
+    D[k * 4] = col[0]; D[k * 4 + 1] = col[1]; D[k * 4 + 2] = col[2]; D[k * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+// ---------- the window: falloff, glass lid, shadows ----------
+// One window, upper left: the drawer falls off from bright to dark across its width. Multiplied over
+// the whole composed frame, after the frame rails and before the glass.
+function lightFalloff(ctx) {
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'multiply';
+  const fall = ctx.createLinearGradient(40, 300, 1060, 700); fall.addColorStop(0, 'rgb(255,254,250)'); fall.addColorStop(0.45, 'rgb(228,219,206)'); fall.addColorStop(1, 'rgb(170,156,138)');
+  ctx.fillStyle = fall; ctx.fillRect(0, 0, W, H);
+  const fv = ctx.createLinearGradient(0, 0, 0, H); fv.addColorStop(0, 'rgb(255,255,255)'); fv.addColorStop(1, 'rgb(236,230,222)');
+  ctx.fillStyle = fv; ctx.fillRect(0, 0, W, H); ctx.restore();
+}
+// The lid: one soft reflection band, strongest high on the right, with dust and a few hairline
+// scratches on the glass. The glass catches the window early in the build, the band sliding in from
+// the right as it brightens; once the drawer is full the light only breathes. Drawn last.
+// The band and its veil are baked once at full strength, blurred, into full-size layers; each frame
+// only slides them by whole pixels and scales their alpha, so no filter runs per frame and any seek
+// order draws the same pixels.
+let _GLASS = null;
+function _glassLayers() {
+  // Each layer is a strip whose profile across is a soft bell, so the band has no edge to read as a
+  // stripe laid over the work. Over black board nothing else is bright, so there the band is wider still.
+  const black = _TONE === 'black', SW = black ? 420 : 300;
+  const bell = (rgb, peak, mid, sd) => Array.from({ length: 17 }, (_, i) => { const u = i / 16, a = peak * Math.exp(-(((u - mid) / sd) ** 2)) * Math.sqrt(Math.sin(Math.PI * u)); return [u, `rgba(${rgb},${a.toFixed(3)})`]; });
+  const f = (c) => { const g = c.createLinearGradient(0, -200, 0, 1250); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.6, 'rgba(0,0,0,0.85)'); g.addColorStop(0.95, 'rgba(0,0,0,0.8)'); g.addColorStop(1, 'rgba(0,0,0,0.5)'); return g; };
+  const strip = (stops) => {
+    const s = mk(SW, 1450), sc = s.getContext('2d'), g = sc.createLinearGradient(0, 0, SW, 0);
+    for (const [o, c] of stops) g.addColorStop(o, c);
+    sc.fillStyle = g; sc.fillRect(0, 0, SW, 1450); sc.globalCompositeOperation = 'destination-in'; sc.translate(SW / 2, 200); sc.fillStyle = f(sc); sc.fillRect(-SW / 2, -200, SW, 1450);
+    return s;
+  };
+  const lay = (s, blur, base) => {
+    const c = mk(W + 160, H), cc = c.getContext('2d');
+    if (base) { cc.fillStyle = base; cc.fillRect(0, 0, c.width, c.height); }
+    cc.translate(948 + 160, RIM - 10); cc.rotate(0.17); cc.filter = `blur(${blur}px)`; cc.drawImage(s, -SW / 2 - (black ? 40 : 0), -200);
+    return c;
+  };
+  // Over a white card a bright reflection all but vanishes; there the band reads by the dimmer room it
+  // also reflects, a cool grey veil a little darker than the board. On open card nothing breaks it up,
+  // so it is kept to a reflection you notice second: half the strength, the edges feathered out.
+  if (black) return { tone: _TONE, veil: lay(strip(bell('188,194,206', 0.34, 0.5, 0.3)), 10, null), band: lay(strip(bell('236,242,248', 0.3, 0.52, 0.2)), 14, null) };
+  return { tone: _TONE, veil: lay(strip(bell('188,194,206', 0.24, 0.5, 0.26)), 8, null), band: lay(strip(bell('236,242,248', 0.19, 0.46, 0.2)), 10, null) };
+}
+function glass(ctx, t) {
+  const e = ease5((t - 0.35) / 1.05), breath = 1 + 0.06 * Math.sin((t - BUILD_END) * Math.PI * 2 / 1.4) * smooth(BUILD_END, BUILD_END + 0.4, t);
+  const lit = (0.1 + 0.9 * e) * breath * (_TONE === 'black' ? 0.5 : 1); // over black board the reflection has nothing to hide in, so it is kept calmer
+  if (!_GLASS || _GLASS.tone !== _TONE) _GLASS = _glassLayers();
+  const dx = Math.round((1 - e) * 150) - 160; // the band slides in from the right as the glass catches the window
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none';
+  ctx.beginPath(); ctx.rect(RIM, RIM, W - 2 * RIM, H - FRONT - RIM); ctx.clip(); // the glass sits inside the rails
+  ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = clamp(lit); ctx.drawImage(_GLASS.veil, dx, 0);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = clamp(lit); ctx.drawImage(_GLASS.band, dx, 0);
+  ctx.restore();
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none'; ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.rect(RIM, RIM, W - 2 * RIM, H - FRONT - RIM); ctx.clip(); // dust and scratches lie on the glass, so only inside the rails
+  const r = rngFor('dust');
+  for (let i = 0; i < 70; i++) { const x = r() * W, y = r() * H, s = 0.5 + r() * 1.1; ctx.fillStyle = `rgba(232,228,218,${0.22 + r() * 0.3})`; ctx.beginPath(); ctx.arc(x, y, s, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(232,228,218,0.32)'; ctx.lineWidth = 0.7;
+  for (let i = 0; i < 3; i++) { let x = r() * W, y = r() * H; ctx.beginPath(); ctx.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (r() - 0.5) * 9; y += (r() - 0.3) * 7; ctx.lineTo(x, y); } ctx.stroke(); }
+  ctx.restore();
+}
+// An object's shadow on the card. img is the object (any canvas; its alpha is the silhouette), drawn
+// at (x, y) in the current transform as drawImage would. The shadow lies heightPx*K along SH in
+// screen space, blurred in proportion to height, and multiplies a warm brown into the card.
+// opts: alpha (0.5), blur (px, default 0.14*height), color (SHC), w, h (draw size).
+function castShadow(ctx, img, x, y, heightPx, o = {}) {
+  const off = heightPx * K, blur = o.blur ?? Math.max(0.5, heightPx * 0.14), w = o.w ?? img.width, h = o.h ?? img.height;
+  const s = mk(img.width, img.height), sc = s.getContext('2d');
+  sc.drawImage(img, 0, 0); sc.globalCompositeOperation = 'source-in'; sc.fillStyle = o.color || SHC; sc.fillRect(0, 0, s.width, s.height);
+  ctx.save(); const m = ctx.getTransform(); ctx.setTransform(m.a, m.b, m.c, m.d, m.e + SH.x * off, m.f + SH.y * off);
+  ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = o.alpha ?? 0.5; ctx.filter = blur > 0.3 ? `blur(${blur.toFixed(2)}px)` : 'none';
+  ctx.drawImage(s, x, y, w, h); ctx.restore();
+}
+
+// ---------- graphite ----------
+// A pencil line is graphite laid on the board's tooth. The lead rides the fibres' crowns, so light
+// pressure leaves a broken grey and heavy pressure fills the pits. Each line is rasterised per pixel
+// in screen space against the baked tooth, so the grain stays put while the line draws itself. The
+// hand is a draughtsman's: a faint tremor, pressure that swells and eases, a landing and a lift.
+// On the black board the lead is a white pencil worked lightly: a warm grey at about 50% value that
+// sits only on the tooth's crowns, so it reads as graphite on dark board, under the brighter specimen.
+const G_DARK = [46, 47, 53], G_SHEEN = [122, 125, 134], G_WHITE = [163, 157, 146], G_WHITE_SHEEN = [184, 178, 166];
+function _devPts(ctx, pts) { const m = ctx.getTransform(); return { P: pts.map(p => [m.a * p[0] + m.c * p[1] + m.e, m.b * p[0] + m.d * p[1] + m.f]), sc: Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1 }; }
+function _resample(P, step) {
+  const out = [P[0].slice()]; let acc = 0;
+  for (let i = 1; i < P.length; i++) {
+    const ax = P[i - 1][0], ay = P[i - 1][1], bx = P[i][0], by = P[i][1], L = Math.hypot(bx - ax, by - ay);
+    if (L < 1e-9) continue;
+    let d = step - acc;
+    while (d <= L) { const t = d / L; out.push([ax + (bx - ax) * t, ay + (by - ay) * t]); d += step; }
+    acc = L - (d - step);
+  }
+  const e = P[P.length - 1], l = out[out.length - 1]; if (Math.hypot(e[0] - l[0], e[1] - l[1]) > 0.05) out.push(e.slice());
+  return out;
+}
+// One pass of the hand along a device-space path: 1 px samples with tremor, pressure and overshoot.
+function _trace(P, o, sc, w) {
+  const seed = o.seed || 'pencil', ph = (hash(seed) % 9973) * 0.731, n = nzc('pencil:hand'), r = rngFor(seed + ':ends');
+  let Q = _resample(P, 1);
+  if (Q.length < 2) Q = [Q[0], [Q[0][0] + 0.05, Q[0][1]]];
+  // a draughtsman runs a construction line on past its ends, straight along the tangent, as the hand lifts
+  const ov = o.overshoot ? (o.overshoot === true ? 6 : o.overshoot) * sc : 0;
+  let pre = 0, post = 0;
+  if (ov > 0 && Q.length > 3) {
+    const k = Math.min(4, Q.length - 1), tan = (a, b) => { const dx = a[0] - b[0], dy = a[1] - b[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
+    const t0 = tan(Q[0], Q[k]), e = Q[Q.length - 1], t1 = tan(e, Q[Q.length - 1 - k]), s0 = Q[0];
+    pre = Math.round(ov * (0.35 + 0.7 * r())); post = Math.round(ov * (0.5 + 0.9 * r()));
+    const head = []; for (let i = pre; i >= 1; i--) head.push([s0[0] + t0[0] * i, s0[1] + t0[1] * i]);
+    const tail = []; for (let i = 1; i <= post; i++) tail.push([e[0] + t1[0] * i, e[1] + t1[1] * i]);
+    Q = head.concat(Q, tail);
+  }
+  const load = o.print ? 0.82 + 0.3 * r() : 1;
+  const dash = o.dash ? [o.dash[0] * sc, o.dash[1] * sc, Math.max(1, Math.round((o.dash[0] + o.dash[1]) * sc))] : null;
+  const N = Q.length, tone = o.tone ?? 1, trem = (o.tremor ?? 0.3) * sc, xs = new Float32Array(N), ys = new Float32Array(N), ps = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const a = Q[Math.max(0, i - 1)], b = Q[Math.min(N - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+    const tw = trem * (0.75 * n(i / 30 + ph, 0.5) + 0.25 * n(i / 6.5 + ph, 7.5));
+    xs[i] = Q[i][0] - dy / l * tw; ys[i] = Q[i][1] + dx / l * tw;
+    let p = tone * (0.84 + 0.16 * n(i / 45 + ph, 3.3)) * (0.9 + 0.1 * n(i / 11 + ph, 9.1));
+    const tp = o.taper ?? 1;
+    // printing a letter, the pencil lands firm and eases off along each stroke, and no two strokes get the same weight
+    if (o.print) p *= load * lerp(1.16, 0.7, smooth(0.15, 1, i / Math.max(1, N - 1))) * (0.84 + 0.16 * n(i / 3.2 + ph, 5.7));
+    p *= pre ? lerp(0.3, 1, clamp(i / pre)) : lerp(1 - 0.45 * tp, 1, clamp(i / 3)); // the lead lands
+    p *= post ? lerp(0.2, 1, clamp((N - 1 - i) / post)) : lerp(1 - 0.55 * tp, 1, clamp((N - 1 - i) / 4)); // and lifts
+    if (dash && (i % dash[2]) >= dash[0]) p = 0; // a dashed line: the lead lifts between dashes
+    ps[i] = p;
+  }
+  return { xs, ys, ps, n: N, lim: clamp(o.prog ?? 1) * (N - 1), w };
+}
+let _SCR = null; // one scratch canvas for writing finished pixels back
+function _scratch(w, h) { if (!_SCR || _SCR.width < w || _SCR.height < h) _SCR = mk(Math.max(w, _SCR ? _SCR.width : 0), Math.max(h, _SCR ? _SCR.height : 0)); return _SCR; }
+// Rasterise traces into one coverage buffer (max, so a line never darkens itself) and lay the
+// graphite: deposit = pressure gated by the tooth, grey with a little sheen where it is dense.
+function _graphite(ctx, trs, o) {
+  _bakeTooth(_TSEED || 'card');
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const t of trs) { const m = Math.min(t.n - 1, Math.ceil(t.lim)); for (let i = 0; i <= m; i++) { x0 = Math.min(x0, t.xs[i] - t.w); y0 = Math.min(y0, t.ys[i] - t.w); x1 = Math.max(x1, t.xs[i] + t.w); y1 = Math.max(y1, t.ys[i] + t.w); } }
+  if (x1 < x0) return;
+  const bx = Math.floor(x0) - 2, by = Math.floor(y0) - 2, bw = Math.ceil(x1) + 3 - bx, bh = Math.ceil(y1) + 3 - by, B = new Float32Array(bw * bh);
+  for (const tr of trs) {
+    const m = Math.min(tr.n - 1, Math.ceil(tr.lim));
+    for (let i = 0; i < m; i++) {
+      const ax = tr.xs[i], ay = tr.ys[i], f = Math.min(1, tr.lim - i), cx = ax + (tr.xs[i + 1] - ax) * f, cy = ay + (tr.ys[i + 1] - ay) * f;
+      const pa = tr.ps[i], pb = tr.ps[i + 1], vx = cx - ax, vy = cy - ay, vv = vx * vx + vy * vy || 1e-9;
+      const h = tr.w / 2 * (0.75 + 0.35 * (pa + pb) / 2), R = h + 1; // a harder press spreads the lead
+      const xa = Math.max(0, Math.floor(Math.min(ax, cx) - R) - bx), xb = Math.min(bw - 1, Math.ceil(Math.max(ax, cx) + R) - bx);
+      const ya = Math.max(0, Math.floor(Math.min(ay, cy) - R) - by), yb = Math.min(bh - 1, Math.ceil(Math.max(ay, cy) + R) - by);
+      for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
+        const px = x + bx + 0.5 - ax, py = y + by + 0.5 - ay, t = clamp((px * vx + py * vy) / vv), d = Math.hypot(px - vx * t, py - vy * t);
+        if (d >= R) continue;
+        const v = (1 - smooth(h - 0.5, h + 0.9, d)) * (pa + (pb - pa) * t), k = y * bw + x;
+        if (v > B[k]) B[k] = v;
+      }
+    }
+  }
+  const white = o.white ?? (_TONE === 'black'), img = new ImageData(bw, bh), D = img.data, T = _TOOTH, ns = nzc('pencil:sheen');
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const a = Math.min(1, B[y * bw + x]); if (a < 0.004) continue;
+    const X = x + bx, Y = y + by; if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+    const t = T[Y * W + X], th = 0.9 - 0.55 * a, dep = a * (0.28 + 0.72 * smooth(th - 0.28, th + 0.28, t));
+    let col, al;
+    if (white) { // the crowns take it, the pits stay board: the tooth breaks the line more than on white
+      const dw = a * (0.3 + 0.7 * smooth(th - 0.24, th + 0.24, t));
+      col = mix(G_WHITE, G_WHITE_SHEEN, 0.5 * smooth(0.6, 1, dw) * (0.5 + 0.5 * ns(X * 0.025, Y * 0.025))); al = Math.min(1, dw * 1.1);
+    }
+    else { col = mix(G_DARK, G_SHEEN, 0.32 * smooth(0.4, 0.95, dep) * (0.55 + 0.45 * ns(X * 0.025, Y * 0.025))); al = dep * 0.86; }
+    col = litAt(col, X, Y);
+    const k = (y * bw + x) * 4; D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = al * 255;
+  }
+  const s = _scratch(bw, bh); s.getContext('2d').putImageData(img, 0, 0);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = o.alpha ?? 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(s, 0, 0, bw, bh, bx, by, bw, bh); ctx.restore();
+}
+// pencil(ctx, pts, opts): pts [[x, y], ...] in the current transform. opts: w (px, 1.45), tone
+// (darkness 0..1, 1), seed, prog (0..1 of arc length), overshoot (true = 6 px, or px), tremor (px,
+// 0.3), dash ([on, off] px), white (white pencil; defaults to true on the black card), alpha.
+function pencil(ctx, pts, o = {}) {
+  if (!pts || !pts.length || (o.prog ?? 1) <= 0) return;
+  const { P, sc } = _devPts(ctx, pts);
+  _graphite(ctx, [_trace(P, o, sc, (o.w ?? 1.45) * sc)], o);
+}
+const pencilLine = (ctx, x0, y0, x1, y1, o = {}) => pencil(ctx, [[x0, y0], [x1, y1]], o);
+// canvas angles: radians, clockwise on screen from +x
+function pencilArc(ctx, cx, cy, r, a0, a1, o = {}) {
+  const n = Math.max(6, Math.ceil(Math.abs(a1 - a0) * r / 1.5)), pts = [];
+  for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+  pencil(ctx, pts, o);
+}
+// a compass circle closes a little past its start, as a drawn one does
+function pencilCircle(ctx, cx, cy, r, o = {}) { const a0 = rngFor((o.seed || 'circle') + ':a0')() * Math.PI * 2; pencilArc(ctx, cx, cy, r, a0, a0 + Math.PI * 2 + 0.1, o); }
+// a firm small dot, pressed and turned
+function pencilDot(ctx, x, y, o = {}) { const r = o.r ?? 1.1; pencilArc(ctx, x, y, r, 0, Math.PI * 2.2, { tone: 1, w: 2.1, tremor: 0, taper: 0, ...o }); }
+// a small + for a centre
+function pencilCross(ctx, x, y, s = 8, o = {}) {
+  const q = { overshoot: 1.5, tone: 1, w: 1.45, ...o }, p = clamp(o.prog ?? 1) * 2;
+  if (p > 0) pencil(ctx, [[x - s / 2, y], [x + s / 2, y]], { ...q, prog: Math.min(1, p), seed: (o.seed || 'x') + 'h' });
+  if (p > 1) pencil(ctx, [[x, y - s / 2], [x, y + s / 2]], { ...q, prog: p - 1, seed: (o.seed || 'x') + 'v' });
+}
+// the curator's tick: a short stroke down and a long one up, in one movement
+function pencilTick(ctx, x, y, s = 14, o = {}) {
+  pencil(ctx, catmull([[x - 0.48 * s, y - 0.06 * s], [x - 0.26 * s, y + 0.14 * s], [x - 0.12 * s, y + 0.34 * s], [x + 0.18 * s, y - 0.12 * s], [x + 0.56 * s, y - 0.6 * s]], 6), { tone: 1, w: 1.7, tremor: 0.15, ...o });
+}
+
+// ---------- the curator's hand ----------
+// A single-stroke upright technical hand, after Leroy and Rapidograph museum labels: careful, even,
+// monoline. Each glyph is its pen's centre-lines in cap-height units, y up from the baseline
+// (x-height 0.68, ascender 1, descender -0.3): [advance, strokes]. Strokes are split by ';'; in a
+// stroke "x,y" is a point and "(cx,cy,rx,ry,a0,a1)" an elliptic arc in degrees, counter-clockwise
+// for a1 > a0; a stroke starting with '~' is smoothed through its points.
+const HAND_SRC = {
+  A: [0.64, '0,0 0.32,1 0.64,0; 0.11,0.33 0.53,0.33'], B: [0.56, '0,0 0,1 0.3,1 (0.3,0.76,0.21,0.24,90,-90) 0,0.52; 0.3,0.52 (0.32,0.26,0.24,0.26,90,-90) 0,0'],
+  C: [0.6, '(0.34,0.5,0.34,0.5,42,318)'], D: [0.6, '0,0 0,1 0.22,1 (0.22,0.5,0.38,0.5,90,-90) 0,0'],
+  E: [0.5, '0.5,1 0,1 0,0 0.52,0; 0,0.53 0.4,0.53'], F: [0.48, '0.5,1 0,1 0,0; 0,0.53 0.4,0.53'],
+  G: [0.7, '(0.35,0.5,0.35,0.5,42,350) 0.7,0.46 0.42,0.46'], H: [0.58, '0,0 0,1; 0.58,0 0.58,1; 0,0.53 0.58,0.53'],
+  I: [0, '0,0 0,1'], J: [0.44, '0.44,1 0.44,0.26 (0.22,0.26,0.22,0.26,0,-180)'],
+  K: [0.56, '0,0 0,1; 0.56,1 0,0.34; 0.19,0.54 0.58,0'], L: [0.46, '0,1 0,0 0.48,0'],
+  M: [0.74, '0,0 0,1 0.37,0.18 0.74,1 0.74,0'], N: [0.6, '0,0 0,1 0.6,0 0.6,1'],
+  O: [0.76, '(0.38,0.5,0.38,0.5,90,450)'], P: [0.54, '0,0 0,1 0.3,1 (0.3,0.75,0.24,0.25,90,-90) 0,0.5'],
+  Q: [0.76, '(0.38,0.5,0.38,0.5,90,450); 0.48,0.24 0.78,-0.06'], R: [0.56, '0,0 0,1 0.3,1 (0.3,0.755,0.24,0.245,90,-90) 0,0.51; 0.3,0.51 0.58,0'],
+  S: [0.56, '(0.28,0.75,0.26,0.25,28,270) (0.29,0.25,0.27,0.25,90,-152)'], T: [0.6, '0,1 0.6,1; 0.3,1 0.3,0'],
+  U: [0.6, '0,1 0,0.3 (0.3,0.3,0.3,0.3,180,360) 0.6,1'], V: [0.62, '0,1 0.31,0 0.62,1'],
+  W: [0.88, '0,1 0.21,0 0.44,0.82 0.67,0 0.88,1'], X: [0.58, '0,1 0.58,0; 0.58,1 0,0'],
+  Y: [0.6, '0,1 0.3,0.48 0.6,1; 0.3,0.48 0.3,0'], Z: [0.56, '0.02,1 0.56,1 0,0 0.58,0'],
+  a: [0.48, '0.06,0.6 (0.26,0.5,0.22,0.18,145,0) 0.48,0; 0.48,0.38 0.22,0.38 (0.22,0.19,0.2,0.19,90,300) 0.48,0.1'],
+  b: [0.54, '0,1 0,0; (0.27,0.34,0.27,0.34,165,-165)'], c: [0.52, '(0.28,0.34,0.28,0.34,42,318)'],
+  d: [0.54, '(0.27,0.34,0.27,0.34,15,345); 0.54,1 0.54,0'], e: [0.54, '0.02,0.36 0.54,0.36 (0.28,0.34,0.27,0.34,4,316)'],
+  f: [0.38, '0.4,0.94 (0.3,0.82,0.14,0.18,50,180) 0.16,0; 0,0.66 0.36,0.66'],
+  g: [0.54, '(0.27,0.34,0.27,0.34,15,345); 0.54,0.68 0.54,-0.08 (0.31,-0.08,0.23,0.22,0,-155)'],
+  h: [0.52, '0,1 0,0; 0,0.42 (0.26,0.42,0.26,0.26,180,0) 0.52,0'], i: [0, '0,0.68 0,0; (0,0.9,0.03,0.03,0,360)'],
+  j: [0.22, '0.22,0.68 0.22,-0.1 (0.06,-0.1,0.16,0.2,0,-140); (0.22,0.9,0.03,0.03,0,360)'],
+  k: [0.48, '0,1 0,0; 0.46,0.68 0,0.24; 0.15,0.37 0.5,0'], l: [0, '0,1 0,0'],
+  m: [0.8, '0,0.68 0,0; 0,0.44 (0.2,0.46,0.2,0.22,180,0) 0.4,0; 0.4,0.46 (0.6,0.46,0.2,0.22,180,0) 0.8,0'],
+  n: [0.52, '0,0.68 0,0; 0,0.42 (0.26,0.42,0.26,0.26,180,0) 0.52,0'], o: [0.58, '(0.29,0.34,0.29,0.34,90,450)'],
+  p: [0.54, '0,0.68 0,-0.3; (0.27,0.34,0.27,0.34,165,-165)'], q: [0.54, '(0.27,0.34,0.27,0.34,15,345); 0.54,0.68 0.54,-0.3'],
+  r: [0.4, '0,0.68 0,0; 0,0.4 (0.25,0.42,0.25,0.26,180,45)'], s: [0.48, '(0.24,0.505,0.22,0.175,30,270) (0.25,0.17,0.24,0.17,90,-152)'],
+  t: [0.36, '0.14,0.92 0.14,0.14 (0.28,0.14,0.14,0.14,180,290); 0,0.66 0.34,0.66'],
+  u: [0.52, '0,0.68 0,0.26 (0.26,0.26,0.26,0.26,180,360); 0.52,0.68 0.52,0'], v: [0.54, '0,0.68 0.27,0 0.54,0.68'],
+  w: [0.78, '0,0.68 0.19,0 0.39,0.58 0.59,0 0.78,0.68'], x: [0.5, '0,0.68 0.5,0; 0.5,0.68 0,0'],
+  y: [0.56, '0,0.68 0.28,0.02; 0.56,0.68 0.22,-0.2 0.16,-0.27 0.06,-0.3'], z: [0.5, '0.02,0.68 0.5,0.68 0,0 0.52,0'],
+  0: [0.54, '(0.27,0.5,0.27,0.5,90,450)'], 1: [0.28, '0,0.78 0.26,1 0.26,0'],
+  2: [0.54, '(0.27,0.72,0.25,0.28,158,-38) 0,0 0.56,0'], 3: [0.54, '(0.25,0.76,0.23,0.24,152,-90); (0.26,0.27,0.28,0.27,90,-152)'],
+  4: [0.56, '0.42,0 0.42,1 0,0.3 0.58,0.3'], 5: [0.54, '0.5,1 0.08,1 0.04,0.57 (0.27,0.31,0.27,0.31,130,-150)'],
+  6: [0.54, '(0.3,0.52,0.26,0.48,52,180) 0.04,0.3 (0.28,0.3,0.24,0.3,180,540)'], 7: [0.52, '0,1 0.54,1 0.16,0'],
+  8: [0.54, '(0.27,0.765,0.22,0.235,-90,270); (0.27,0.27,0.27,0.27,90,450)'], 9: [0.54, '(0.26,0.7,0.24,0.3,0,360) 0.5,0.48 (0.24,0.48,0.26,0.48,0,-128)'],
+  ' ': [0.2, ''], '.': [0.06, '(0.03,0.03,0.03,0.03,0,360)'], ',': [0.06, '0.06,0.06 0.05,-0.02 0.01,-0.14'], ':': [0.06, '(0.03,0.03,0.03,0.03,0,360); (0.03,0.47,0.03,0.03,0,360)'],
+  ';': [0.06, '(0.04,0.47,0.03,0.03,0,360); 0.06,0.06 0.05,-0.02 0.01,-0.14'], "'": [0, '0,1 0,0.76'], '"': [0.16, '0,1 0,0.76; 0.16,1 0.16,0.76'],
+  '(': [0.2, '(0.4,0.4,0.4,0.68,118,242)'], ')': [0.2, '(-0.2,0.4,0.4,0.68,62,-62)'],
+  '[': [0.18, '0.18,1 0,1 0,-0.2 0.18,-0.2'], ']': [0.18, '0,1 0.18,1 0.18,-0.2 0,-0.2'],
+  '-': [0.3, '0,0.38 0.3,0.38'], '–': [0.5, '0,0.38 0.5,0.38'], '—': [0.96, '0,0.38 0.96,0.38'],
+  '=': [0.5, '0,0.5 0.5,0.5; 0,0.27 0.5,0.27'], '+': [0.5, '0,0.385 0.5,0.385; 0.25,0.135 0.25,0.635'], '−': [0.5, '0,0.385 0.5,0.385'],
+  '×': [0.4, '0.02,0.2 0.38,0.57; 0.38,0.2 0.02,0.57'], '·': [0.06, '(0.03,0.36,0.03,0.03,0,360)'], '/': [0.42, '0,-0.12 0.42,1.06'],
+  '°': [0.24, '(0.12,0.87,0.12,0.13,0,360)'], '%': [0.74, '(0.13,0.8,0.13,0.2,0,360); 0.62,1 0.12,0; (0.61,0.2,0.13,0.2,0,360)'],
+  '^': [0.4, '0,0.68 0.2,1 0.4,0.68'], '~': [0.5, '~0,0.34 0.12,0.43 0.25,0.385 0.38,0.34 0.5,0.43'],
+  '!': [0.06, '0.03,1 0.03,0.3; (0.03,0.03,0.03,0.03,0,360)'], '?': [0.44, '(0.22,0.77,0.22,0.23,155,-60) 0.22,0.4 0.22,0.28; (0.22,0.03,0.03,0.03,0,360)'],
+  '&': [0.66, '~0.64,0 0.4,0.26 0.18,0.52 0.12,0.74 0.2,0.95 0.36,0.97 0.44,0.82 0.38,0.66 0.12,0.44 0.04,0.22 0.14,0.03 0.34,0 0.52,0.14 0.62,0.36'],
+  '<': [0.44, '0.44,0.64 0,0.385 0.44,0.13'], '>': [0.44, '0,0.64 0.44,0.385 0,0.13'],
+  '≈': [0.5, '~0,0.46 0.12,0.55 0.25,0.505 0.38,0.46 0.5,0.55; ~0,0.22 0.12,0.31 0.25,0.265 0.38,0.22 0.5,0.31'],
+  '√': [0.72, '0,0.44 0.09,0.5 0.24,0 0.5,1.06 0.74,1.06'],
+  '∞': [0.76, '~0.38,0.38 0.48,0.5 0.6,0.55 0.72,0.48 0.75,0.38 0.72,0.28 0.6,0.21 0.48,0.26 0.38,0.38 0.28,0.5 0.16,0.55 0.04,0.48 0.01,0.38 0.04,0.28 0.16,0.21 0.28,0.26 0.38,0.38'],
+  '′': [0.08, '0.1,1 0,0.72'], '✓': [0.64, '0,0.44 0.22,0.08 0.64,0.92'],
+  'α': [0.62, '(0.25,0.34,0.25,0.34,0,360); ~0.58,0.7 0.51,0.42 0.5,0.18 0.56,0.03 0.64,0'],
+  'β': [0.5, '0,-0.3 0,0.78 (0.2,0.78,0.2,0.22,180,-90) (0.22,0.28,0.28,0.28,90,-155)'],
+  'γ': [0.56, '~0,0.6 0.07,0.68 0.14,0.62 0.29,0.04; ~0.56,0.68 0.36,0.2 0.29,0.04 0.19,-0.12 0.21,-0.27 0.29,-0.31 0.37,-0.22 0.29,0.04'],
+  'δ': [0.54, '(0.27,0.3,0.27,0.3,0,360); ~0.3,0.6 0.1,0.78 0.12,0.94 0.32,1 0.48,0.94'],
+  'θ': [0.5, '(0.25,0.5,0.25,0.5,90,450); 0,0.5 0.5,0.5'], 'λ': [0.56, '0.02,1 0.14,0.98 0.56,0; 0.3,0.5 0,0'],
+  'μ': [0.6, '0,0.68 0,-0.3; 0,0.26 (0.26,0.26,0.26,0.26,180,360); 0.52,0.68 0.52,0.06 0.6,0'],
+  'π': [0.62, '-0.02,0.6 0.06,0.68 0.62,0.68; 0.16,0.68 0.14,0; 0.46,0.68 0.46,0.06 0.56,0.02'],
+  'ρ': [0.54, '0,-0.3 0,0.34 (0.27,0.34,0.27,0.34,180,-180)'], 'σ': [0.66, '0.66,0.68 0.3,0.68 (0.27,0.34,0.27,0.34,95,455)'],
+  'φ': [0.6, '(0.3,0.34,0.3,0.32,0,360); 0.3,0.92 0.3,-0.3'], 'ψ': [0.56, '0,0.68 0,0.36 (0.28,0.36,0.28,0.36,180,360) 0.56,0.68; 0.28,0.92 0.28,-0.3'],
+  'ω': [0.76, '~0.12,0.68 0.02,0.46 0.02,0.18 0.12,0.02 0.26,0 0.36,0.12 0.38,0.38; ~0.38,0.38 0.4,0.12 0.5,0 0.64,0.02 0.74,0.18 0.74,0.46 0.64,0.68'],
+  'Δ': [0.68, '0,0 0.34,1 0.68,0 0,0'], 'Σ': [0.58, '0.56,1 0,1 0.3,0.5 0,0 0.58,0'], 'Φ': [0.72, '(0.36,0.5,0.36,0.3,0,360); 0.36,1 0.36,0'],
+};
+const HAND_CHARS = Object.keys(HAND_SRC).join('');
+// parse a face: "(cx,cy,rx,ry,a0,a1,rot)" arcs may turn their ellipse by rot degrees. Strokes are
+// resampled to short steps so a hand's wobble bends them smoothly.
+function _parseFace(SRC) {
+  const F = {};
+  for (const ch in SRC) {
+    const [adv, src] = SRC[ch], st = [];
+    for (let s of src.split(';')) {
+      s = s.trim(); if (!s) continue;
+      const sm = s[0] === '~', pts = [];
+      (sm ? s.slice(1) : s).replace(/\(([^)]*)\)|(-?[\d.]+),(-?[\d.]+)/g, (m, arc, x, y) => {
+        if (arc) {
+          const [cx, cy, rx, ry, a0, a1, rt = 0] = arc.split(',').map(Number), n = Math.max(4, Math.ceil(Math.abs(a1 - a0) / 8)), cr = Math.cos(rt * Math.PI / 180), sr = Math.sin(rt * Math.PI / 180);
+          for (let i = 0; i <= n; i++) { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180, u = rx * Math.cos(a), v = ry * Math.sin(a); pts.push([cx + u * cr - v * sr, cy + u * sr + v * cr]); }
+        } else pts.push([+x, +y]);
+        return '';
+      });
+      const q = sm ? catmull(pts, 6) : pts, out = [q[0]];
+      for (let i = 1; i < q.length; i++) { const a = q[i - 1], b = q[i], n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.07); for (let k = 1; k <= n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]); }
+      st.push(out);
+    }
+    F[ch] = { adv, st };
+  }
+  return F;
+}
+const HAND = _parseFace(HAND_SRC);
+// The pencil hand is the same curator printing more freely: bowls a little oval and leaning, the
+// apertures open, a single-storey a, the o closing just past its start. Every advance is the hand's.
+// At 13 px a pencil line is wider than these letters' gaps, so the forms that could merge are kept
+// apart: the a's bowl meets a straight stem in corners, the e's eye is tall above its bar, and the
+// i's dot sits low and to the right, clear of an l before it (or 'li' reads as 'fi'). The figures
+// likewise: each stroke lands firm and eases off, so the 4 is an open 4 in two strokes (its arm is
+// not left to the weak end of one long stroke, where '40' read as '10'), the 1's flag is a short
+// tick, the 3 stays open on the left, and the 6 and 9 run their stems off the loop, clear of a 0.
+const HAND_PENCIL_SRC = {
+  a: [0.48, '0.46,0.54 (0.25,0.3,0.22,0.3,72,290,-6) 0.46,0.09; 0.47,0.68 0.47,0.05 0.54,0'], b: [0.54, '0,1 0,0; (0.28,0.34,0.25,0.34,155,-155,-8)'],
+  c: [0.52, '(0.28,0.34,0.26,0.34,52,306,-8)'], d: [0.54, '(0.26,0.34,0.24,0.34,25,338,-8); 0.54,1 0.54,0'],
+  e: [0.54, '0.05,0.32 0.52,0.355 (0.28,0.34,0.25,0.34,6,304,-8)'], g: [0.54, '(0.26,0.36,0.24,0.32,25,338,-8); 0.53,0.68 0.53,-0.06 (0.3,-0.06,0.23,0.23,0,-150)'],
+  o: [0.58, '(0.29,0.34,0.25,0.35,75,437,-9)'], p: [0.54, '0,0.68 0,-0.3; (0.28,0.34,0.25,0.34,155,-155,-8)'],
+  q: [0.54, '(0.26,0.34,0.24,0.34,25,338,-8); 0.54,0.68 0.54,-0.3'], s: [0.48, '(0.25,0.51,0.21,0.17,40,270,-4) (0.25,0.17,0.24,0.17,90,-140,-4)'],
+  i: [0, '0,0.68 0,0; (0.04,0.87,0.022,0.022,0,360)'], j: [0.22, '0.22,0.68 0.22,-0.1 (0.06,-0.1,0.16,0.2,0,-140); (0.26,0.87,0.022,0.022,0,360)'],
+  C: [0.6, '(0.34,0.5,0.33,0.5,48,312,-6)'], O: [0.76, '(0.38,0.5,0.36,0.5,80,442,-6)'], 0: [0.54, '(0.27,0.5,0.25,0.5,80,442,-6)'],
+  1: [0.28, '0.1,0.86 0.26,1 0.26,0'], 3: [0.54, '(0.26,0.76,0.22,0.24,135,-90); (0.26,0.27,0.27,0.27,90,-135)'],
+  4: [0.56, '0.18,1 0.02,0.32 0.6,0.32; 0.44,0.84 0.44,0'], 7: [0.52, '0,1 0.56,1 0.2,0'],
+  6: [0.54, '~0.46,0.98 0.24,0.84 0.09,0.56 (0.28,0.3,0.24,0.3,180,540)'], 9: [0.54, '~(0.26,0.7,0.24,0.3,0,360) 0.49,0.42 0.43,0.14 0.32,0'],
+};
+const HAND_P = _parseFace({ ...HAND_SRC, ...HAND_PENCIL_SRC });
+for (const ch in HAND_P) HAND_P[ch].adv = HAND[ch].adv; // the layout never moves
+// The typewriter: a monospaced slab-serif face in the spirit of a 1950s office machine, every glyph
+// on a cell TYPE_PITCH cap heights wide (x-height 0.7), drawn as the slug's centre-lines with small
+// slab serifs. The Greek and the maths come off a symbol ball.
+const TYPE_PITCH = 0.6, TYPE_W = 0.11, TYPE_DOT = r => `(${r[0]},${r[1]},0.045,0.045,0,360)`;
+const TYPE_SRC = {
+  A: '0.3,1 0.08,0; 0.3,1 0.52,0; 0.15,0.34 0.45,0.34; 0.02,0 0.16,0; 0.44,0 0.58,0; 0.18,1 0.3,1',
+  B: '0.1,1 0.1,0; 0.02,1 0.34,1 (0.34,0.765,0.17,0.235,90,-90) 0.1,0.53; 0.1,0.53 0.36,0.53 (0.36,0.265,0.19,0.265,90,-90) 0.02,0',
+  C: '(0.31,0.5,0.25,0.5,42,318); 0.5,0.66 0.5,0.88', D: '0.1,1 0.1,0; 0.02,1 0.28,1 (0.28,0.5,0.26,0.5,90,-90) 0.02,0',
+  E: '0.1,1 0.1,0; 0.02,1 0.52,1 0.52,0.82; 0.1,0.53 0.38,0.53; 0.38,0.63 0.38,0.43; 0.02,0 0.54,0 0.54,0.2',
+  F: '0.1,1 0.1,0; 0.02,1 0.52,1 0.52,0.82; 0.1,0.53 0.38,0.53; 0.38,0.63 0.38,0.43; 0.02,0 0.26,0',
+  G: '(0.31,0.5,0.25,0.5,42,350); 0.56,0.44 0.56,0.1; 0.38,0.44 0.6,0.44; 0.5,0.66 0.5,0.88',
+  H: '0.1,0 0.1,1; 0.5,0 0.5,1; 0.1,0.53 0.5,0.53; 0.02,1 0.18,1; 0.42,1 0.58,1; 0.02,0 0.18,0; 0.42,0 0.58,0',
+  I: '0.3,0 0.3,1; 0.12,1 0.48,1; 0.12,0 0.48,0', J: '0.44,1 0.44,0.28 (0.29,0.28,0.15,0.28,0,-180) 0.14,0.4; 0.28,1 0.58,1',
+  K: '0.1,0 0.1,1; 0.02,1 0.18,1; 0.02,0 0.18,0; 0.5,1 0.1,0.36; 0.22,0.52 0.5,0; 0.4,1 0.58,1; 0.42,0 0.58,0',
+  L: '0.12,1 0.12,0; 0.02,1 0.24,1; 0.02,0 0.54,0 0.54,0.22', M: '0.07,0 0.07,1 0.3,0.36 0.53,1 0.53,0; 0,1 0.07,1; 0.53,1 0.6,1; 0,0 0.14,0; 0.46,0 0.6,0',
+  N: '0.08,0 0.08,1 0.52,0 0.52,1; 0,1 0.08,1; 0.44,1 0.6,1; 0,0 0.16,0', O: '(0.3,0.5,0.25,0.5,90,450)',
+  P: '0.1,1 0.1,0; 0.02,1 0.34,1 (0.34,0.75,0.2,0.25,90,-90) 0.1,0.5; 0.02,0 0.26,0', Q: '(0.3,0.5,0.25,0.5,90,450); 0.2,-0.1 0.32,0 0.44,-0.08 0.54,-0.04',
+  R: '0.1,1 0.1,0; 0.02,1 0.34,1 (0.34,0.755,0.19,0.245,90,-90) 0.1,0.51; 0.3,0.51 0.5,0 0.58,0; 0.02,0 0.2,0',
+  S: '(0.3,0.75,0.21,0.25,28,270) (0.3,0.25,0.23,0.25,90,-152); 0.49,0.78 0.49,0.94; 0.1,0.24 0.1,0.06',
+  T: '0.06,0.8 0.06,1 0.54,1 0.54,0.8; 0.3,1 0.3,0; 0.18,0 0.42,0', U: '0.1,1 0.1,0.3 (0.3,0.3,0.2,0.3,180,360) 0.5,1; 0.02,1 0.18,1; 0.42,1 0.58,1',
+  V: '0.08,1 0.3,0 0.52,1; 0,1 0.16,1; 0.44,1 0.6,1', W: '0.05,1 0.16,0 0.3,0.62 0.44,0 0.55,1; 0,1 0.12,1; 0.48,1 0.6,1',
+  X: '0.08,1 0.52,0; 0.52,1 0.08,0; 0,1 0.18,1; 0.42,1 0.6,1; 0,0 0.18,0; 0.42,0 0.6,0', Y: '0.08,1 0.3,0.5 0.52,1; 0.3,0.5 0.3,0; 0,1 0.18,1; 0.42,1 0.6,1; 0.16,0 0.44,0',
+  Z: '0.08,0.8 0.08,1 0.52,1 0.08,0 0.54,0 0.54,0.2',
+  a: '0.12,0.6 (0.3,0.52,0.18,0.18,150,0) 0.48,0.04 0.58,0.02; 0.48,0.4 0.27,0.4 (0.27,0.2,0.18,0.2,90,290) 0.48,0.12',
+  b: '0.1,1 0.1,0; 0,1 0.1,1; (0.31,0.35,0.21,0.35,165,-165); 0,0 0.1,0', c: '(0.32,0.35,0.24,0.35,42,318); 0.52,0.48 0.52,0.66',
+  d: '(0.29,0.35,0.21,0.35,15,345); 0.5,1 0.5,0 0.6,0; 0.4,1 0.5,1', e: '0.08,0.37 0.54,0.37 (0.31,0.35,0.23,0.35,4,318)',
+  f: '0.52,0.92 (0.4,0.84,0.14,0.16,40,180) 0.26,0; 0.08,0.7 0.48,0.7; 0.1,0 0.44,0', g: '(0.29,0.38,0.21,0.32,15,345); 0.5,0.7 0.5,-0.1 (0.3,-0.1,0.2,0.2,0,-160); 0.5,0.7 0.6,0.7',
+  h: '0.1,1 0.1,0; 0,1 0.1,1; 0.1,0.45 (0.3,0.45,0.2,0.25,180,0) 0.5,0; 0,0 0.2,0; 0.4,0 0.6,0', i: '0.3,0.7 0.3,0; 0.14,0.7 0.3,0.7; 0.1,0 0.5,0; ' + TYPE_DOT([0.3, 0.95]),
+  j: '0.4,0.7 0.4,-0.12 (0.26,-0.12,0.14,0.18,0,-150); 0.2,0.7 0.4,0.7; ' + TYPE_DOT([0.4, 0.95]),
+  k: '0.12,1 0.12,0; 0.02,1 0.12,1; 0.5,0.7 0.12,0.28; 0.26,0.42 0.52,0; 0.4,0.7 0.58,0.7; 0.02,0 0.22,0; 0.42,0 0.6,0', l: '0.3,1 0.3,0; 0.14,1 0.3,1; 0.1,0 0.5,0',
+  m: '0.06,0.7 0.06,0; 0.06,0.48 (0.18,0.5,0.12,0.2,180,0) 0.3,0; 0.3,0.5 (0.42,0.5,0.12,0.2,180,0) 0.54,0; 0,0.7 0.06,0.7; 0,0 0.12,0; 0.48,0 0.6,0',
+  n: '0.1,0.7 0.1,0; 0.1,0.45 (0.3,0.45,0.2,0.25,180,0) 0.5,0; 0,0.7 0.1,0.7; 0,0 0.2,0; 0.4,0 0.6,0', o: '(0.3,0.35,0.23,0.35,90,450)',
+  p: '0.1,0.7 0.1,-0.3; 0,0.7 0.1,0.7; (0.31,0.35,0.21,0.35,165,-165); 0,-0.3 0.24,-0.3', q: '(0.29,0.35,0.21,0.35,15,345); 0.5,0.7 0.5,-0.3; 0.5,0.7 0.6,0.7; 0.36,-0.3 0.6,-0.3',
+  r: '0.14,0.7 0.14,0; 0.14,0.42 (0.36,0.43,0.22,0.27,180,50); 0.04,0.7 0.14,0.7; 0.04,0 0.4,0', s: '(0.3,0.525,0.19,0.175,30,270) (0.3,0.175,0.21,0.175,90,-152); 0.47,0.56 0.47,0.7; 0.12,0.16 0.12,0.02',
+  t: '0.22,0.94 0.22,0.14 (0.36,0.14,0.14,0.14,180,300); 0.06,0.7 0.48,0.7', u: '0.1,0.7 0.1,0.25 (0.3,0.25,0.2,0.25,180,360); 0.5,0.7 0.5,0 0.6,0; 0,0.7 0.1,0.7; 0.4,0.7 0.5,0.7',
+  v: '0.08,0.7 0.3,0 0.52,0.7; 0,0.7 0.16,0.7; 0.44,0.7 0.6,0.7', w: '0.05,0.7 0.16,0 0.3,0.48 0.44,0 0.55,0.7; 0,0.7 0.11,0.7; 0.49,0.7 0.6,0.7',
+  x: '0.08,0.7 0.52,0; 0.52,0.7 0.08,0; 0,0.7 0.18,0.7; 0.42,0.7 0.6,0.7; 0,0 0.18,0; 0.42,0 0.6,0', y: '0.08,0.7 0.31,0.06; 0.52,0.7 0.22,-0.3; 0,0.7 0.16,0.7; 0.44,0.7 0.6,0.7; 0.08,-0.3 0.34,-0.3',
+  z: '0.1,0.54 0.1,0.7 0.5,0.7 0.1,0 0.52,0 0.52,0.16',
+  0: '(0.3,0.5,0.22,0.5,90,450)', 1: '0.14,0.8 0.3,1 0.3,0; 0.12,0 0.48,0', 2: '(0.3,0.73,0.21,0.27,160,-35) 0.1,0 0.52,0 0.52,0.12',
+  3: '(0.29,0.76,0.2,0.24,155,-90); (0.3,0.27,0.23,0.27,90,-155)', 4: '0.4,0 0.4,1 0.06,0.3 0.56,0.3; 0.26,0 0.54,0',
+  5: '0.5,1 0.14,1 0.12,0.57 (0.3,0.31,0.22,0.31,125,-150)', 6: '(0.34,0.52,0.22,0.48,55,180) 0.12,0.3 (0.31,0.3,0.19,0.3,180,540)',
+  7: '0.08,0.82 0.08,1 0.52,1 0.24,0', 8: '(0.3,0.765,0.18,0.235,-90,270); (0.3,0.27,0.22,0.27,90,450)', 9: '(0.29,0.7,0.19,0.3,0,360) 0.48,0.48 (0.26,0.48,0.22,0.48,0,-125)',
+  ' ': '', '.': TYPE_DOT([0.3, 0.04]), ',': TYPE_DOT([0.31, 0.05]) + '; 0.33,0.05 0.31,-0.04 0.25,-0.15', ':': TYPE_DOT([0.3, 0.04]) + '; ' + TYPE_DOT([0.3, 0.5]),
+  ';': TYPE_DOT([0.31, 0.5]) + '; ' + TYPE_DOT([0.31, 0.05]) + '; 0.33,0.05 0.31,-0.04 0.25,-0.15', "'": '0.3,1 0.3,0.74', '"': '0.22,1 0.22,0.74; 0.38,1 0.38,0.74',
+  '(': '(0.52,0.4,0.3,0.66,118,242)', ')': '(0.08,0.4,0.3,0.66,62,-62)', '[': '0.42,1.04 0.24,1.04 0.24,-0.22 0.42,-0.22', ']': '0.18,1.04 0.36,1.04 0.36,-0.22 0.18,-0.22',
+  '-': '0.12,0.38 0.48,0.38', '–': '0.03,0.38 0.57,0.38', '—': '0,0.38 0.6,0.38', '=': '0.08,0.5 0.52,0.5; 0.08,0.27 0.52,0.27',
+  '+': '0.08,0.385 0.52,0.385; 0.3,0.16 0.3,0.61', '−': '0.08,0.385 0.52,0.385', '×': '0.12,0.18 0.48,0.58; 0.48,0.18 0.12,0.58', '·': TYPE_DOT([0.3, 0.38]),
+  '/': '0.1,-0.1 0.5,1.06', '°': '(0.3,0.86,0.11,0.12,0,360)', '%': '(0.17,0.8,0.1,0.17,0,360); 0.52,0.98 0.08,0.02; (0.43,0.2,0.1,0.17,0,360)',
+  '^': '0.12,0.66 0.3,0.98 0.48,0.66', '~': '~0.06,0.34 0.17,0.43 0.3,0.38 0.43,0.33 0.54,0.42', '!': '0.3,1 0.3,0.3; ' + TYPE_DOT([0.3, 0.04]),
+  '?': '(0.3,0.77,0.2,0.23,155,-60) 0.3,0.4 0.3,0.28; ' + TYPE_DOT([0.3, 0.04]), '_': '0,-0.17 0.6,-0.17',
+  '&': '~0.56,0 0.36,0.26 0.18,0.52 0.14,0.74 0.22,0.95 0.34,0.97 0.42,0.82 0.36,0.66 0.14,0.44 0.08,0.22 0.16,0.03 0.32,0 0.46,0.14 0.54,0.36',
+  '<': '0.5,0.64 0.1,0.385 0.5,0.13', '>': '0.1,0.64 0.5,0.385 0.1,0.13',
+  '≈': '~0.06,0.47 0.17,0.56 0.3,0.51 0.43,0.46 0.54,0.55; ~0.06,0.23 0.17,0.32 0.3,0.27 0.43,0.22 0.54,0.31', '√': '0.04,0.44 0.12,0.5 0.26,0 0.46,1.04 0.6,1.04',
+  '∞': '~0.3,0.38 0.37,0.48 0.45,0.52 0.53,0.47 0.55,0.38 0.53,0.29 0.45,0.24 0.37,0.28 0.3,0.38 0.23,0.48 0.15,0.52 0.07,0.47 0.05,0.38 0.07,0.29 0.15,0.24 0.23,0.28 0.3,0.38',
+  '′': '0.34,1 0.26,0.74', '✓': '0.08,0.44 0.26,0.08 0.56,0.9',
+  'α': '(0.27,0.35,0.2,0.35,0,360); ~0.54,0.7 0.48,0.42 0.47,0.18 0.52,0.03 0.6,0', 'β': '0.12,-0.3 0.12,0.78 (0.29,0.78,0.17,0.22,180,-90) (0.31,0.28,0.22,0.28,90,-155)',
+  'γ': '~0.06,0.62 0.12,0.7 0.18,0.64 0.3,0.04; ~0.54,0.7 0.36,0.2 0.3,0.04 0.22,-0.12 0.24,-0.27 0.31,-0.31 0.38,-0.22 0.3,0.04',
+  'δ': '(0.3,0.3,0.22,0.3,0,360); ~0.32,0.6 0.14,0.78 0.16,0.94 0.34,1 0.48,0.94', 'θ': '(0.3,0.5,0.21,0.5,90,450); 0.09,0.5 0.51,0.5',
+  'λ': '0.08,1 0.18,0.98 0.54,0; 0.32,0.5 0.06,0', 'μ': '0.1,0.7 0.1,-0.3; 0.1,0.26 (0.3,0.26,0.2,0.26,180,360); 0.5,0.7 0.5,0.06 0.58,0',
+  'π': '0.04,0.62 0.1,0.7 0.58,0.7; 0.2,0.7 0.18,0; 0.44,0.7 0.44,0.06 0.54,0.02', 'ρ': '0.1,-0.3 0.1,0.35 (0.31,0.35,0.21,0.35,180,-180)',
+  'σ': '0.58,0.7 0.32,0.7 (0.29,0.35,0.21,0.35,95,455)', 'φ': '(0.3,0.36,0.24,0.32,0,360); 0.3,0.94 0.3,-0.3',
+  'ψ': '0.06,0.7 0.06,0.38 (0.3,0.38,0.24,0.38,180,360) 0.54,0.7; 0.3,0.94 0.3,-0.3',
+  'ω': '~0.12,0.7 0.04,0.46 0.04,0.18 0.12,0.02 0.22,0 0.29,0.12 0.3,0.38; ~0.3,0.38 0.31,0.12 0.38,0 0.48,0.02 0.56,0.18 0.56,0.46 0.48,0.7',
+  'Δ': '0.04,0 0.3,1 0.56,0 0.04,0', 'Σ': '0.54,0.82 0.54,1 0.06,1 0.32,0.5 0.06,0 0.56,0 0.56,0.18', 'Φ': '(0.3,0.5,0.26,0.3,0,360); 0.3,1 0.3,0; 0.18,1 0.42,1; 0.18,0 0.42,0',
+};
+const TYPE = _parseFace(Object.fromEntries(Object.entries(TYPE_SRC).map(([k, v]) => [k, [TYPE_PITCH, v]])));
+const HAND_GAP = 0.2, HAND_SUP = 0.62, HAND_SLANT = Math.tan(16 * Math.PI / 180), HAND_LEAN = Math.tan(1.5 * Math.PI / 180); // italic slant; a roman hand's own lean
+// Inline markup: ^{...} a raised superscript at 0.62 size, _{...} a subscript, *{...} italic.
+function _marks(str, italic) {
+  const out = [], st = [{ s: 1, dy: 0, it: !!italic }];
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i], top = st[st.length - 1];
+    if ((c === '^' || c === '_' || c === '*') && str[i + 1] === '{') { st.push(c === '*' ? { ...top, it: true } : { s: top.s * HAND_SUP, dy: top.dy + (c === '^' ? 0.42 : -0.16) * top.s, it: top.it }); i++; continue; }
+    if (c === '}' && st.length > 1) { st.pop(); continue; }
+    out.push({ ch: c, s: top.s, dy: top.dy, it: top.it });
+  }
+  return out;
+}
+// width in px of str set at cap height size (opts: face 'hand' | 'type', italic, tracking)
+function measureText(str, size, o = {}) {
+  const g = _marks(str, o.italic); let x = 0;
+  if (o.face === 'type') return g.length * TYPE_PITCH * size + Math.max(0, g.length - 1) * (o.tracking || 0);
+  g.forEach((q, i) => { const gl = HAND[q.ch]; x += ((gl ? gl.adv : 0.5) + (i < g.length - 1 ? HAND_GAP : 0)) * size * q.s + (i < g.length - 1 ? (o.tracking || 0) : 0); });
+  return x;
+}
+// Lay out str as pen strokes in the current coordinates. Every letter is made a little off by its
+// own seed, as a person's are: about 3% in size, a degree or so of turn and lean, uneven spacing.
+// The baseline wanders across the line and the whole line runs a hair up- or downhill.
+function _letterStrokes(str, x, y, o) {
+  const size = o.size || 13, seed = o.seed || ('t:' + str), g = _marks(str, o.italic), n = nzc('hand:wobble'), out = [], F = o._face || HAND;
+  let px = x - (o.align === 'center' ? 0.5 : o.align === 'right' ? 1 : 0) * measureText(str, size, o);
+  const drift = (hash(seed) % 997) * 0.31, wob = o.wobble ?? 1, x0 = px, hill = (rngFor(seed + ':line')() - 0.5) * 0.009 * wob;
+  g.forEach((q, i) => {
+    const gl = F[q.ch] || { adv: 0.5, st: [] }, s = size * q.s, r = rngFor(seed + ':' + i + q.ch);
+    const k = 1 + (r() - 0.5) * 0.06 * wob, sx = k * (1 + (r() - 0.5) * 0.02 * wob), sy = k * (1 + (r() - 0.5) * 0.02 * wob);
+    const rot = (r() - 0.5) * 0.05 * wob, off = r() * 60, sp = (r() - 0.5) * 0.045 * wob, lean = (q.it ? HAND_SLANT : HAND_LEAN) + (r() - 0.5) * 0.035 * wob;
+    const bx = (r() - 0.5) * 0.03 * wob, by = ((r() - 0.5) * 0.024 + 0.04 * n(px / size * 0.12 + drift, 0.5)) * wob;
+    const nib = (r() - 0.5) * 0.1 * wob, load = 0.9 + 0.1 * r(); // the pen turns a little in the fingers; the ink runs a little thinner
+    const cx = gl.adv / 2, cs = Math.cos(rot), sn = Math.sin(rot), base = y - q.dy * size - (px - x0) * hill;
+    for (const st of gl.st) {
+      const jx = (r() - 0.5) * 0.026 * wob, jy = (r() - 0.5) * 0.02 * wob; // each stroke set down on its own, so joins overshoot or fall a hair short
+      const pts = st.map(([gx, gy]) => {
+        let u = gx * sx + jx + 0.024 * wob * n(gx * 1.9 + off, gy * 1.9), v = gy * sy + jy + 0.024 * wob * n(gx * 1.9, gy * 1.9 + off + 31);
+        const du = u - cx, dv = v - 0.35; u = cx + du * cs - dv * sn; v = 0.35 + du * sn + dv * cs;
+        return [px + (u + bx + v * lean) * s, base - (v + by) * s];
+      });
+      let L = 0; for (let k = 1; k < pts.length; k++) L += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+      out.push({ pts, L: Math.max(L, 0.3), s, nib, load });
+    }
+    px += (gl.adv + HAND_GAP + sp) * s + (o.tracking || 0); // a hand never spaces quite evenly
+  });
+  return out;
+}
+// cut a polyline at fraction f of its length
+function _cut(pts, f) {
+  if (f >= 1) return pts; let L = 0; for (let k = 1; k < pts.length; k++) L += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+  const lim = L * f, out = [pts[0]]; let acc = 0;
+  for (let k = 1; k < pts.length; k++) {
+    const a = pts[k - 1], b = pts[k], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (acc + l >= lim) { const t = l ? (lim - acc) / l : 0; out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); break; }
+    out.push(b); acc += l;
+  }
+  return out;
+}
+// India ink from a fine, slightly broad nib held at a fixed angle: the stroke is the swept nib, so
+// it thickens and thins with direction (about 1.8 : 1), lands a touch heavier, has angled ends, and
+// is near-black with a hint of blue. The edge follows the board's fibres and a faint bleed lies under it.
+const INK = hex('#1c1b22'), INK_SHEEN = [76, 78, 94], NIB_ANGLE = 38 * Math.PI / 180, NIB_RATIO = 1.8;
+function _ink(ctx, list, o) {
+  const m = ctx.getTransform(), rot = Math.atan2(m.b, m.a);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const s of list) { const r = 0.09 * s.s + 1.5; for (const p of s.pts) { x0 = Math.min(x0, p[0] - r); y0 = Math.min(y0, p[1] - r); x1 = Math.max(x1, p[0] + r); y1 = Math.max(y1, p[1] + r); } }
+  if (x1 < x0) return;
+  const bx = Math.floor(x0) - 2, by = Math.floor(y0) - 2, bw = Math.ceil(x1) + 3 - bx, bh = Math.ceil(y1) + 3 - by, M = new Float32Array(bw * bh), LD = new Float32Array(bw * bh);
+  for (const st of list) {
+    const A = Math.max(0.62, 0.0625 * st.s), B = Math.max(0.42, A / NIB_RATIO), ph = -NIB_ANGLE + rot + st.nib, cu = Math.cos(ph), su = Math.sin(ph);
+    const Q = _resample(st.pts, 0.35); let acc = 0;
+    for (let j = 0; j < Q.length; j++) {
+      if (j) acc += Math.hypot(Q[j][0] - Q[j - 1][0], Q[j][1] - Q[j - 1][1]);
+      const land = 1 + 0.2 * (1 - smooth(0, 0.14 * st.s, acc)), a = A * land, b = B * land, R = a + 1, cx = Q[j][0], cy = Q[j][1];
+      const xa = Math.max(0, Math.floor(cx - R) - bx), xb = Math.min(bw - 1, Math.ceil(cx + R) - bx), ya = Math.max(0, Math.floor(cy - R) - by), yb = Math.min(bh - 1, Math.ceil(cy + R) - by);
+      for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
+        const dx = x + bx + 0.5 - cx, dy = y + by + 0.5 - cy, u = dx * cu + dy * su, v = dy * cu - dx * su;
+        const f = Math.hypot(u / a, v / b), gr = Math.hypot(u / (a * a), v / (b * b)), d = f > 1e-6 ? (f - 1) * f / gr : -b; // distance to the nib's edge
+        const cov = clamp(0.5 - d), k = y * bw + x; if (cov > M[k]) { M[k] = cov; LD[k] = st.load; }
+      }
+    }
+  }
+  const Bl = new Float32Array(bw * bh), Bt = new Float32Array(bw * bh); // the bleed: the ink spread a pixel or so into the board
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { let s = 0; for (let i = -1; i <= 1; i++) s += M[y * bw + clamp(x + i, 0, bw - 1)]; Bt[y * bw + x] = s / 3; }
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { let s = 0; for (let j = -1; j <= 1; j++) s += Bt[clamp(y + j, 0, bh - 1) * bw + x]; Bl[y * bw + x] = s / 3; }
+  _bakeTooth(_TSEED || 'card');
+  const img = new ImageData(bw, bh), D = img.data, T = _TOOTH, ns = nzc('ink:sheen');
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const i = y * bw + x, a = M[i], b = Bl[i]; if (a + b < 0.01) continue;
+    const X = x + bx, Y = y + by, t = X < 0 || Y < 0 || X >= W || Y >= H ? 0.5 : T[Y * W + X];
+    const core = a > 0.97 ? 1 : a * clamp(0.8 + 0.5 * (t - 0.5)), bleed = b * 0.22 * (0.3 + 0.7 * t), al = core + bleed * (1 - core);
+    const col = litAt(mix(INK, INK_SHEEN, 0.14 * core * (0.5 + 0.5 * ns(X * 0.05, Y * 0.05)) + (1 - (LD[i] || 1)) * 1.4), X, Y), k = i * 4; // thinner ink dries a little greyer
+    D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = al * 255;
+  }
+  const s = _scratch(bw, bh); s.getContext('2d').putImageData(img, 0, 0);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = o.alpha ?? 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(s, 0, 0, bw, bh, bx, by, bw, bh); ctx.restore();
+}
+// The typewriter at work: each character is one strike of its slug through the ribbon, a little
+// harder or softer, a hair off the line and off square, and the odd key prints heavier. A raised
+// character is typed full size on a half-turned platen. Italic spans are underlined after typing,
+// a row of underscore strikes, which is how a typed label marks a binomial.
+function _typeStrikes(str, x, y, o, wd) {
+  const size = o.size || 13, seed = o.seed || ('t:' + str), g = _marks(str, o.italic), out = [], cw = TYPE_PITCH * size + (o.tracking || 0);
+  const x0 = x - (o.align === 'center' ? 0.5 : o.align === 'right' ? 1 : 0) * wd;
+  const strike = (ch, cx, base, key) => {
+    const gl = TYPE[ch]; if (!gl || !gl.st.length) return;
+    const r = rngFor(seed + ':' + key), dx = (r() - 0.5) * 0.04, dy = (r() - 0.5) * 0.07, rot = (r() - 0.5) * 0.04, k = r(), heavy = k < 0.07, cs = Math.cos(rot), sn = Math.sin(rot);
+    // the odd key prints heavier, the odd one is struck light
+    out.push({ heavy, dens: heavy ? 1 : k > 0.93 ? 0.62 : 0.8 + 0.2 * r(), ga: r() * Math.PI * 2, gs: (r() - 0.5) * 0.7, ph: r() * 40, c: [cx + 0.3 * size, base - 0.35 * size],
+      st: gl.st.map(s => s.map(([gx, gy]) => { const u = gx - 0.3, v = gy - 0.35; return [cx + (0.3 + u * cs - v * sn + dx) * size, base - (0.35 + u * sn + v * cs + dy) * size]; })) });
+  };
+  let run = null;
+  const flush = () => {
+    if (!run) return; let a = run.a, b = run.b; while (a <= b && g[a].ch === ' ') a++; while (b >= a && g[b].ch === ' ') b--;
+    for (let i = a; i <= b; i++) strike('_', x0 + i * cw, y, 'u' + i);
+    run = null;
+  };
+  g.forEach((q, i) => { strike(q.ch, x0 + i * cw, y - q.dy * size, i + q.ch); if (q.it) { if (run) run.b = i; else run = { a: i, b: i }; } else flush(); });
+  flush();
+  return out;
+}
+// Ribbon ink: a strike prints the slug's face through an inked fabric ribbon, so the ink lies in a
+// fine weave, denser where the key was struck harder and on the side of the slug that met the
+// platen first. Overlapping strikes (an underline through a descender) add their ink.
+const RIBBON = [31, 29, 33];
+function _ribbon(ctx, S, size, prog, o) {
+  const cnt = Math.floor(clamp(prog) * S.length + 1e-6); if (!cnt) return;
+  const m = ctx.getTransform(), sc = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1, dev = p => [m.a * p[0] + m.c * p[1] + m.e, m.b * p[0] + m.d * p[1] + m.f];
+  const L = S.slice(0, cnt).map(s => ({ ...s, st: s.st.map(t => t.map(dev)), c: dev(s.c) })), h0 = TYPE_W * size * sc / 2, pad = h0 * 1.3 + 2;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const s of L) for (const t of s.st) for (const p of t) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+  const bx = Math.floor(x0 - pad), by = Math.floor(y0 - pad), bw = Math.ceil(x1 + pad) - bx + 1, bh = Math.ceil(y1 + pad) - by + 1, T = new Float32Array(bw * bh).fill(1), nf = nzc('ribbon');
+  for (const s of L) {
+    const h = h0 * (s.heavy ? 1.2 : 1) * (0.9 + 0.12 * s.dens), R = h + 0.8;
+    let sx0 = 1e9, sy0 = 1e9, sx1 = -1e9, sy1 = -1e9;
+    for (const t of s.st) for (const p of t) { sx0 = Math.min(sx0, p[0]); sy0 = Math.min(sy0, p[1]); sx1 = Math.max(sx1, p[0]); sy1 = Math.max(sy1, p[1]); }
+    const lx = Math.max(0, Math.floor(sx0 - R) - bx), ly = Math.max(0, Math.floor(sy0 - R) - by), lw = Math.min(bw - 1, Math.ceil(sx1 + R) - bx) - lx + 1, lh = Math.min(bh - 1, Math.ceil(sy1 + R) - by) - ly + 1;
+    if (lw <= 0 || lh <= 0) continue;
+    const Lb = new Float32Array(lw * lh);
+    for (const t of s.st) for (let i = 0; i < Math.max(1, t.length - 1); i++) {
+      const a = t[i], b = t[Math.min(i + 1, t.length - 1)], vx = b[0] - a[0], vy = b[1] - a[1], vv = vx * vx + vy * vy || 1e-9;
+      const xa = Math.max(0, Math.floor(Math.min(a[0], b[0]) - R) - bx - lx), xb = Math.min(lw - 1, Math.ceil(Math.max(a[0], b[0]) + R) - bx - lx);
+      const ya = Math.max(0, Math.floor(Math.min(a[1], b[1]) - R) - by - ly), yb = Math.min(lh - 1, Math.ceil(Math.max(a[1], b[1]) + R) - by - ly);
+      for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
+        const px = x + lx + bx + 0.5 - a[0], py = y + ly + by + 0.5 - a[1], u = clamp((px * vx + py * vy) / vv), d = Math.hypot(px - vx * u, py - vy * u);
+        const c = 1 - smooth(h - 0.55, h + 0.55, d), k = y * lw + x; if (c > Lb[k]) Lb[k] = c;
+      }
+    }
+    const gx = Math.cos(s.ga), gy = Math.sin(s.ga), span = size * sc;
+    for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) {
+      const c = Lb[y * lw + x]; if (c <= 0) continue;
+      const X = x + lx + bx, Y = y + ly + by, dl = s.dens * (1 + s.gs * ((X - s.c[0]) * gx + (Y - s.c[1]) * gy) / span);
+      const fab = 0.86 + 0.1 * Math.sin(2.3 * (X + Y) + s.ph) * Math.sin(2.3 * (X - Y) + s.ph * 1.7) + 0.12 * nf(X * 0.85 + s.ph, Y * 0.85);
+      T[(y + ly) * bw + x + lx] *= 1 - clamp(c * dl * fab);
+    }
+  }
+  _bakeTooth(_TSEED || 'card');
+  const img = new ImageData(bw, bh), D = img.data, TT = _TOOTH;
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const i = y * bw + x, a = 1 - T[i]; if (a < 0.004) continue;
+    const X = x + bx, Y = y + by, t = X < 0 || Y < 0 || X >= W || Y >= H ? 0.5 : TT[Y * W + X], col = litAt(RIBBON, X, Y), k = i * 4;
+    D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = 255 * a * 0.95 * clamp(0.88 + 0.24 * (t - 0.5));
+  }
+  const sc2 = _scratch(bw, bh); sc2.getContext('2d').putImageData(img, 0, 0);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = o.alpha ?? 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(sc2, 0, 0, bw, bh, bx, by, bw, bh); ctx.restore();
+}
+// letterText(ctx, str, x, y, opts): letters str with its baseline at y. opts: size (cap height px,
+// 13), medium ('ink' | 'pencil' | 'white'; pencil turns white on the black card), italic, align
+// ('left' | 'center' | 'right'), prog (0..1, the pen writes left to right), seed, tracking (px),
+// tone (pencil darkness), wobble (1; 1.25 for pencil), face ('hand' | 'type'). Returns the width.
+function letterText(ctx, str, x, y, o = {}) {
+  const size = o.size || 13, med = o.medium || 'ink', prog = clamp(o.prog ?? 1), wd = measureText(str, size, o);
+  if (prog <= 0 || !str) return wd;
+  if (o.face === 'type') { _ribbon(ctx, _typeStrikes(str, x, y, o, wd), size, prog, o); return wd; }
+  const S = _letterStrokes(str, x, y, med === 'ink' ? o : { wobble: 1.25, ...o, _face: HAND_P }), m = ctx.getTransform(), sc = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1;
+  let tot = 0; for (const s of S) tot += s.L;
+  let lim = prog * tot; const list = [];
+  for (const s of S) { if (lim <= 0) break; const f = Math.min(1, lim / s.L); lim -= s.L; list.push({ pts: _devPts(ctx, _cut(s.pts, f)).P, s: s.s * sc, L: s.L * sc, nib: s.nib, load: s.load }); }
+  if (med === 'ink') _ink(ctx, list, o);
+  else { // a person printing with a pencil: each stroke lands firm and eases off, each its own weight
+    const seed = o.seed || ('t:' + str), tone = o.tone ?? 1;
+    const trs = list.map((s, i) => _trace(s.pts, { tone, tremor: 0.08, taper: 0.25, print: s.L >= 1.2, seed: seed + ':' + i }, sc, Math.max(1.45, 0.125 * s.s) * (s.L < 1.2 ? 1.25 : 1)));
+    _graphite(ctx, trs, { white: med === 'white' ? true : undefined, alpha: o.alpha });
+  }
+  return wd;
+}
+
+// ---------- the label ----------
+// A slip of buff label stock cut from a sheet with a knife along a rule: crisp edges a hair off
+// straight and square, fibres and formation in the paper, a faint sheen. It lies flat on the mount,
+// so its shadow is a crisp hairline below and right with only a breath of ambient shade beyond it.
+const _STOCK = {}, _SP = 4; // the slip sits _SP px inside its canvas so its cut can wander
+function _labelStock(w, h, seed) {
+  const key = w + 'x' + h + ':' + seed; if (_STOCK[key]) return _STOCK[key];
+  const cw = w + 2 * _SP, ch = h + 2 * _SP, r = rngFor(seed + ':cut'), rr = rngFor(seed + ':s3');
+  const C = [[0, 0], [w, 0], [w, h], [0, h]].map(([x, y]) => [x + _SP + (r() - 0.5) * 1.3, y + _SP + (r() - 0.5) * 1.3]); // corners, each a hair off square
+  const bow = [0, 1, 2, 3].map(() => (r() - 0.5) * 0.9), lit = [1, 0, 0, 1]; // each edge bowed a little; top and left face the window
+  const E = C.map((A, e) => { const B = C[(e + 1) % 4], ex = B[0] - A[0], ey = B[1] - A[1], l = Math.hypot(ex, ey); return { A, ex, ey, ll: l * l, nx: ey / l, ny: -ex / l }; });
+  const F = mk(cw, ch), fc = F.getContext('2d'); fc.lineCap = 'round'; fc.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < cw * ch / 70; i++) { // fibres in the sheet: most pale, a few tan
+    const x = r() * cw, y = r() * ch, a = r() * Math.PI, L = 3 + r() * r() * 16, bend = (r() - 0.5) * L * 0.5;
+    fc.strokeStyle = r() < 0.8 ? `rgba(255,0,0,${(0.25 + r() * 0.5).toFixed(2)})` : `rgba(0,0,255,${(0.2 + r() * 0.4).toFixed(2)})`; fc.lineWidth = 0.4 + r() * 0.5;
+    fc.beginPath(); fc.moveTo(x, y); fc.quadraticCurveTo(x + Math.cos(a) * L / 2 - Math.sin(a) * bend, y + Math.sin(a) * L / 2 + Math.cos(a) * bend, x + Math.cos(a) * L, y + Math.sin(a) * L); fc.stroke();
+  }
+  const fd = fc.getImageData(0, 0, cw, ch).data, c = mk(cw, ch), g = c.getContext('2d'), img = g.createImageData(cw, ch), D = img.data;
+  const n1 = nzc(seed + ':s1'), n2 = nzc(seed + ':s2'), ne = nzc(seed + ':edge'), Fp = (x, y) => fd[(clamp(y, 0, ch - 1) * cw + clamp(x, 0, cw - 1)) * 4] / 255;
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const px = x + 0.5, py = y + 0.5; let d = -1e9, ed = 0;
+    for (let e = 0; e < 4; e++) { const q = E[e], t = clamp(((px - q.A[0]) * q.ex + (py - q.A[1]) * q.ey) / q.ll), de = (px - q.A[0]) * q.nx + (py - q.A[1]) * q.ny - bow[e] * 4 * t * (1 - t); if (de > d) { d = de; ed = e; } }
+    d += 0.2 * ne(x * 0.9, y * 0.9); // the knife tears a fibre here and there
+    const al = clamp(0.5 - d); if (al <= 0) continue;
+    const k = (y * cw + x) * 4, fp = fd[k] / 255, ft = fd[k + 2] / 255;
+    // a buff stock, warmer than either board, so the slip reads as its own material from across the room
+    let col = mix(hex('#f2e5ca'), hex('#e3d1ae'), clamp(0.42 + fbm(n1, x * 0.07, y * 0.07, 3) * 0.6 + n2(x * 0.5, y * 0.5) * 0.1)); // formation, a little cloudy
+    col = mix(mix(col, hex('#f8efda'), fp * 0.42), hex('#bfa77e'), ft * 0.3);
+    const sheen = 0.035 * Math.exp(-Math.pow(((px / cw) * 0.6 + (py / ch) * 0.8 - 0.38) / 0.42, 2)); // the window's faint sheen on the stock
+    col = shade(col, 1 + sheen + (Fp(x + 1, y + 1) - Fp(x - 1, y - 1)) * 0.05 + (rr() - 0.5) * 0.025);
+    if (d > -1.4) col = shade(col, lit[ed] ? 1.06 : 0.84); // the cut edge: a bright lip toward the window, a dull one away
+    D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = al * 255;
+  }
+  g.putImageData(img, 0, 0);
+  return (_STOCK[key] = c);
+}
+// labelCard(ctx, opts): x, y (top-left), w (auto), lines [{text, size (15 if italic, else 12.5),
+// italic, align}], prog (0..1 across all lines, line by line), rot (radians), pad (12), lead (1.7),
+// lift (px, height of its faint ambient shade), seed, face ('type', the default: typed in one size,
+// typeSize 13, binomials underlined; or 'hand', lettered in ink). Returns its bbox {x, y, w, h} before rotation.
+function labelCard(ctx, o = {}) {
+  const pad = o.pad ?? 12, lead = o.lead ?? 1.7, seed = o.seed || 'label';
+  const L = (o.lines || []).map(l => ({ ...l, size: l.size || (l.italic || l.text.includes('*{') ? 15 : 12.5) })); // the binomial line a size up
+  let wMax = 0, yb = pad;
+  L.forEach((l, i) => { l.w = measureText(l.text, l.size, l); wMax = Math.max(wMax, l.w); yb += i ? l.size * lead : l.size * 1.05; l.y = yb; });
+  const w = Math.round(o.w ?? wMax + 2 * pad + 6), h = Math.round(yb + (L.length ? L[L.length - 1].size * 0.42 : 0) + pad);
+  const stock = _labelStock(w, h, seed), tot = L.reduce((a, l) => a + l.w, 0) || 1, P = clamp(o.prog ?? 1) * tot;
+  ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rot || 0);
+  castShadow(ctx, stock, -_SP, -_SP, o.lift ?? 1.2 * MM, { alpha: 0.12, blur: 3 }); // a breath of ambient shade
+  castShadow(ctx, stock, -_SP, -_SP, 0.5 * MM, { alpha: 0.5, blur: 0 }); // the contact line where the slip lies on the board: a crisp hairline below and right
+  ctx.drawImage(stock, -_SP, -_SP);
+  let acc = 0;
+  const ax = l => l.align === 'center' ? w / 2 : l.align === 'right' ? w - pad : pad;
+  if ((o.face ?? 'type') === 'type') {
+    // one machine, one size: the type is set smaller only if the slip is too narrow for its longest line
+    const n = L.map(l => _marks(l.text).length), ts = Math.min(o.typeSize ?? 13, (w - 2 * pad) / (Math.max(1, ...n) * TYPE_PITCH));
+    const yA = pad + ts * 1.05, yB = L.length ? L[L.length - 1].y : yA, tn = n.reduce((a, b) => a + b, 0) || 1, Pn = clamp(o.prog ?? 1) * tn;
+    L.forEach((l, i) => {
+      const f = clamp((Pn - acc) / Math.max(1, n[i])); acc += n[i]; if (f <= 0) return;
+      letterText(ctx, l.text, ax(l), L.length > 1 ? lerp(yA, yB, i / (L.length - 1)) : yA, { face: 'type', size: ts, italic: l.italic, align: l.align, prog: f, seed: seed + ':' + i });
+    });
+  } else L.forEach((l, i) => {
+    const f = clamp((P - acc) / l.w); acc += l.w; if (f <= 0) return;
+    letterText(ctx, l.text, ax(l), l.y, { size: l.size, italic: l.italic, align: l.align, prog: f, seed: seed + ':' + i, medium: 'ink' });
+  });
+  ctx.restore();
+  return { x: o.x, y: o.y, w, h };
+}
+
+// ---------- the page contract ----------
+// kitStart(init, seek): window.__riso for the render tools; ?t=2.5 shows that moment, ?play plays the
+// build in real time from 0 and holds at the hero. seek may be async; frames drop if it is slow.
+function kitStart(init, seek) {
+  const R = window.__riso = { duration: DUR, ready: false, seek, hero: HERO, build: { end: BUILD_END } }, q = new URLSearchParams(location.search);
+  (async () => {
+    await init();
+    if (q.has('play')) {
+      await seek(0); R.ready = true; const t0 = performance.now();
+      for (;;) { await new Promise(requestAnimationFrame); const t = Math.min(HERO, (performance.now() - t0) / 1000); await seek(t); if (t >= HERO) break; }
+    } else { const t = Number(q.get('t')); await seek(q.has('t') && isFinite(t) ? t : HERO); R.ready = true; }
+  })();
+}
+// ===== math-animals kit v1 end =====
+// Plate 5. The emperor dragonfly, Anax imperator, pinned with its wings set flat. Between the main
+// veins its wing cells are the Voronoi tessellation of their centres (Hoffmann et al., PNAS 2018).
+// The curator draws the wing frame and scatters the centres in pencil; the specimen comes down onto
+// its drawing; then the walls form where equal fronts from neighbouring centres meet, and the
+// membrane takes the window's light. Fig. 2 shows the right hindwing from the nodus to the tip at ×6.
+const cv = document.getElementById('c'), X = cv.getContext('2d'), Q = new URLSearchParams(location.search);
+const span = (t, a, b) => clamp((t - a) / (b - a));
+const CAM = 400 * MM, persp = z => CAM / (CAM - z); // a point z px above the card shows this much further from the view's centre
+const VC = [W / 2, H / 2];
+
+// ---------- the specimen's frame ----------
+// Body-local millimetres: x to the specimen's right, y toward the tail, origin between the wing roots.
+// Wing-local millimetres: u along the wing from its root, v across it toward the trailing edge.
+const SPEC = { x: 540, y: 298, rot: -0.006 }; // the wing-root centre on the card, px (x is set below, from Fig. 2's detail box)
+const HGT = 12 * MM;                          // the specimen rides 12 mm up its pin, clear of its drawing
+const WINGS = {
+  // forewing 50 mm, hindwing 49.8 mm (the male right hindwing in Biometry of A. imperator, Eur. J. Entomol. 2019)
+  fw: { L: 50, root: [2.6, -2.8], ang: -0.172,
+    out: [[0, -0.9], [3, -1.7], [10, -2.3], [20, -2.75], [30, -2.95], [38, -2.85], [43, -2.45], [47, -1.65], [49.4, -0.5], [50.1, 0.7], [49.4, 2.2], [47.2, 4.0], [43.5, 5.9], [38, 7.6], [31, 8.7], [24, 9.0], [17, 8.4], [11, 6.9], [6, 4.9], [2.6, 3.0], [0.6, 1.6], [0, 0.4]],
+    tipIdx: 9, nodus: 23.8, ptero: [41.4, 45.2] },
+  hw: { L: 49.8, root: [2.6, 3.2], ang: 0.105,
+    out: [[0, -0.8], [3, -1.5], [10, -2.1], [20, -2.45], [30, -2.55], [38, -2.4], [43, -2.0], [47, -1.25], [49.4, -0.2], [50.0, 1.0], [49.2, 2.7], [46.8, 4.8], [42.8, 7.0], [37, 9.2], [30, 11.0], [23, 12.6], [17, 14.3], [12, 15.6], [8, 16.0], [4.8, 15.3], [2.6, 13.3], [1.2, 10.2], [0.4, 6.4], [0, 3.0], [0, 1.0]],
+    tipIdx: 9, nodus: 19.5, ptero: [41.0, 44.9] },
+};
+// The main veins of an aeshnid wing, after the Riek–Kukalová-Peck naming: [name, width mm, points].
+// A point may be {on: vein, u} (a point on another vein at that u), so branches start exactly on
+// their parent and the frame closes into regions.
+const VEINS = {
+  fw: [
+    ['Sc', 0.15, [[0.4, -0.35], [6, -1.1], [14, -1.65], [20, -2.0], [23.2, -2.35], { on: 'C', u: 23.8 }]],
+    ['R1', 0.19, [[0.4, 0.15], [6, -0.35], [14, -0.85], [23.8, -1.2], [32, -1.4], [40, -1.35], [44, -1.1], [47.5, -0.55], [49.6, 0.3], [50.6, 1.0]]],
+    ['nodus', 0.2, [{ on: 'C', u: 23.8 }, { on: 'R1', u: 23.9 }]],
+    ['pt0', 0.16, [{ on: 'C', u: 41.4 }, { on: 'R1', u: 41.4 }]], ['pt1', 0.12, [{ on: 'C', u: 45.2 }, { on: 'R1', u: 45.2 }]],
+    ['Cu', 0.15, [[0.4, 0.95], [3, 1.05], [5.6, 1.25], [6.2, 1.45]]],
+    ['arc', 0.15, [{ on: 'R1', u: 5.6 }, { on: 'Cu', u: 5.6 }]],
+    ['RP', 0.14, [{ on: 'arc', f: 0.4 }, [9, 0.25], [14, 0.15], [19, 0.05], [24, 0.0]]],
+    ['subn', 0.14, [{ on: 'R1', u: 24 }, { on: 'RP', u: 24 }]],
+    ['RP1', 0.13, [{ on: 'RP', u: 24 }, [30, 0.1], [36, 0.2], [42, 0.4], [46, 0.75], [49, 1.35], [51, 1.9]]],
+    ['RP2', 0.13, [{ on: 'RP', u: 24 }, [28, 0.6], [33, 1.25], [38, 1.8], [42.5, 2.4], [46, 3.1], [49, 4.1]]],
+    ['IR2', 0.12, [{ on: 'RP', u: 15 }, [19, 0.9], [25, 1.9], [31, 2.8], [37, 3.6], [42, 4.4], [46.5, 5.7]]],
+    ['RP3', 0.13, [{ on: 'RP', u: 11 }, [15, 1.2], [21, 2.6], [27, 3.9], [33, 5.0], [38, 6.2], [42, 7.8]]],
+    ['MA', 0.14, [{ on: 'arc', f: 0.76 }, [9, 1.5], [13, 2.3], [18, 3.4], [23, 4.6], [28, 5.9], [32, 7.2], [35, 9.2]]],
+    ['tri', 0.14, [{ on: 'Cu', u: 6.2 }, [12.8, 2.6], [7.4, 2.75], { on: 'Cu', u: 6.2 }]],
+    ['htri', 0.12, [[12.8, 2.6], { on: 'MA', u: 13.3 }]],
+    ['MP', 0.13, [[12.8, 2.6], [16, 3.6], [20, 4.9], [24, 6.3], [27.5, 7.8], [30, 9.4]]],
+    ['CuA', 0.13, [[7.4, 2.75], [10, 3.8], [13, 5.0], [16, 6.3], [19, 7.7], [21.5, 9.2]]],
+    ['CuA2', 0.11, [{ on: 'CuA', u: 12.6 }, [14.2, 6.6], [15.6, 9.0]]],
+    ['AA', 0.15, [[0.4, 1.45], [3, 2.0], [5.5, 2.55], [7.4, 2.75]]],
+    ['AA1', 0.12, [{ on: 'AA', u: 5.0 }, [7.5, 3.9], [9.5, 5.7], [10.8, 7.2]]],
+  ],
+  hw: [
+    ['Sc', 0.15, [[0.4, -0.3], [6, -1.0], [13, -1.5], [18.8, -1.95], { on: 'C', u: 19.5 }]],
+    ['R1', 0.19, [[0.4, 0.2], [6, -0.3], [13, -0.7], [19.5, -0.95], [28, -1.1], [37, -1.05], [43, -0.8], [47.2, -0.2], [49.6, 0.7], [50.6, 1.4]]],
+    ['nodus', 0.2, [{ on: 'C', u: 19.5 }, { on: 'R1', u: 19.6 }]],
+    ['pt0', 0.16, [{ on: 'C', u: 41.0 }, { on: 'R1', u: 41.0 }]], ['pt1', 0.12, [{ on: 'C', u: 44.9 }, { on: 'R1', u: 44.9 }]],
+    ['Cu', 0.15, [[0.4, 1.1], [3, 1.3], [5.0, 1.5], [6.2, 1.75]]],
+    ['arc', 0.15, [{ on: 'R1', u: 5.0 }, { on: 'Cu', u: 5.0 }]],
+    ['RP', 0.14, [{ on: 'arc', f: 0.4 }, [9, 0.35], [14, 0.25], [19.7, 0.2]]],
+    ['subn', 0.14, [{ on: 'R1', u: 19.7 }, { on: 'RP', u: 19.7 }]],
+    ['RP1', 0.13, [{ on: 'RP', u: 19.7 }, [26, 0.3], [33, 0.45], [40, 0.7], [45, 1.1], [48.5, 1.8], [51, 2.6]]],
+    ['RP2', 0.13, [{ on: 'RP', u: 19.7 }, [24, 0.9], [30, 1.7], [36, 2.5], [41, 3.4], [45, 4.4], [48.5, 5.8]]],
+    ['IR2', 0.12, [{ on: 'RP', u: 12 }, [16, 1.1], [22, 2.3], [28, 3.4], [34, 4.6], [39, 6.0], [44, 8.0]]],
+    ['RP3', 0.13, [{ on: 'RP', u: 9 }, [13, 1.6], [18, 3.0], [24, 4.6], [29, 6.3], [33, 8.2], [36.5, 11.2]]],
+    ['MA', 0.14, [{ on: 'arc', f: 0.78 }, [8, 1.8], [12, 3.0], [16, 4.5], [20, 6.2], [24, 8.1], [27, 10.0], [29.5, 12.6]]],
+    ['tri', 0.14, [{ on: 'Cu', u: 6.2 }, [10.6, 2.9], [7.0, 4.4], { on: 'Cu', u: 6.2 }]],
+    ['htri', 0.12, [[10.6, 2.9], { on: 'MA', u: 10.9 }]],
+    ['MP', 0.13, [[10.6, 2.9], [13.5, 4.6], [16.5, 6.8], [19, 9.0], [21, 11.4], [23, 14.2]]],
+    ['CuA', 0.13, [[7.0, 4.4], [9.0, 6.0], [11.0, 7.9], [13.0, 10.0], [14.8, 12.4], [16.6, 15.4]]],
+    ['CuA2', 0.11, [{ on: 'CuA', u: 11.0 }, [10.0, 10.4], [9.4, 13.0], [9.2, 16.6]]],
+    ['AA', 0.15, [[0.4, 1.7], [3.5, 3.0], [5.5, 4.0], [7.0, 4.4]]],
+    ['AA1', 0.12, [{ on: 'AA', u: 3.5 }, [3.2, 6.0], [3.4, 9.0], [4.2, 12.5], [5.4, 16.2]]],
+    ['AA2', 0.12, [{ on: 'AA', u: 5.5 }, [6.0, 7.0], [6.3, 10.5], [6.8, 16.6]]],
+  ],
+};
+
+// ---------- geometry ----------
+function closedCR(pts, seg = 10) {
+  const n = pts.length, out = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    for (let k = 0; k < seg; k++) {
+      const t = k / seg, t2 = t * t, t3 = t2 * t, f = j => 0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3);
+      out.push([f(0), f(1)]);
+    }
+  }
+  return out;
+}
+const plen = P => { let L = 0; for (let i = 1; i < P.length; i++) L += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); return L; };
+function atFrac(P, f) { const L = plen(P) * clamp(f); let acc = 0; for (let i = 1; i < P.length; i++) { const l = Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); if (acc + l >= L) { const t = l ? (L - acc) / l : 0; return [lerp(P[i - 1][0], P[i][0], t), lerp(P[i - 1][1], P[i][1], t)]; } acc += l; } return P[P.length - 1].slice(); }
+function atU(P, u) { // the first point of polyline P whose x is u
+  for (let i = 1; i < P.length; i++) { const a = P[i - 1], b = P[i]; if ((a[0] - u) * (b[0] - u) <= 0 && a[0] !== b[0]) { const t = (u - a[0]) / (b[0] - a[0]); return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)]; } }
+  let best = P[0], bd = 1e9; for (const p of P) { const d = Math.abs(p[0] - u); if (d < bd) { bd = d; best = p; } } return best.slice();
+}
+function inPoly(P, x, y) { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; }
+// keep a vein up to where it leaves the wing, the last point set on the margin
+function clipToWing(P, out) {
+  const res = [P[0]];
+  for (let i = 1; i < P.length; i++) {
+    if (inPoly(out, P[i][0], P[i][1])) { res.push(P[i]); continue; }
+    let a = P[i - 1], b = P[i]; for (let k = 0; k < 24; k++) { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; if (inPoly(out, m[0], m[1])) a = m; else b = m; }
+    res.push(a); res.margin = true; break;
+  }
+  return res;
+}
+// One wing's frame, resolved: outline, costa and main veins as polylines in wing-local mm.
+function buildFrame(key) {
+  const wd = WINGS[key], SEG = 10, out = closedCR(wd.out, SEG), V = {};
+  const C = out.slice(0, wd.tipIdx * SEG + 1); V.C = { name: 'C', w: 0.26, P: C };
+  for (const [name, w, pts] of VEINS[key]) {
+    const R = pts.map(p => p.on ? (p.f != null ? atFrac(V[p.on].P, p.f) : atU(V[p.on].P, p.u)) : p);
+    let P = R.length > 2 && name !== 'tri' ? catmull(R, 8) : R;
+    P = clipToWing(P, out);
+    V[name] = { name, w, P };
+  }
+  return { key, wd, out, V, list: Object.values(V) };
+}
+const FRAMES = { fw: buildFrame('fw'), hw: buildFrame('hw') };
+// Placement: wing-local mm -> body mm -> card px. The left wings are the right ones mirrored and set a
+// hair differently, as no setter is exact.
+function placement(key, side) {
+  const wd = WINGS[key], a = wd.ang + (side < 0 ? (key === 'fw' ? 0.012 : -0.008) : 0), ca = Math.cos(a), sa = Math.sin(a);
+  const cr = Math.cos(SPEC.rot), sr = Math.sin(SPEC.rot);
+  const toBody = (u, v) => [side * (wd.root[0] + u * ca - v * sa), wd.root[1] + u * sa + v * ca];
+  const toCard = (u, v) => { const b = toBody(u, v); return [SPEC.x + (b[0] * cr - b[1] * sr) * MM, SPEC.y + (b[0] * sr + b[1] * cr) * MM]; };
+  const fromCard = (x, y) => { // inverse of toCard
+    const dx = (x - SPEC.x) / MM, dy = (y - SPEC.y) / MM, bx = dx * cr + dy * sr, by = -dx * sr + dy * cr;
+    const px = side * bx - wd.root[0], py = by - wd.root[1]; return [px * ca + py * sa, -px * sa + py * ca];
+  };
+  return { key, side, toCard, fromCard, a };
+}
+const bodyToCard = (bx, by) => { const cr = Math.cos(SPEC.rot), sr = Math.sin(SPEC.rot); return [SPEC.x + (bx * cr - by * sr) * MM, SPEC.y + (bx * sr + by * cr) * MM]; };
+const WING_LIST = [['fw', 1], ['fw', -1], ['hw', 1], ['hw', -1]].map(([k, s]) => ({ id: k + (s > 0 ? 'R' : 'L'), key: k, side: s, F: FRAMES[k], pl: placement(k, s) }));
+// The detail box of Fig. 2, on the right hindwing: from just short of the nodus to past the tip, and
+// the leading 12.6 mm of the wing's breadth. The plate's axis runs down through this box and the
+// centre of Fig. 2, so the specimen sits that far left of centre.
+const PWG = WING_LIST.find(w => w.id === 'hwR');
+const DBOX = (() => {
+  const F = PWG.F, sd = PWG.side, nd = PWG.pl.toCard(...atU(F.V.C.P, F.wd.nodus)), xc = nd[0] - sd * 0.7 * MM; let y0 = 1e9, xe = xc;
+  const P = []; for (let i = 1; i < F.out.length; i++) { const a = PWG.pl.toCard(...F.out[i - 1]), b = PWG.pl.toCard(...F.out[i]); for (let k = 0; k < 8; k++) P.push([lerp(a[0], b[0], k / 8), lerp(a[1], b[1], k / 8)]); }
+  for (const p of P) if (sd * (p[0] - xc) >= 0) { y0 = Math.min(y0, p[1]); if (sd * (p[0] - xe) > 0) xe = p[0]; }
+  xe += sd * 0.7 * MM; const x = Math.min(xc, xe);
+  return { x, y: y0 - 0.45 * MM, w: Math.abs(xe - xc), h: 12.6 * MM };
+})();
+{ const dx = Math.round(W / 2 - (DBOX.x + DBOX.w / 2)); SPEC.x += dx; DBOX.x += dx; } // whole pixels: the bakes index by them
+
+// ---------- the regions between the main veins ----------
+// Each frame is rasterised at RES px/mm in wing-local space: the veins are drawn as barriers, and a
+// flood fill numbers the regions they enclose. A distance transform gives every point's clearance
+// from the nearest vein or margin.
+const RES = 20;
+function rasterFrame(F) {
+  let u0 = 1e9, v0 = 1e9, u1 = -1e9, v1 = -1e9; for (const p of F.out) { u0 = Math.min(u0, p[0]); v0 = Math.min(v0, p[1]); u1 = Math.max(u1, p[0]); v1 = Math.max(v1, p[1]); }
+  u0 -= 0.4; v0 -= 0.4; u1 += 0.4; v1 += 0.4;
+  const w = Math.ceil((u1 - u0) * RES), h = Math.ceil((v1 - v0) * RES), c = mk(w, h), g = c.getContext('2d');
+  g.setTransform(RES, 0, 0, RES, -u0 * RES, -v0 * RES);
+  g.fillStyle = '#fff'; g.beginPath(); F.out.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.fill();
+  g.strokeStyle = '#000'; g.lineWidth = 1.7 / RES; g.lineCap = 'round'; g.lineJoin = 'round';
+  for (const v of F.list) { if (v.name === 'C') continue; g.beginPath(); v.P.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke(); }
+  const d = g.getImageData(0, 0, w, h).data, N = w * h, lab = new Int32Array(N);
+  for (let k = 0; k < N; k++) lab[k] = d[k * 4] > 200 && d[k * 4 + 3] > 200 ? -2 : -1; // -2 open membrane, -1 vein, margin or outside
+  const q = new Int32Array(N); let nreg = 0;
+  for (let s = 0; s < N; s++) {
+    if (lab[s] !== -2) continue; nreg++; let qh = 0, qt = 0; q[qt++] = s; lab[s] = nreg;
+    while (qh < qt) { const k = q[qh++], x = k % w, y = (k / w) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue; const kk = yy * w + xx; if (lab[kk] === -2) { lab[kk] = nreg; q[qt++] = kk; } } }
+  }
+  // chamfer distance to the nearest barrier, in mm
+  const D = new Float32Array(N); for (let k = 0; k < N; k++) D[k] = lab[k] > 0 ? 1e9 : 0;
+  const a = 1, b = Math.SQRT2;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const k = y * w + x; if (!D[k]) continue; let m = D[k]; if (x > 0) m = Math.min(m, D[k - 1] + a); if (y > 0) { m = Math.min(m, D[k - w] + a); if (x > 0) m = Math.min(m, D[k - w - 1] + b); if (x < w - 1) m = Math.min(m, D[k - w + 1] + b); } D[k] = m; }
+  for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) { const k = y * w + x; if (!D[k]) continue; let m = D[k]; if (x < w - 1) m = Math.min(m, D[k + 1] + a); if (y < h - 1) { m = Math.min(m, D[k + w] + a); if (x < w - 1) m = Math.min(m, D[k + w + 1] + b); if (x > 0) m = Math.min(m, D[k + w - 1] + b); } D[k] = m; }
+  for (let k = 0; k < N; k++) D[k] /= RES;
+  // the widest clearance near each point (a max filter over 0.8 mm): a strip narrower than two cells
+  // holds one row of centres down its middle
+  const R = Math.round(0.8 * RES), T1 = new Float32Array(N), LM = new Float32Array(N);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let m = 0; for (let i = Math.max(0, x - R); i <= Math.min(w - 1, x + R); i++) m = Math.max(m, D[y * w + i]); T1[y * w + x] = m; }
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) { let m = 0; for (let j = Math.max(0, y - R); j <= Math.min(h - 1, y + R); j++) m = Math.max(m, T1[j * w + x]); LM[y * w + x] = m; }
+  const at = (u, v) => { const x = Math.round((u - u0) * RES), y = Math.round((v - v0) * RES); return x < 0 || y < 0 || x >= w || y >= h ? -1 : y * w + x; };
+  return { u0, v0, w, h, lab, D, LM, nreg, at, region: (u, v) => { const k = at(u, v); return k < 0 ? -1 : lab[k]; }, clear: (u, v) => { const k = at(u, v); return k < 0 ? 0 : D[k]; } };
+}
+for (const k in FRAMES) { const F = FRAMES[k], p = F.wd.ptero, c = atU(F.V.C.P, (p[0] + p[1]) / 2), r = atU(F.V.R1.P, (p[0] + p[1]) / 2); F.ras = rasterFrame(F); F.ptReg = F.ras.region((c[0] + r[0]) / 2, (c[1] + r[1]) / 2); }
+
+// ---------- the centres: scattered at a minimum spacing ----------
+// Cells shrink from the base toward the tip and the trailing margin (Hoffmann et al. 2018 measure
+// this across 232 species), so the minimum spacing is a field, d(u, v) in mm.
+function spacing(F, u, v) {
+  const s = u / F.wd.L, edge = atU(F.out.slice(F.wd.tipIdx * 10), u)[1], lead = atU(F.V.C.P, u)[1], vn = clamp((v - lead) / Math.max(1, edge - lead));
+  let d = lerp(0.9, 0.5, smooth(0.05, 0.95, s)) * (1 - 0.12 * smooth(0.45, 1, vn) * smooth(0.2, 0.6, s));
+  d *= 1 + 0.42 * (1 - smooth(1.0, 2.4, v - lead)); // the costal strips: one row of long cells between C, Sc and R1
+  if (F.key === 'hw') d *= 1 + 0.18 * (1 - smooth(8, 22, u)) * smooth(0.35, 0.7, vn); // the hindwing's anal field: larger cells
+  return d;
+}
+// The leading-edge fields are narrower than two cells, so their centres fall in one row down the
+// middle of the field, and the Voronoi walls between neighbours in a row are a ladder of straight
+// crossveins: the antenodals, the postnodals, the crossveins under R1 before and after the nodus, and
+// the first stretch between RP1 and RP2. [vein, vein, from u, to u] in wing-local mm.
+const LADDERS = {
+  fw: [['C', 'Sc', 0.9, 23.5], ['Sc', 'R1', 0.9, 23.3], ['C', 'R1', 24.3, 41.1], ['C', 'R1', 45.6, 49.0], ['R1', 'RP', 6.0, 23.6], ['R1', 'RP1', 24.4, 41.2], ['RP1', 'RP2', 26.5, 37]],
+  hw: [['C', 'Sc', 0.9, 19.2], ['Sc', 'R1', 0.9, 19.0], ['C', 'R1', 19.9, 40.7], ['C', 'R1', 45.2, 49.2], ['R1', 'RP', 5.4, 19.4], ['R1', 'RP1', 20.0, 40.8], ['RP1', 'RP2', 23.0, 34]],
+};
+// Elsewhere, dart throwing: centres are tried in a seeded random order and kept when no kept centre
+// of the same region lies nearer than the local spacing. The build scatters them in a shuffled order.
+function seedWing(F, key) {
+  const r = rngFor(key), Rs = F.ras, cs = 0.4, gw = Math.ceil(Rs.w / RES / cs) + 1, gh = Math.ceil(Rs.h / RES / cs) + 1, grid = new Map(), S = [], zones = {};
+  const dCache = new Float32Array(Rs.w * Rs.h).fill(-1);
+  const dAt = (u, v) => { const k = Rs.at(u, v); if (k < 0) return 1; if (dCache[k] < 0) dCache[k] = spacing(F, u, v); return dCache[k]; };
+  const cellK = (u, v) => Math.floor((u - Rs.u0) / cs) + Math.floor((v - Rs.v0) / cs) * gw;
+  const ok = (u, v) => {
+    const k = Rs.at(u, v); if (k < 0) return null; const reg = Rs.lab[k]; if (reg <= 0 || reg === F.ptReg) return null;
+    if (zones[reg] && zones[reg].some(z => u > z[0] - 0.25 && u < z[1] + 0.25)) return null;
+    const d = dAt(u, v), cl = Rs.D[k]; if (cl < Math.min(0.42 * d, 0.9 * Rs.LM[k])) return null;
+    const gx = Math.floor((u - Rs.u0) / cs), gy = Math.floor((v - Rs.v0) / cs);
+    for (let j = gy - 4; j <= gy + 4; j++) for (let i = gx - 4; i <= gx + 4; i++) { const L = grid.get(i + j * gw); if (!L) continue; for (const s of L) if (s.reg === reg && Math.hypot(s.u - u, s.v - v) < 0.5 * (d + s.d)) return null; }
+    return { u, v, d, reg };
+  };
+  const add = s => { s.i = S.length; S.push(s); const k = cellK(s.u, s.v); (grid.get(k) || grid.set(k, []).get(k)).push(s); };
+  // the ladders first: a centre every local spacing down the middle of each narrow field
+  for (const [A, B, ua, ub] of LADDERS[F.key]) {
+    const mid = u => { const a = atU(F.V[A].P, u), b = atU(F.V[B].P, u); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; };
+    let u = ua + 0.3 * dAt(...mid(ua)) * r();
+    while (u < ub) {
+      const m = mid(u), k = Rs.at(m[0], m[1]), reg = k < 0 ? -1 : Rs.lab[k], d = dAt(m[0], m[1]);
+      if (reg > 0 && reg !== F.ptReg && Rs.D[k] > 0.12) { add({ u: m[0], v: m[1], d, reg, lad: 1 }); (zones[reg] || (zones[reg] = [])).push([ua, ub]); }
+      u += d * (0.9 + 0.2 * r());
+    }
+  }
+  let area = 0; for (let k = 0; k < Rs.lab.length; k++) if (Rs.lab[k] > 0) area++; area /= RES * RES;
+  const N = Math.round(area * 70);
+  for (let n = 0; n < N; n++) { const u = Rs.u0 + r() * Rs.w / RES, v = Rs.v0 + r() * Rs.h / RES, s = ok(u, v); if (s) add(s); }
+  for (let i = 0; i < S.length; i++) for (let k = 0; k < 14; k++) { // fill what the darts missed
+    const a = r() * Math.PI * 2, rr = S[i].d * (1 + r() * 0.5), s = ok(S[i].u + Math.cos(a) * rr, S[i].v + Math.sin(a) * rr); if (s) add(s);
+  }
+  for (let i = S.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [S[i], S[j]] = [S[j], S[i]]; } // the scatter's order
+  S.forEach((s, i) => s.i = i);
+  return { S, grid, cs, gw, cellK, u0: Rs.u0, v0: Rs.v0 };
+}
+// nearest centre of a seed set to (u, v), any region; returns [distance mm, index]
+function nearest(SD, u, v, reg = 0) {
+  const gx = Math.floor((u - SD.u0) / SD.cs), gy = Math.floor((v - SD.v0) / SD.cs); let bd = 1e9, bi = -1;
+  for (let j = gy - 3; j <= gy + 3; j++) for (let i = gx - 3; i <= gx + 3; i++) { const L = SD.grid.get(i + j * SD.gw); if (!L) continue; for (const s of L) { if (reg && s.reg !== reg) continue; const d = Math.hypot(s.u - u, s.v - v); if (d < bd) { bd = d; bi = s.i; } } }
+  return [bd, bi];
+}
+
+// ---------- the walls: the Voronoi tessellation of the centres ----------
+// A centre's cell is the part of its region nearer to it than to any other centre: a square around it
+// cut by the perpendicular bisector of every neighbour. Each wall is then trimmed where it meets a
+// main vein or the margin.
+function clipHalf(poly, ax, ay, nx, ny, c, j) { // keep n·p <= c; edges remember the neighbour that made them
+  const out = [];
+  for (let k = 0; k < poly.length; k++) {
+    const P = poly[k], Qp = poly[(k + 1) % poly.length], dp = nx * P[0] + ny * P[1] - c, dq = nx * Qp[0] + ny * Qp[1] - c;
+    if (dp <= 0) out.push(P);
+    if ((dp <= 0) !== (dq <= 0)) { const t = dp / (dp - dq); out.push([P[0] + (Qp[0] - P[0]) * t, P[1] + (Qp[1] - P[1]) * t, dp <= 0 ? j : P[2]]); }
+  }
+  // the edge leaving each vertex is tagged on the vertex: [x, y, neighbour of the edge to the next vertex]
+  return out;
+}
+function voronoi(S, nbrs, box) {
+  const cells = [];
+  for (const s of S) {
+    const h = box(s); let poly = [[s.u - h, s.v - h, -1], [s.u + h, s.v - h, -1], [s.u + h, s.v + h, -1], [s.u - h, s.v + h, -1]];
+    const ns = nbrs(s).map(o => [o, Math.hypot(o.u - s.u, o.v - s.v)]).sort((a, b) => a[1] - b[1]);
+    for (const [o, dd] of ns) {
+      let rmax = 0; for (const p of poly) rmax = Math.max(rmax, Math.hypot(p[0] - s.u, p[1] - s.v)); if (dd > 2 * rmax) break;
+      const nx = o.u - s.u, ny = o.v - s.v, c = (nx * (o.u + s.u) + ny * (o.v + s.v)) / 2;
+      poly = clipHalf(poly, 0, 0, nx, ny, c, o.i); if (poly.length < 3) break;
+    }
+    cells.push(poly);
+  }
+  return cells;
+}
+// trim a wall to the stretch inside its own region, clear of the main veins by `keep` mm
+function trimWall(Rs, reg, a, b, keep) {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(2, Math.ceil(L * RES * 1.5)), runs = []; let st = -1;
+  const okAt = t => { const u = lerp(a[0], b[0], t), v = lerp(a[1], b[1], t), k = Rs.at(u, v); return k >= 0 && Rs.lab[k] === reg && Rs.D[k] >= keep; };
+  for (let i = 0; i <= n; i++) { const o = okAt(i / n); if (o && st < 0) st = i; if ((!o || i === n) && st >= 0) { const e = o ? i : i - 1; if (e > st) runs.push([st / n, e / n]); st = -1; } }
+  return runs.map(([t0, t1]) => [lerp(a[0], b[0], t0), lerp(a[1], b[1], t0), lerp(a[0], b[0], t1), lerp(a[1], b[1], t1)]);
+}
+function buildWing(Wg) {
+  const F = Wg.F, Rs = F.ras, SD = seedWing(F, 'seeds:' + Wg.id), S = SD.S;
+  const nbrs = s => { const out = [], gx = Math.floor((s.u - SD.u0) / SD.cs), gy = Math.floor((s.v - SD.v0) / SD.cs), R = Math.ceil(2.6 * s.d / SD.cs);
+    for (let j = gy - R; j <= gy + R; j++) for (let i = gx - R; i <= gx + R; i++) { const L = SD.grid.get(i + j * SD.gw); if (L) for (const o of L) if (o !== s && o.reg === s.reg) out.push(o); } return out; };
+  const cells = voronoi(S, nbrs, s => 2.4 * s.d), walls = [];
+  cells.forEach((poly, i) => {
+    for (let k = 0; k < poly.length; k++) {
+      const p = poly[k], q = poly[(k + 1) % poly.length], j = p[2]; if (j < 0 || j < i) continue;
+      for (const w of trimWall(Rs, S[i].reg, p, q, 0.035)) walls.push([...w, i, j]);
+    }
+  });
+  Object.assign(Wg, { SD, S, cells, walls });
+  return Wg;
+}
+const T0 = performance.now();
+WING_LIST.forEach(buildWing);
+const GEO_MS = performance.now() - T0;
+
+// ---------- the specimen, baked once where it lies ----------
+const SB = { x0: SPEC.x - 214, y0: SPEC.y - 72, w: 428, h: 330 }; // its box on the card, px
+const PAL = {
+  vein: hex('#2b231b'), costa: hex('#c7a03c'), amber: hex('#cfa74f'),
+  pteroPale: hex('#d9c79a'), pteroDark: hex('#86622e'), membranule: hex('#d8d6d0'), root: hex('#3a2c1e'),
+  green: hex('#80b03c'), greenDeep: hex('#4f7a22'), yellow: hex('#c9cf52'), blue: hex('#58a9dc'), blueDeep: hex('#2c6fa8'), black: hex('#16171a'),
+  eye: hex('#2b6f8c'), eyeDeep: hex('#0f2a38'),
+};
+const segPoly = (pl, P) => P.map(p => pl.toCard(p[0], p[1]));
+function pathOf(g, P, close) { g.beginPath(); P.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); if (close) g.closePath(); }
+function pteroPoly(F) { // between the costa and R1 over the pterostigma's length
+  const [a, b] = F.wd.ptero, C = F.V.C.P.filter(p => p[0] >= a && p[0] <= b), R = F.V.R1.P.filter(p => p[0] >= a && p[0] <= b);
+  return [atU(F.V.C.P, a), ...C, atU(F.V.C.P, b), atU(F.V.R1.P, b), ...R.reverse(), atU(F.V.R1.P, a)];
+}
+// per-pixel maps over the specimen's box: which wing, its local mm, the nearest centre and its distance
+function wingMaps() {
+  const N = SB.w * SB.h, WI = new Int8Array(N).fill(-1), COV = new Float32Array(N), U = new Float32Array(N), V = new Float32Array(N), DS = new Float32Array(N).fill(1e9), CI = new Int32Array(N).fill(-1);
+  WING_LIST.forEach((Wg, wi) => {
+    const c = mk(SB.w, SB.h), g = c.getContext('2d'); g.translate(-SB.x0, -SB.y0); g.fillStyle = '#000';
+    pathOf(g, segPoly(Wg.pl, Wg.F.out), true); g.fill();
+    const d = g.getImageData(0, 0, SB.w, SB.h).data;
+    for (let k = 0; k < N; k++) {
+      const a = d[k * 4 + 3] / 255; if (a <= 0) continue;
+      if (a > COV[k]) { COV[k] = a; WI[k] = wi; }
+      const x = SB.x0 + (k % SB.w) + 0.5, y = SB.y0 + ((k / SB.w) | 0) + 0.5, l = Wg.pl.fromCard(x, y);
+      if (WI[k] === wi) { U[k] = l[0]; V[k] = l[1]; const reg = Wg.F.ras.region(l[0], l[1]), [dd, ci] = nearest(Wg.SD, l[0], l[1], reg > 0 ? reg : 0); DS[k] = dd; CI[k] = ci; }
+    }
+  });
+  return { WI, COV, U, V, DS, CI };
+}
+// The membrane: clear chitin with a faint amber tint, deeper at the base; each cell a hair different,
+// as each sits at its own small tilt in the corrugated wing.
+function bakeMembrane(M) {
+  const c = mk(SB.w, SB.h), g = c.getContext('2d'), img = g.createImageData(SB.w, SB.h), D = img.data, n = nzc('membrane');
+  for (let k = 0; k < M.WI.length; k++) {
+    if (M.WI[k] < 0) continue; const u = M.U[k], v = M.V[k], Wg = WING_LIST[M.WI[k]], r = M.CI[k] >= 0 ? (hash(Wg.id + ':' + M.CI[k]) % 1000) / 1000 : 0.5;
+    const base = 1 - smooth(0.5, 6, u), a = (0.006 + 0.08 * base + 0.005 * n(u * 0.4, v * 0.4) + (r - 0.5) * 0.008) * M.COV[k];
+    const col = mix([150, 160, 166], mix(PAL.amber, hex('#a47a3c'), 0.5), smooth(0, 0.6, base)); // clear chitin, amber only at the root
+    D[k * 4] = col[0]; D[k * 4 + 1] = col[1]; D[k * 4 + 2] = col[2]; D[k * 4 + 3] = 255 * a;
+  }
+  g.putImageData(img, 0, 0); return c;
+}
+// The main veins: dark tubes, thickest at the root; the costa is yellow along the leading edge, as
+// it is in this species. The pterostigma, the wing roots and the hindwing's membranule.
+function bakeMainVeins() {
+  const c = mk(SB.w, SB.h), g = c.getContext('2d'); g.translate(-SB.x0, -SB.y0); g.lineCap = 'round'; g.lineJoin = 'round';
+  for (const Wg of WING_LIST) {
+    const F = Wg.F, pl = Wg.pl;
+    if (F.key === 'hw') { // membranule: an opaque grey-white strip along the anal margin at the base
+      const P = F.out.filter(p => p[0] < 4.4 && p[1] > 2.4), inner = P.map(p => [p[0] + 0.55, p[1] - 0.25]).reverse();
+      g.fillStyle = rgba(PAL.membranule, 0.92); pathOf(g, segPoly(pl, [...P, ...inner]), true); g.fill();
+    }
+    g.strokeStyle = rgba(shade(PAL.vein, 1.1), 0.9); g.lineWidth = 0.45; pathOf(g, segPoly(pl, F.out), true); g.stroke(); // the margin
+    for (const v of F.list) {
+      const col = v.name === 'C' ? PAL.costa : PAL.vein;
+      for (let i = 1; i < v.P.length; i++) {
+        const a = v.P[i - 1], b = v.P[i], taper = lerp(1.55, 0.8, smooth(0, F.wd.L, (a[0] + b[0]) / 2)), A = pl.toCard(a[0], a[1]), B = pl.toCard(b[0], b[1]);
+        g.lineWidth = Math.max(0.5, v.w * MM * taper); g.strokeStyle = rgba(col, 0.96);
+        g.beginPath(); g.moveTo(A[0], A[1]); g.lineTo(B[0], B[1]); g.stroke();
+      }
+    }
+    // the root: the axillary plates where the veins gather into the thorax
+    g.fillStyle = rgba(PAL.root, 0.95); pathOf(g, segPoly(pl, F.out.filter(p => p[0] < 2.2)).concat([pl.toCard(2.2, F.key === 'fw' ? 3.2 : 4.6), pl.toCard(2.2, -1.9)]), true); g.fill();
+  }
+  return c;
+}
+function bakePtero(col, edge) {
+  const c = mk(SB.w, SB.h), g = c.getContext('2d'); g.translate(-SB.x0, -SB.y0);
+  for (const Wg of WING_LIST) { const P = segPoly(Wg.pl, pteroPoly(Wg.F)); g.fillStyle = rgba(col); pathOf(g, P, true); g.fill(); g.strokeStyle = rgba(edge); g.lineWidth = 0.6; g.stroke(); }
+  return c;
+}
+// The secondary veins: every Voronoi wall, a fine dark line.
+function bakeWalls() {
+  const c = mk(SB.w, SB.h), g = c.getContext('2d'); g.translate(-SB.x0, -SB.y0); g.lineCap = 'round';
+  g.strokeStyle = rgba(shade(PAL.vein, 0.8), 0.8); g.lineWidth = 0.36; g.beginPath();
+  for (const Wg of WING_LIST) for (const w of Wg.walls) { const a = Wg.pl.toCard(w[0], w[1]), b = Wg.pl.toCard(w[2], w[3]); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+  g.stroke(); return c;
+}
+// The sheen: the membrane is a thin film, so it shows interference colour, faint and shifting with
+// its thickness; and each cell, tilted its own way, catches the window a little more or less.
+function bakeSheen(M) {
+  const c = mk(SB.w, SB.h), g = c.getContext('2d'), img = g.createImageData(SB.w, SB.h), D = img.data, n = nzc('film'), n2 = nzc('film2');
+  for (let k = 0; k < M.WI.length; k++) {
+    if (M.WI[k] < 0) continue; const Wg = WING_LIST[M.WI[k]], u = M.U[k], v = M.V[k], x = SB.x0 + k % SB.w, y = SB.y0 + ((k / SB.w) | 0);
+    const r = M.CI[k] >= 0 ? (hash(Wg.id + ':tilt:' + M.CI[k]) % 1000) / 1000 : 0.5;
+    // the window's reflection: a soft band across the wings, broken cell by cell by the corrugation
+    const d = (x - SPEC.x) * 0.83 - (y - SPEC.y + 40) * 0.56 + 40 * n2(x * 0.008, y * 0.008), band = Math.exp(-Math.pow((d + 60) / 120, 2));
+    const ph = 0.3 + 0.7 * fbm(n, u * 0.06 + Wg.side * 3, v * 0.1, 3) + u * 0.01 + (r - 0.5) * 0.1;
+    const film = [0.5 + 0.5 * Math.cos(6.283 * ph), 0.5 + 0.5 * Math.cos(6.283 * (ph - 0.33)), 0.5 + 0.5 * Math.cos(6.283 * (ph - 0.67))];
+    // glass: the window's cool reflection in a band, each cell tilted its own way, a faint film colour at its edge
+    const glint = smooth(0.82, 1, r) * band, a = (0.012 + 0.2 * band * (0.3 + 0.9 * r)) * M.COV[k] * smooth(1, 4, u);
+    const col = mix(mix([226, 236, 246], [film[0] * 255, film[1] * 255, film[2] * 255], 0.12 * band), [250, 253, 255], glint);
+    D[k * 4] = col[0]; D[k * 4 + 1] = col[1]; D[k * 4 + 2] = col[2]; D[k * 4 + 3] = 255 * clamp(a + glint * 0.14);
+  }
+  g.putImageData(img, 0, 0); return c;
+}
+
+// ---------- the body ----------
+// Male colours: apple-green head and thorax, blue eyes, a sky-blue abdomen with a black dorsal line.
+// Per pixel in body mm: each part is a rounded solid whose normal takes the window light, glossy
+// cuticle with a soft highlight on its window side. Abdomen 54.5 mm in ten segments, total 77.5 mm.
+const LGT = (() => { const c = Math.SQRT1_2, l = [-SH.x * c, -SH.y * c, Math.SQRT1_2], h = [l[0], l[1], l[2] + 1], m = Math.hypot(...h); return { l, h: h.map(v => v / m) }; })();
+const ABD = { y0: 5.0, segs: [1.7, 5.4, 7.3, 7.0, 6.8, 6.6, 6.4, 5.6, 4.6, 3.1] };
+ABD.j = [ABD.y0]; for (const s of ABD.segs) ABD.j.push(ABD.j[ABD.j.length - 1] + s); ABD.y1 = ABD.j[10];
+const THX_W = [[-7.0, 0.0], [-6.75, 1.8], [-6.0, 2.6], [-4.5, 3.2], [-2.0, 3.55], [1.0, 3.6], [3.5, 3.3], [5.0, 2.5], [5.6, 0.0]];
+const THX_H = [[-7.0, 1.2], [-5.5, 3.0], [-2, 4.2], [1.5, 4.4], [4.5, 3.6], [5.6, 2.0]];
+const ABD_HW = [[5.0, 2.0], [6.0, 2.45], [8.6, 2.78], [11.0, 2.45], [12.1, 1.92], [14.5, 1.48], [16.2, 1.42], [18.6, 1.62], [24, 1.74], [36, 1.78], [44, 1.74], [50, 1.66], [55, 1.55], [59.5, 1.32]];
+function interp(T, y) { if (y <= T[0][0]) return T[0][1]; for (let i = 1; i < T.length; i++) if (y <= T[i][0]) { const t = (y - T[i - 1][0]) / (T[i][0] - T[i - 1][0]), s = t * t * (3 - 2 * t); return lerp(T[i - 1][1], T[i][1], s); } return T[T.length - 1][1]; }
+function segAt(y) { for (let i = 0; i < 10; i++) if (y < ABD.j[i + 1]) return [i, (y - ABD.j[i]) / ABD.segs[i]]; return [9, 1]; }
+const shadeN = (c, n, gloss, amb = 0.42) => { const d = Math.max(0, n[0] * LGT.l[0] + n[1] * LGT.l[1] + n[2] * LGT.l[2]), s = Math.pow(Math.max(0, n[0] * LGT.h[0] + n[1] * LGT.h[1] + n[2] * LGT.h[2]), gloss[0]) * gloss[1]; return mix(shade(c, amb + 0.78 * d), [255, 252, 244], s); };
+function bodyAt(bx, by, n) { // -> [r, g, b, coverage-distance-mm] or null
+  // abdomen
+  if (by > ABD.y0 - 0.4 && by < ABD.y1 + 0.2) {
+    const [si, f] = segAt(by), pinch = 0.07 * (1 - smooth(0, 0.08, f)) + 0.05 * smooth(0.93, 1, f), hw = interp(ABD_HW, by) - pinch, ax = Math.abs(bx), ins = hw - ax;
+    if (ins > -0.2) {
+      // each tergite is its own plate: domed along its length, its base tucked under the rim of the one in front
+      const q = clamp(bx / hw, -0.999, 0.999), ny = -0.62 * Math.cos(Math.PI * clamp(f * 1.08)) * (si > 1 ? 1 : 0.5), nz = Math.sqrt(1 - q * q);
+      const nn = [q * 0.95, ny, nz], m = Math.hypot(...nn);
+      // pattern: sky blue, a continuous black dorsal line that spreads into a spur toward each
+      // segment's end, thin black rings at the joints; S1 and the base of S2 green
+      const tone = 0.5 + 0.5 * n(bx * 1.4, by * 0.35);
+      let c = mix(PAL.blue, hex('#86c8ec'), 0.15 + 0.25 * tone);
+      if (si <= 1) c = mix(c, mix(PAL.green, PAL.blue, 0.45), si === 0 ? 1 : 1 - smooth(0.1, 0.45, f));
+      let dl = si === 0 ? 0 : 0.34 + (si >= 7 ? 0.12 * (si - 6) : 0);
+      if (si >= 2) dl += 0.34 * smooth(0.4, 0.88, f) * (1 - smooth(0.9, 1, f)) * (1 + 0.15 * Math.sin(f * 9));
+      if (si === 1) dl += 0.45 * smooth(0.25, 0.4, f) * (1 - smooth(0.62, 0.75, f));
+      const ring = 1 - smooth(0.03, 0.09, Math.min(f * ABD.segs[si], (1 - f) * ABD.segs[si]));
+      const black = Math.max(1 - smooth(dl - 0.07, dl + 0.07, ax), ring * 0.85, si === 1 ? (1 - smooth(0.04, 0.1, Math.abs(f - 0.62) * ABD.segs[si])) * 0.85 : 0);
+      c = mix(c, mix(PAL.black, hex('#20262c'), tone * 0.5), clamp(black));
+      if (si === 9) c = mix(c, PAL.black, smooth(0.45, 0.85, f) * 0.6);
+      let lit = shadeN(c, nn.map(v => v / m), [52, 0.55], 0.41);
+      lit = shade(lit, (1 - 0.42 * (1 - smooth(0.0, 0.16, f)) * (si > 0 ? 1 : 0)) * (1 + 0.1 * smooth(0.86, 0.95, f) * (1 - smooth(0.95, 0.99, f))) * (0.96 + 0.08 * ((hash('seg' + si) % 100) / 100)));
+      return [...lit, ins];
+    }
+  }
+  if (by > ABD.y1 - 0.4 && by < ABD.y1 + 5.6) { // the superior appendages: two dark leaf-shaped cerci
+    const t = (by - ABD.y1) / 5.4, cx = 0.42 + 0.35 * t, hw = 0.5 * Math.sin(Math.PI * clamp(t * 0.95 + 0.05)) + 0.12, ins = hw - Math.abs(Math.abs(bx) - cx);
+    if (ins > -0.2) { const q = clamp((Math.abs(bx) - cx) / hw, -0.99, 0.99); return [...shadeN(hex('#2a2620'), [q * Math.sign(bx), 0, Math.sqrt(1 - q * q)], [30, 0.4]), ins]; }
+  }
+  // synthorax: broad where the wings articulate, its dorsum keeled down the middle in front
+  if (by > -7.05 && by < 5.65) {
+    const hw = interp(THX_W, by), ins = hw - Math.abs(bx);
+    if (ins > -0.2 && hw > 0.05) {
+      const Hh = (x, y) => { const w = interp(THX_W, y), q = clamp(x / Math.max(0.05, w), -1, 1); return interp(THX_H, y) * Math.pow(1 - q * q, 0.42); }, e = 0.06;
+      const nn = [-(Hh(bx + e, by) - Hh(bx - e, by)) / (2 * e), -(Hh(bx, by + e) - Hh(bx, by - e)) / (2 * e), 1], m = Math.hypot(...nn), q = bx / hw;
+      let c = mix(mix(PAL.green, hex('#a8c95c'), 0.3 + 0.25 * n(bx * 1.3, by * 1.3)), hex('#5f8a2c'), 0.5 * smooth(0.55, 1, Math.abs(q)));
+      c = mix(c, hex('#3f5a1e'), (1 - smooth(0.04, 0.13, Math.abs(bx))) * smooth(-6.6, -5.6, by) * (1 - smooth(-1.6, -0.6, by)) * 0.8); // the dorsal carina
+      c = mix(c, hex('#4f7424'), (1 - smooth(0.1, 0.3, Math.hypot(Math.abs(bx) - 1.75, (by + 4.1) * 0.7))) * 0.6); // the antealar crests
+      for (const [wy, wl] of [[-3.3, 1.8], [2.4, 1.8]]) c = mix(c, hex('#3a3220'), smooth(0.78, 0.98, Math.abs(q)) * (1 - smooth(wl * 0.5, wl, Math.abs(by - wy))) * 0.75); // wing articulations
+      return [...shadeN(c, nn.map(v => v / m), [26, 0.26]), ins];
+    }
+  }
+  // prothorax
+  { const ins = 1 - Math.hypot(bx / 1.9, (by + 7.3) / 0.8); if (ins > -0.15) return [...shadeN(hex('#5f7a2c'), [bx / 2.4, (by + 7.3) / 1.2, 0.8], [16, 0.2]), ins * 0.8]; }
+  // head: the two great eyes fill it, meeting along a seam down the middle; the frons shows in front
+  { const hy = by + 10.0, ho = Math.hypot(bx / 4.85, hy / (hy < 0 ? 2.75 : 2.35));
+    if (ho < 1.04) {
+      const front = -(hy + 1.55) / 1.1; // the frons: the head's leading band, ahead of the eyes
+      if (front > 0 && Math.abs(bx) < 3.4 * Math.sqrt(clamp(1 - Math.pow(hy / 2.75, 2)))) {
+        let c = mix(PAL.yellow, PAL.green, 0.45 + 0.3 * front); c = mix(c, PAL.black, (1 - smooth(0.06, 0.16, Math.abs(hy + 1.62))) * 0.75);
+        return [...shadeN(c, [bx / 6, -0.5 * front - 0.2, 0.85], [26, 0.3]), (1 - ho) * 2.4];
+      }
+      const ex = Math.abs(bx) - 2.15, er = Math.hypot(ex / 2.75, (hy + 0.15) / 2.5), nz = Math.sqrt(Math.max(0.02, 1 - Math.min(1, er) ** 2));
+      const nn = [ex / 2.75 * Math.sign(bx), (hy + 0.15) / 2.5, nz], m = Math.hypot(...nn), N = nn.map(v => v / m);
+      let c = mix(PAL.eye, hex('#4f9f98'), clamp(0.45 - hy * 0.2)); c = mix(c, PAL.eyeDeep, smooth(0.55, 1.05, er) * 0.65);
+      c = mix(c, hex('#11202a'), (1 - smooth(0.1, 0.4, Math.hypot(ex + 0.2 * Math.sign(bx), hy + 0.3))) * 0.5); // the pseudopupil
+      c = mix(c, hex('#15262c'), (1 - smooth(0.03, 0.1, Math.abs(bx))) * 0.85 * smooth(-2.4, -1.6, hy) * (1 - smooth(1.4, 2.1, hy))); // the seam
+      // the facets: a lattice of ommatidia about 0.3 mm across, each a little domed
+      const fs = 0.3, row = Math.round(by / (fs * 0.866)), col = Math.round(bx / fs - (row & 1) * 0.5), fd = Math.hypot(bx - (col + (row & 1) * 0.5) * fs, by - row * fs * 0.866) / (fs * 0.5);
+      c = shade(mix(c, hex('#1d4a5e'), 0.22 * (0.5 + 0.5 * n(bx * 3, by * 3))), 1 - 0.16 * smooth(0.55, 1, fd));
+      const soft = Math.pow(Math.max(0, N[0] * LGT.h[0] + N[1] * LGT.h[1] + N[2] * LGT.h[2]), 140) * 0.5;
+      return [...mix(shadeN(c, N, [20, 0.06], 0.42), [236, 244, 246], soft), (1 - ho) * 2.4];
+    }
+    const oc = Math.hypot(bx / 0.85, (by + 7.75) / 0.42); if (oc < 1) return [...shadeN(PAL.yellow, [0, 0.3, 1], [10, 0.1]), (1 - oc) * 0.4];
+  }
+  return null;
+}
+function bakeBody() {
+  const c = mk(SB.w, SB.h), g = c.getContext('2d'), img = g.createImageData(SB.w, SB.h), D = img.data, n = nzc('cuticle');
+  const [bx0, by0] = [SPEC.x - 6 * MM, SPEC.y - 13.5 * MM], [bx1, by1] = [SPEC.x + 6 * MM, SPEC.y + 66 * MM], cr = Math.cos(SPEC.rot), sr = Math.sin(SPEC.rot);
+  for (let y = Math.floor(by0); y < by1; y++) for (let x = Math.floor(bx0); x < bx1; x++) {
+    let acc = [0, 0, 0], cov = 0;
+    for (const [ox, oy] of [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) {
+      const dx = (x + ox - SPEC.x) / MM, dy = (y + oy - SPEC.y) / MM, bx = dx * cr + dy * sr, by = -dx * sr + dy * cr, s = bodyAt(bx, by, n);
+      if (!s) continue; const a = clamp(s[3] * MM + 0.5); acc = [acc[0] + s[0] * a, acc[1] + s[1] * a, acc[2] + s[2] * a]; cov += a;
+    }
+    if (cov <= 0) continue; const k = ((y - SB.y0) * SB.w + (x - SB.x0)) * 4;
+    D[k] = acc[0] / cov; D[k + 1] = acc[1] / cov; D[k + 2] = acc[2] / cov; D[k + 3] = 255 * cov / 4;
+  }
+  g.putImageData(img, 0, 0);
+  // fine pale hair over the thorax, longer at its rim
+  const r = rngFor('thorax hair'); g.translate(-SB.x0, -SB.y0); g.lineCap = 'round';
+  for (let i = 0; i < 260; i++) {
+    const a = r() * Math.PI * 2, rr = Math.sqrt(r()), by = -0.7 + Math.sin(a) * 6.0 * rr, bx = Math.cos(a) * interp(THX_W, by) * rr, p = bodyToCard(bx, by), L = (0.2 + 0.3 * rr) * MM;
+    g.strokeStyle = `rgba(230,234,205,${(0.1 + 0.16 * rr).toFixed(2)})`; g.lineWidth = 0.35;
+    g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(p[0] + Math.cos(a) * L * 0.6 + (r() - 0.5), p[1] + Math.sin(a) * L * 0.6 + 0.4 * L); g.stroke();
+  }
+  return c;
+}
+
+// ---------- the build ----------
+const TM = { frame: [0.35, 1.45], seeds: [1.2, 1.95], land: [1.85, 2.6], crys: [2.6, 3.8], sheen: [3.4, 4.15], ptero: [3.55, 4.25], trials: [3.5, 4.3], label: [3.85, 4.5] };
+// The fronts' radius over the crystallisation: most cells (the tip, the mid-wing, the detail) close
+// between 0.24 and 0.62 mm; the large cells at the wing roots close last.
+function rhoAt(t) { const a = TM.crys[0], b = TM.crys[1], m = lerp(a, b, 0.72); if (t <= a - 0.3) return 0; if (t <= a) return 0.24 * Math.pow((t - a + 0.3) / 0.3, 1.4); if (t < m) return lerp(0.24, 0.62, smooth(0, 1, (t - a) / (m - a)) * 0.5 + 0.5 * (t - a) / (m - a)); return lerp(0.62, RHO_MAX, ease(span(t, m, b))); }
+let CARD, FRAME, MAPS, L_MEM, L_VEIN, L_WALL, L_SHEEN, L_PTP, L_PTD, L_BODY, WALLPX, RHO_MAX = 1, SPC, SPS, SPW, WREV;
+const PIN = { b: [0.5, 2.2], up: 12 * MM }, WSH = 0.5;
+function wallsAt(rho) { // the walls that have formed when every centre's front has spread rho mm
+  const g = WREV.getContext('2d'), img = g.createImageData(SB.w, SB.h), D = img.data, S = WALLPX, DS = MAPS.DS, e = 0.035;
+  if (rho > 0) for (let k = 0; k < DS.length; k++) { const a = S[k * 4 + 3]; if (!a) continue; const f = 1 - smooth(rho - e, rho + e, DS[k]); if (f <= 0) continue; D[k * 4] = S[k * 4]; D[k * 4 + 1] = S[k * 4 + 1]; D[k * 4 + 2] = S[k * 4 + 2]; D[k * 4 + 3] = a * f; }
+  g.putImageData(img, 0, 0); return WREV;
+}
+// what = 'all' (the specimen), 'wings' (what of the wings stops the light: veins, walls, pterostigma,
+// a trace of membrane) or 'body' (the body alone); each shadow is cast from its own image
+function composeSpecimen(t, what = 'all') {
+  const c = what === 'all' ? SPC : what === 'wings' ? SPW : SPS, g = c.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, SB.w, SB.h);
+  if (what !== 'body') {
+    g.drawImage(L_MEM, 0, 0);
+    const rho = rhoAt(t); if (rho > 0) { const L = rho >= RHO_MAX ? L_WALL : wallsAt(rho); if (what === 'wings') g.globalAlpha = 0.3; g.drawImage(L, 0, 0); g.globalAlpha = 1; } // in the shadow the fine walls blur to a tone, under the main veins' lines
+    g.drawImage(L_VEIN, 0, 0);
+    g.drawImage(L_PTP, 0, 0); const pd = ease(span(t, ...TM.ptero)); if (pd > 0) { g.globalAlpha = pd; g.drawImage(L_PTD, 0, 0); g.globalAlpha = 1; }
+    if (what === 'all') { const sh = ease(span(t, ...TM.sheen)); if (sh > 0) { g.globalAlpha = sh; g.drawImage(L_SHEEN, 0, 0); g.globalAlpha = 1; } }
+  }
+  if (what !== 'wings') g.drawImage(L_BODY, 0, 0);
+  return c;
+}
+function drawSpecimen(t) {
+  const lin = span(t, ...TM.land), u = ease5(lin); if (lin <= 0) return;
+  const LIFT = 54 * MM, z = HGT + (1 - u) * LIFT, s = persp(z) / persp(HGT), a = smooth(0, 0.12, lin), dof = (z - HGT) / LIFT * 5, rot = (1 - u) * 0.05;
+  const img = composeSpecimen(t), shd = composeSpecimen(t, 'body'), wsh = composeSpecimen(t, 'wings'), cx = SPEC.x, cy = SPEC.y;
+  const at = (x, y, zz) => [VC[0] + (x - VC[0]) * persp(zz) / persp(HGT), VC[1] + (y - VC[1]) * persp(zz) / persp(HGT)];
+  // the shadow lies on the card along the light, wider and softer while the specimen is high
+  // and the wings' venation casts its own network, offset the same and as soft, about a sixth as dark
+  const blur = 0.5 + z * 0.022; // a window a few degrees across: the penumbra at 12 mm is about half a millimetre
+  X.save(); X.translate(cx, cy); X.rotate(rot); castShadow(X, shd, SB.x0 - cx, SB.y0 - cy, z, { alpha: 0.6 * a, blur }); castShadow(X, wsh, SB.x0 - cx, SB.y0 - cy, z, { alpha: WSH * a, blur }); X.restore();
+  // the pin's shadow from its foot in the card up its length, sharp at the foot
+  const pf = bodyToCard(...PIN.b), zt = z + PIN.up;
+  X.save(); X.globalCompositeOperation = 'multiply'; X.globalAlpha = a; X.strokeStyle = 'rgba(60,42,28,0.8)'; X.lineWidth = 2.6;
+  for (let i = 0; i < 8; i++) { const za = (z - HGT) + zt * i / 8, zb = (z - HGT) + zt * (i + 1) / 8; X.filter = `blur(${(0.5 + zb * 0.05).toFixed(1)}px)`; X.beginPath(); X.moveTo(pf[0] + SH.x * za * K, pf[1] + SH.y * za * K); X.lineTo(pf[0] + SH.x * zb * K, pf[1] + SH.y * zb * K); X.stroke(); }
+  X.filter = `blur(${(0.6 + zt * 0.05).toFixed(1)}px)`; X.fillStyle = 'rgba(60,42,28,0.7)'; X.beginPath(); X.ellipse(pf[0] + SH.x * zt * K, pf[1] + SH.y * zt * K, 5, 7, Math.atan2(SH.y, SH.x) - Math.PI / 2, 0, 7); X.fill(); X.restore();
+  // the specimen
+  const [px, py] = at(cx, cy, z);
+  X.save(); X.globalAlpha = a; X.filter = dof > 0.05 ? `blur(${dof.toFixed(2)}px)` : 'none'; X.translate(px, py); X.rotate(rot); X.scale(s, s); X.drawImage(img, SB.x0 - cx, SB.y0 - cy); X.restore();
+  // the pin above it: steel, a black enamelled head with one catch of the window
+  const [x0, y0] = at(pf[0], pf[1], z), [x1, y1] = at(pf[0], pf[1], zt);
+  X.save(); X.globalAlpha = a; X.filter = dof > 0.05 ? `blur(${dof.toFixed(2)}px)` : 'none'; X.strokeStyle = 'rgb(104,101,96)'; X.lineWidth = 1.1; X.beginPath(); X.moveTo(x0, y0); X.lineTo(x1, y1); X.stroke();
+  const pr = 4.6 * persp(zt) / persp(HGT); X.fillStyle = rgba(hex('#1c1714')); X.beginPath(); X.arc(x1, y1, pr, 0, 7); X.fill();
+  X.fillStyle = 'rgba(205,198,186,0.9)'; X.beginPath(); X.arc(x1 - pr * 0.38, y1 - pr * 0.4, pr * 0.3, 0, 7); X.fill(); X.restore();
+}
+
+// ---------- Fig. 2: the right hindwing from the nodus to the tip, at ×6 ----------
+// The detail box (above) is drawn again six times larger in a frame below the specimen: a true
+// enlargement, at the wing's own angle, cropped square by the frame.
+const M2 = 6, S2 = M2 * MM, A2 = PWG.pl.a;
+const FIG = { w: Math.round(DBOX.w * M2), h: Math.round(DBOX.h * M2), y: 616 }; FIG.x = Math.round(W / 2 - FIG.w / 2); // centred on the plate's axis, under the box
+const toFig = (u, v) => { const c = PWG.pl.toCard(u, v); return [FIG.x + (c[0] - DBOX.x) * M2, FIG.y + (c[1] - DBOX.y) * M2]; };
+const fromFig = (x, y) => PWG.pl.fromCard(DBOX.x + (x - FIG.x) / M2, DBOX.y + (y - FIG.y) / M2);
+const inFig = (p, m = 0) => p[0] >= FIG.x + m && p[0] <= FIG.x + FIG.w - m && p[1] >= FIG.y + m && p[1] <= FIG.y + FIG.h - m;
+const FB = { x0: FIG.x, y0: FIG.y, w: FIG.w, h: FIG.h };
+const figPoly = P => P.map(p => toFig(p[0], p[1]));
+// the parts of a polyline that a test admits, resampled every 2 px
+function clipRuns(P, ins) {
+  const out = []; let cur = null, Q = [];
+  for (let i = 0; i < P.length; i++) { if (i) { const a = P[i - 1], b = P[i], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2)); for (let k = 1; k <= n; k++) Q.push([lerp(a[0], b[0], k / n), lerp(a[1], b[1], k / n)]); } else Q.push(P[0]); }
+  for (const p of Q) { if (ins(p)) { if (!cur) out.push(cur = []); cur.push(p); } else cur = null; }
+  return out.filter(q => q.length > 1);
+}
+// the parts of a polyline inside a disc
+function inDisc(P, c, r) {
+  const out = []; let cur = null; const ins = p => Math.hypot(p[0] - c[0], p[1] - c[1]) <= r;
+  const Q = []; for (let i = 0; i < P.length; i++) { if (i) { const a = P[i - 1], b = P[i], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2)); for (let k = 1; k <= n; k++) Q.push([lerp(a[0], b[0], k / n), lerp(a[1], b[1], k / n)]); } else Q.push(P[0]); }
+  for (const p of Q) { if (ins(p)) { if (!cur) out.push(cur = []); cur.push(p); } else cur = null; }
+  return out.filter(q => q.length > 1);
+}
+function offsetLine(P, d) { // a polyline moved sideways by d px
+  return P.map((p, i) => { const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [p[0] - dy / l * d, p[1] + dx / l * d]; });
+}
+
+// ---------- the construction: every pencil line, with when it is drawn ----------
+// Two weights of pencil: heavy for the construction (the wing frames, the seeds, the walls, the
+// trials' cells), light for the annotation (dimensions, the axis, the boxes, the leaders, the words).
+// Each stroke takes its own pressure, pv about the weight's own (a seeded spread, ±pv/2).
+const HV = { tone: 1.1, w: 1.3, pv: 0.36 }, LT = { tone: 0.68, w: 0.9, pv: 0.24 }, TXT = 0.92;
+const CONS = [];
+const press = o => { const pv = o.pv ?? 0.2, r = rngFor('pv:' + o.seed)(); return { ...o, tone: clamp(0.22 + 0.95 * (o.tone ?? 0.8), 0, 1.45) * (1 - pv / 2 + pv * r), w: (o.w ?? 1.1) * 1.12 }; };
+const addC = (pts, t0, t1, o) => CONS.push({ pts, t0, t1, o: press({ seed: 'c' + CONS.length, ...o }) });
+const addT = (str, x, y, t0, t1, o) => CONS.push({ text: str, x, y, t0, t1, o: { size: 12, medium: 'pencil', seed: 'tx' + CONS.length, ...o, tone: clamp(0.3 + 0.85 * (o?.tone ?? TXT)) } });
+function planConstruction() {
+  // the four wings: outline, then the main veins one after another, all four wings at once
+  WING_LIST.forEach((Wg, wi) => {
+    const t0 = TM.frame[0] + wi * 0.06, F = Wg.F, pl = Wg.pl;
+    addC(segPoly(pl, [...F.out, F.out[0]]), t0, t0 + 0.42, { ...HV, w: 1.0 });
+    const names = F.list.filter(v => v.name !== 'C');
+    names.forEach((v, k) => { const a = t0 + 0.3 + k * 0.028; addC(segPoly(pl, v.P), a, a + 0.16, { ...HV, w: 0.9, tremor: 0.2 }); });
+  });
+  // the body's axis, run past both ends
+  addC([bodyToCard(0, -19), bodyToCard(0, ABD.y1 + 11)], 0.75, 1.15, { ...LT, overshoot: 8 });
+}
+function planConstruction2() {
+  // the span, tip to tip, measured off the drawing: a dimension line over the wings, ticked at its ends
+  let xL = 1e9, xR = -1e9, yL = 0, yR = 0, yT = 1e9; for (const Wg of WING_LIST) for (const p of segPoly(Wg.pl, Wg.F.out)) { if (p[0] < xL) { xL = p[0]; yL = p[1]; } if (p[0] > xR) { xR = p[0]; yR = p[1]; } yT = Math.min(yT, p[1]); }
+  SPAN_MM = (xR - xL) / MM; const yD = Math.round(yT - 26);
+  addC([[xL, yL - 6], [xL, yD - 6]], 0.95, 1.05, { ...LT, overshoot: 3 }); addC([[xR, yR - 6], [xR, yD - 6]], 0.97, 1.07, { ...LT, overshoot: 3 });
+  addC([[xL, yD], [xR, yD]], 1.02, 1.3, LT);
+  for (const x of [xL, xR]) addC([[x - 3.5, yD + 3.5], [x + 3.5, yD - 3.5]], 1.28, 1.33, { ...LT, tone: 0.8 });
+  addT(SPAN_MM.toFixed(0) + ' mm', (xL + xR) / 2, yD - 8, 1.3, 1.45, { align: 'center', size: 12 });
+  const hd = bodyToCard(0, -12.6), tl = bodyToCard(0, ABD.y1 + 5.4); BODY_MM = (tl[1] - hd[1]) / MM;
+  planFig2();
+}
+// Fig. 2 in pencil: the box on the specimen, its two leaders, the frame; inside it the margin and
+// each main vein weighted by its thickness, cut by the frame, and the pterostigma hatched; three
+// landmarks named and the figure captioned.
+function hatch(poly, step, t0, t1, o) { // parallel strokes at 45° clipped to a polygon
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const p of poly) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+  for (let c = x0 + y0; c < x1 + y1; c += step) { let run = null; for (let x = x0; x <= x1; x += 0.5) { const y = c - x, ins = inPoly(poly, x, y); if (ins && !run) run = [[x, y]]; if (!ins && run) { run.push([x, y]); if (Math.hypot(run[1][0] - run[0][0], run[1][1] - run[0][1]) > 1.5) addC(run, t0, t1, o); run = null; } } }
+}
+let SEED_LBL = null;
+function planFig2() {
+  const F = PWG.F, t0 = 0.95, inside = p => inFig(p, 1.5);
+  // the box at natural size, the cone from its lower corners, the frame
+  const B = [[DBOX.x, DBOX.y], [DBOX.x + DBOX.w, DBOX.y], [DBOX.x + DBOX.w, DBOX.y + DBOX.h], [DBOX.x, DBOX.y + DBOX.h]];
+  const R = [[FIG.x, FIG.y], [FIG.x + FIG.w, FIG.y], [FIG.x + FIG.w, FIG.y + FIG.h], [FIG.x, FIG.y + FIG.h]];
+  const CALL = { tone: 0.82, w: 1.0, pv: 0.12 }; // the callout: box and cone in one graphite
+  addC([...B, B[0]], 0.9, 1.15, CALL);
+  addC([B[3], R[0]], 1.1, 1.35, CALL); addC([B[2], R[1]], 1.1, 1.35, CALL);
+  addC([...R, R[0]], 1.25, 1.6, { ...LT, overshoot: 5 });
+  // the margin and the main veins, the costa, R1 and the nodus heaviest
+  const HEAVY = { C: 1, R1: 1, nodus: 1 };
+  for (const q of clipRuns(figPoly([...F.out, F.out[0]]), inside)) addC(q, t0 + 0.3, t0 + 0.75, { ...HV, w: 2.2, tone: 0.85 });
+  F.list.forEach((v, k) => {
+    const a = t0 + 0.45 + k * 0.025, o = HEAVY[v.name] ? { ...HV, w: 3.2, tone: 0.95, pv: 0.18 } : { ...HV, w: clamp(v.w * S2 * 0.6, 1.9, 2.4), tone: 0.78, pv: 0.26 };
+    for (const q of clipRuns(figPoly(v.P), inside)) addC(q, a, a + 0.2, { ...o, tremor: 0.2 });
+  });
+  const [p0, p1] = F.wd.ptero; hatch(figPoly(pteroPoly(F)), 2.6, t0 + 0.8, t0 + 0.9, { ...HV, tone: 0.8, w: 1.0, tremor: 0.1 });
+  // three names: the nodus and the pterostigma over the frame, one seed under the tip
+  const up = (u, v, str, ta) => { const p = toFig(u, v), q = [p[0], FIG.y - 7]; addC([[p[0], p[1] - 3], q], ta, ta + 0.06, LT); addT(str, q[0], q[1] - 7, ta + 0.04, ta + 0.18, { align: 'center' }); };
+  const nd = atU(F.V.C.P, F.wd.nodus), pc = atU(F.V.C.P, (p0 + p1) / 2);
+  up(nd[0], nd[1], 'nodus', 1.5); up(pc[0], pc[1], 'pterostigma', 1.56);
+  let best = null, bd = 1e9; for (const sd of PWG.S) { const d = Math.hypot(sd.u - 47.0, sd.v - 2.7); if (d < bd) { bd = d; best = sd; } }
+  const sd = PWG.side, sp = toFig(best.u, best.v), lq = [sp[0] + 16 * sd, FIG.y + FIG.h - 34]; SEED_LBL = { sp, lq };
+  addC([[sp[0] + 1 * sd, sp[1] + 5], lq], 1.98, 2.06, LT); addT('a seed', lq[0] + 4 * sd, lq[1] + 14, 2.02, 2.16, { align: sd > 0 ? 'left' : 'right' });
+  addT(`Fig. 2   the ${PWG.side > 0 ? 'right' : 'left'} hindwing, nodus to tip, ×${M2}`, W / 2, FIG.y + FIG.h + 28, 1.5, 1.75, { align: 'center', size: 12.5 });
+}
+let SPAN_MM = 0, BODY_MM = 0;
+function circlePts(c, r) { const a0 = rngFor('circ' + c[0])() * 6.283, n = Math.ceil(r * 0.8) + 24, P = []; for (let i = 0; i <= n; i++) { const a = a0 + (6.283 + 0.12) * i / n; P.push([c[0] + r * Math.cos(a), c[1] + r * Math.sin(a)]); } return P; }
+function drawItem(ctx, c, p) {
+  if (c.text) letterText(ctx, c.text, c.x, c.y, { ...c.o, prog: p });
+  else if (c.dot) { if (p > 0.5) pencilDot(ctx, c.dot[0], c.dot[1], c.o); }
+  else if (c.tick) pencilTick(ctx, c.tick[0], c.tick[1], 17, { ...(c.o || {}), prog: p, seed: 'tick' });
+  else pencil(ctx, c.pts, { ...c.o, prog: ease(p) });
+}
+// Finished lines are baked: everything done by 2.0 s into one layer, everything into another.
+let BAKES = [];
+function bakeConstruction() {
+  const tEnd = Math.max(...CONS.map(c => c.t1));
+  BAKES = [2.0, tEnd].map(tb => { const c = mk(W, H), g = c.getContext('2d'); for (const it of CONS) if (it.t1 <= tb) drawItem(g, it, 1); return { tb, c }; });
+}
+function drawConstruction(ctx, t) {
+  let base = null; for (const b of BAKES) if (t >= b.tb) base = b;
+  if (base) ctx.drawImage(base.c, 0, 0);
+  for (const c of CONS) { if (base && c.t1 <= base.tb) continue; const p = span(t, c.t0, c.t1); if (p > 0) drawItem(ctx, c, p); }
+}
+
+// ---------- timed graphite: drawn once, revealed pixel by pixel ----------
+// The seeds appear in the order the darts were kept. The walls appear where the fronts spreading at
+// one speed from every seed have met: a wall pixel shows once rho reaches its distance to the
+// nearest seed, which is the same for both seeds it divides.
+// ---------- the natural-size construction: every wall in pencil, run on past the margins ----------
+// Under the pinned wings the curator pencilled the same seeds and walls. Where the wing stops the
+// tessellation does not: a margin cell is open, and its walls run on outward, so each is continued
+// up to 2.2 mm past the margin onto the bare card, fading. Everything here is in body millimetres.
+let FRINGE = null;
+function buildFringe() {
+  const all = [], cs = 0.5, grid = new Map(), key = (x, y) => Math.floor(x / cs) + 1000 * Math.floor(y / cs);
+  const put = p => { all.push(p); const k = key(p.x, p.y); (grid.get(k) || grid.set(k, []).get(k)).push(p); };
+  const near = (x, y, R) => { const out = [], g = Math.ceil(R / cs); for (let j = -g; j <= g; j++) for (let i = -g; i <= g; i++) { const L = grid.get(key(x, y) + i + 1000 * j); if (L) for (const p of L) if (Math.hypot(p.x - x, p.y - y) < R) out.push(p); } return out; };
+  const toB = (Wg, u, v) => { const c = Wg.pl.toCard(u, v); return [(c[0] - SPEC.x) / MM, (c[1] - SPEC.y) / MM]; };
+  for (const Wg of WING_LIST) for (const s of Wg.S) { const b = toB(Wg, s.u, s.v); put({ x: b[0], y: b[1] }); }
+  const inAny = (x, y) => { const k = Math.round(SPEC.y + y * MM - SB.y0) * SB.w + Math.round(SPEC.x + x * MM - SB.x0); return k >= 0 && k < MAPS.WI.length && MAPS.WI[k] >= 0 && MAPS.COV[k] > 0.2; };
+  const walls = [];
+  for (const Wg of WING_LIST) {
+    const out = Wg.F.out.concat([Wg.F.out[0]]);
+    Wg.cells.forEach((poly, i) => {
+      for (let k = 0; k < poly.length; k++) {
+        const a = poly[k], b = poly[(k + 1) % poly.length], j = a[2]; if (j < 0 || j < i) continue;
+        const n = Math.max(2, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 24)); let run = [];
+        const flush = () => { if (run.length > 1) walls.push(run.map(p => toB(Wg, p[0], p[1])).concat([run.map(p => p[2])])); run = []; };
+        for (let q = 0; q <= n; q++) {
+          const u = lerp(a[0], b[0], q / n), v = lerp(a[1], b[1], q / n); let dm = 1e9;
+          if (!inPoly(Wg.F.out, u, v) && u > 2) { for (let m = 1; m < out.length; m++) dm = Math.min(dm, dSeg2(u, v, out[m - 1], out[m])); }
+          const bb = toB(Wg, u, v); if (dm < 2.6 && !inAny(bb[0], bb[1]) && Math.abs(bb[0]) > 4.4) run.push([u, v, dm]); else flush();
+        }
+        flush();
+      }
+    });
+  }
+  FRINGE = { all, walls, near };
+}
+function dSeg2(x, y, a, b) { const vx = b[0] - a[0], vy = b[1] - a[1], t = clamp(((x - a[0]) * vx + (y - a[1]) * vy) / (vx * vx + vy * vy || 1)); return Math.hypot(x - a[0] - vx * t, y - a[1] - vy * t); }
+let NATW, NATPX, DST;
+function bakeNatural() {
+  buildFringe();
+  const bc = (x, y) => [SPEC.x + x * MM, SPEC.y + y * MM];
+  NATW = mk(W, H); const h = NATW.getContext('2d');
+  for (const Wg of WING_LIST) for (const w of Wg.walls) pencil(h, [Wg.pl.toCard(w[0], w[1]), Wg.pl.toCard(w[2], w[3])], { tone: 0.42, w: 0.7, tremor: 0.03, seed: 'nw' + Wg.id + w[4] + ':' + w[5] });
+  FRINGE.walls.forEach((w, k) => { // each overrun in three pieces, lighter as it leaves the wing
+    const D = w.pop(), n = w.length; for (let p = 0; p < 3; p++) { const i0 = Math.floor(p * (n - 1) / 3), i1 = Math.ceil((p + 1) * (n - 1) / 3); if (i1 <= i0) continue;
+      const dm = (D[i0] + D[i1]) / 2, f = 1 - smooth(0.2, 2.6, dm); if (f > 0.05) pencil(h, w.slice(i0, i1 + 1).map(q => bc(q[0], q[1])), { tone: 0.3 + 0.62 * f, w: 0.85, tremor: 0.04, seed: 'nf' + k + ':' + p }); }
+  });
+  NATPX = h.getImageData(SB.x0, SB.y0, SB.w, SB.h).data;
+  DST = new Float32Array(SB.w * SB.h).fill(-1);
+  for (let k = 0; k < DST.length; k++) { if (!NATPX[k * 4 + 3]) continue; const x = (SB.x0 + k % SB.w + 0.5 - SPEC.x) / MM, y = (SB.y0 + ((k / SB.w) | 0) + 0.5 - SPEC.y) / MM; let m = 2.95; for (const p of FRINGE.near(x, y, 2.95)) m = Math.min(m, Math.hypot(p.x - x, p.y - y)); DST[k] = m; }
+}
+const RHO_N = 3.0, rhoNat = t => t < TM.crys[1] ? rhoAt(t) : lerp(RHO_MAX, RHO_N, ease(span(t, TM.crys[1], TM.crys[1] + 0.4)));
+function drawNaturalWalls(ctx, t) {
+  const rho = rhoNat(t); if (rho <= 0) return; if (rho >= RHO_N) { ctx.drawImage(NATW, SB.x0, SB.y0, SB.w, SB.h, SB.x0, SB.y0, SB.w, SB.h); return; }
+  const img = new ImageData(SB.w, SB.h), D = img.data, e = 0.03;
+  for (let k = 0; k < DST.length; k++) { const ds = DST[k]; if (ds < 0) continue; const f = 1 - smooth(rho - e, rho + e, ds); if (f <= 0) continue; D[k * 4] = NATPX[k * 4]; D[k * 4 + 1] = NATPX[k * 4 + 1]; D[k * 4 + 2] = NATPX[k * 4 + 2]; D[k * 4 + 3] = NATPX[k * 4 + 3] * f; }
+  const g = SCR2.getContext('2d'); g.clearRect(0, 0, SCR2.width, SCR2.height); g.putImageData(img, 0, 0); ctx.drawImage(SCR2, 0, 0, SB.w, SB.h, SB.x0, SB.y0, SB.w, SB.h);
+}
+
+let SEEDC, SEEDT, BWALL, BWPX, DSB, SCR2;
+const seedTime = (Wg, s) => TM.seeds[0] + (s.i / Wg.S.length) * (TM.seeds[1] - TM.seeds[0] - 0.08);
+function bakeTimed() {
+  SEEDC = mk(W, H); const g = SEEDC.getContext('2d', { willReadFrequently: true }); SEEDT = new Float32Array(W * H).fill(1e9);
+  const stamp = (x, y, R, t) => { for (let j = Math.floor(y - R); j <= Math.ceil(y + R); j++) for (let i = Math.floor(x - R); i <= Math.ceil(x + R); i++) { if (i < 0 || j < 0 || i >= W || j >= H || Math.hypot(i + 0.5 - x, j + 0.5 - y) > R) continue; const k = j * W + i; if (t < SEEDT[k]) SEEDT[k] = t; } };
+  for (const Wg of WING_LIST) for (const s of Wg.S) {
+    const p = Wg.pl.toCard(s.u, s.v), t = seedTime(Wg, s);
+    pencilDot(g, p[0], p[1], { r: 0.22, w: 0.9, tone: 0.5, seed: 'sd' + Wg.id + s.i }); stamp(p[0], p[1], 1.6, t);
+    if (Wg === PWG) { const b = toFig(s.u, s.v); if (inFig(b, 3)) { pencilDot(g, b[0], b[1], { r: 1.0, w: 1.7, tone: 0.8, seed: 'fd' + s.i }); stamp(b[0], b[1], 3.4, t); } }
+  }
+  BWALL = mk(W, H); const h = BWALL.getContext('2d'); h.save(); h.beginPath(); h.rect(FIG.x + 1.5, FIG.y + 1.5, FIG.w - 3, FIG.h - 3); h.clip();
+  for (const w of PWG.walls) { const a = toFig(w[0], w[1]), b = toFig(w[2], w[3]); if (!inFig(a, -4) && !inFig(b, -4)) continue; pencil(h, [a, b], { tone: 0.5 + 0.3 * rngFor('pw' + w[4] + ':' + w[5])(), w: 1.75, tremor: 0.12, seed: 'fw' + w[4] + ':' + w[5] }); }
+  h.restore();
+  BWPX = h.getImageData(FB.x0, FB.y0, FB.w, FB.h).data;
+  // the nearest seed's distance (mm) at every pixel of Fig. 2: a wall shows once the fronts have
+  // reached it, and the fronts themselves are drawn as faint rings while they spread
+  DSB = new Float32Array(FB.w * FB.h).fill(-1); const Rs = PWG.F.ras;
+  for (let j = 0; j < FB.h; j++) for (let i = 0; i < FB.w; i++) {
+    const l = fromFig(FB.x0 + i + 0.5, FB.y0 + j + 0.5), k = Rs.at(l[0], l[1]); if (k < 0) continue;
+    const reg = Rs.lab[k], wall = BWPX[(j * FB.w + i) * 4 + 3]; if (reg <= 0 && !wall) continue;
+    DSB[j * FB.w + i] = nearest(PWG.SD, l[0], l[1], reg > 0 ? reg : 0)[0] * (reg > 0 && Rs.D[k] > 0.05 ? 1 : wall ? 1 : -1);
+  }
+  SCR2 = mk(Math.max(SB.w, FB.w), Math.max(SB.h, FB.h));
+}
+const SEEDPX = {};
+function revealBox(ctx, x0, y0, w, h, f) { // copy the pixels of SEEDC in a box that f(k) admits, at alpha f
+  const key = x0 + ',' + y0, src0 = SEEDPX[key] || (SEEDPX[key] = SEEDC.getContext('2d').getImageData(x0, y0, w, h)), src = new ImageData(new Uint8ClampedArray(src0.data), w, h), D = src.data;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const k = (j * w + i) * 4; if (!D[k + 3]) continue; D[k + 3] *= f((y0 + j) * W + x0 + i); }
+  const g = SCR2.getContext('2d'); g.clearRect(0, 0, SCR2.width, SCR2.height); g.putImageData(src, 0, 0); ctx.drawImage(SCR2, 0, 0, w, h, x0, y0, w, h);
+}
+function drawSeeds(ctx, t) {
+  if (t < TM.seeds[0]) return; if (t >= TM.seeds[1]) { ctx.drawImage(SEEDC, 0, 0); return; }
+  const f = k => smooth(SEEDT[k], SEEDT[k] + 0.06, t);
+  revealBox(ctx, SB.x0, SB.y0, SB.w, SB.h, f); revealBox(ctx, FB.x0, FB.y0, FB.w, FB.h, f);
+}
+function drawFigWalls(ctx, t) {
+  const rho = rhoAt(t); if (rho <= 0) return; if (rho >= RHO_MAX) { ctx.drawImage(BWALL, FB.x0, FB.y0, FB.w, FB.h, FB.x0, FB.y0, FB.w, FB.h); return; }
+  const img = new ImageData(FB.w, FB.h), D = img.data, e = 0.025, fade = 1 - smooth(0.75, 1.1, rho);
+  for (let k = 0; k < DSB.length; k++) {
+    const ds = DSB[k]; if (ds < 0) continue; const a = BWPX[k * 4 + 3];
+    if (a) { const f = 1 - smooth(rho - e, rho + e, ds); if (f > 0) { D[k * 4] = BWPX[k * 4]; D[k * 4 + 1] = BWPX[k * 4 + 1]; D[k * 4 + 2] = BWPX[k * 4 + 2]; D[k * 4 + 3] = a * f; continue; } }
+    // the front: a ring at rho round every seed, inside its own cell (beyond the cell a nearer seed's ring has it)
+    const d = Math.abs(ds - rho) * S2; if (d > 1.2 || fade <= 0) continue;
+    const x = FB.x0 + (k % FB.w), y = FB.y0 + ((k / FB.w) | 0), tooth = cardTooth(x, y), cov = (1 - smooth(0.15, 1.2, d)) * 0.34 * fade, dep = cov * (0.25 + 0.75 * smooth(0.3, 0.7, tooth));
+    const c = litAt(G_DARK, x, y); D[k * 4] = c[0]; D[k * 4 + 1] = c[1]; D[k * 4 + 2] = c[2]; D[k * 4 + 3] = 255 * dep;
+  }
+  const g = SCR2.getContext('2d'); g.clearRect(0, 0, SCR2.width, SCR2.height); g.putImageData(img, 0, 0); ctx.drawImage(SCR2, 0, 0, FB.w, FB.h, FB.x0, FB.y0, FB.w, FB.h);
+}
+
+// ---------- the trials: the same Voronoi, seeded by other rules ----------
+// Four crops of the same hindwing, each its own patch and size, with its seeds laid by another rule
+// at the density the wing has there: a square grid, a hexagonal lattice, scattered at a minimum
+// spacing (the wing's own seeds), and scattered with no spacing at all. The cells are cut by the
+// same code as the wing's. [name, rule, patch centre (wing-local mm), patch radius mm]
+const TR = 62, TY = 1096, TXS = [300, 460, 620, 780];
+const TRIAL_RULES = [['square grid', 'grid', [30.0, 8.0], 3.0], ['hexagonal', 'hex', [24.6, 10.5], 2.4], ['min. spacing', 'real', [45.4, 2.8], 2.2], ['random', 'rand', [30.6, 5.3], 2.5]];
+function trialSeeds(kind, TP, TPR) {
+  const F = PWG.F, Rs = F.ras, R = TPR + 1.6, real = PWG.S.filter(s => Math.hypot(s.u - TP[0], s.v - TP[1]) < R);
+  if (kind === 'real') return real.map((s, i) => ({ u: s.u, v: s.v, reg: s.reg, d: s.d, i }));
+  let A = 0, n = 0; for (let v = TP[1] - R; v < TP[1] + R; v += 0.05) for (let u = TP[0] - R; u < TP[0] + R; u += 0.05) { if (Math.hypot(u - TP[0], v - TP[1]) >= R) continue; n++; if (Rs.region(u, v) > 0) A++; }
+  const area = A * 0.0025, N = real.length, out = [], r = rngFor('trial:' + kind), keep = (u, v, cl) => { if (Math.hypot(u - TP[0], v - TP[1]) >= R) return; const reg = Rs.region(u, v); if (reg > 0 && Rs.clear(u, v) >= cl) out.push({ u, v, reg, i: out.length }); };
+  if (kind === 'grid') { const a = Math.sqrt(area / N); for (let j = -14; j <= 14; j++) for (let i = -14; i <= 14; i++) keep(TP[0] + (i + 0.31) * a, TP[1] + (j + 0.17) * a, 0.22 * a); out.forEach(s => s.d = a); }
+  if (kind === 'hex') { const a = Math.sqrt(2 * area / (Math.sqrt(3) * N)); for (let j = -16; j <= 16; j++) for (let i = -16; i <= 16; i++) keep(TP[0] + (i + (j & 1) * 0.5 + 0.2) * a, TP[1] + (j + 0.1) * a * Math.sqrt(3) / 2, 0.22 * a); out.forEach(s => s.d = a); }
+  if (kind === 'rand') { const a = Math.sqrt(area / N); for (let k = 0; out.length < N && k < N * 20; k++) keep(TP[0] + (r() * 2 - 1) * R, TP[1] + (r() * 2 - 1) * R, 0.02); out.forEach(s => s.d = a); }
+  return out;
+}
+// a cell's sides, not counting the vanishing edges left where four or more cells meet at a point
+const nSides = (poly, d) => poly.filter((p, k) => { const q = poly[(k + 1) % poly.length]; return Math.hypot(q[0] - p[0], q[1] - p[1]) > 0.02 * d; }).length;
+function buildTrial(kind, TP, TPR) {
+  const RS = TPR * 2.4, S = trialSeeds(kind, TP, RS), Rs = PWG.F.ras, nbrs = s => S.filter(o => o !== s && o.reg === s.reg && Math.hypot(o.u - s.u, o.v - s.v) < 4 * s.d);
+  const cells = voronoi(S, nbrs, s => 3 * s.d), walls = [], sides = [];
+  cells.forEach((poly, i) => {
+    const s = S[i], inner = Math.hypot(s.u - TP[0], s.v - TP[1]) < RS * 0.9 && poly.every(p => p[2] >= 0 && Rs.region(p[0], p[1]) === s.reg && Rs.clear(p[0], p[1]) > 0.3 * s.d);
+    if (inner) sides.push(nSides(poly, s.d));
+    for (let k = 0; k < poly.length; k++) { const p = poly[k], q = poly[(k + 1) % poly.length], j = p[2]; if (j < 0 || j < i) continue; if (Math.hypot(p[0] - TP[0], p[1] - TP[1]) > TPR + 0.6 && Math.hypot(q[0] - TP[0], q[1] - TP[1]) > TPR + 0.6) continue; for (const w of trimWall(Rs, s.reg, p, q, 0.035)) walls.push(w); }
+  });
+  return { kind, S, walls, sides: sides.length ? [Math.min(...sides), Math.max(...sides)] : [0, 0], n: sides.length };
+}
+let TRIALS = [];
+function planTrials() {
+  const F = PWG.F, a0 = TM.trials[0];
+  TRIALS = TRIAL_RULES.map(([name, kind, TP, TPR], ti) => {
+    const T = buildTrial(kind, TP, TPR), cx = TXS[ti], c = [cx, TY], t0 = a0 + ti * 0.12, TMAG = TR / (TPR * MM); T.TP = TP; T.TPR = TPR; T.mag = TMAG;
+    const map = (u, v) => { const p = PWG.pl.toCard(u, v), q = PWG.pl.toCard(...TP); return [cx + (p[0] - q[0]) * TMAG, TY + (p[1] - q[1]) * TMAG]; };
+    addC(circlePts(c, TR), t0, t0 + 0.22, LT);
+    for (const q of inDisc([...F.out, F.out[0]].map(p => map(...p)), c, TR - 1.5)) addC(q, t0 + 0.08, t0 + 0.24, { ...HV, tone: 0.85, w: 1.8 });
+    for (const v of F.list) { const P = v.P.map(p => map(...p)), hw = Math.max(0.5, v.w * MM * lerp(1.55, 0.8, v.P[(v.P.length / 2) | 0][0] / F.wd.L)) * TMAG / 2; for (const sd of [-1, 1]) for (const q of inDisc(offsetLine(P, sd * hw), c, TR - 1.5)) addC(q, t0 + 0.1, t0 + 0.26, { ...HV, tone: 0.8, w: 1.2 }); }
+    T.walls.forEach((w, k) => { for (const q of inDisc([map(w[0], w[1]), map(w[2], w[3])], c, TR - 1.5)) addC(q, t0 + 0.2 + 0.18 * (k / T.walls.length), t0 + 0.26 + 0.18 * (k / T.walls.length), { ...HV, tone: 0.7, w: 1.4, tremor: 0.12 }); });
+    T.S.forEach((s, k) => { const p = map(s.u, s.v); if (Math.hypot(p[0] - cx, p[1] - TY) < TR - 3) CONS.push({ dot: p, t0: t0 + 0.14 + 0.1 * (k / T.S.length), t1: t0 + 0.2 + 0.1 * (k / T.S.length), o: { r: 0.8, w: 1.45, tone: 0.7, seed: 'td' + ti + ':' + k } }); });
+    addT(name, cx, TY + TR + 27, t0 + 0.3, t0 + 0.45, { align: 'center', size: 14.5, tone: 1 });
+    addT(T.sides[0] === T.sides[1] ? T.sides[0] + ' sides' : T.sides[0] + '–' + T.sides[1] + ' sides', cx, TY + TR + 49, t0 + 0.38, t0 + 0.5, { align: 'center', size: 13, tone: 1 });
+    if (kind === 'real') CONS.push({ tick: [cx, TY + TR + 72], t0: t0 + 0.5, t1: t0 + 0.62, o: { tone: 1.2, w: 1.7 } });
+    return T;
+  });
+}
+function label(t) {
+  const lines = [{ text: 'No. 3', size: 12.5 }, { text: '*{Anax imperator} Leach, 1815', size: 15 }, { text: 'emperor dragonfly, male', size: 12.5 }, { text: 'each cell is the region nearest its seed', size: 12.5 }];
+  // the slip sized for the typed lines (13 px type), with room after the longest
+  const w = Math.round(Math.max(...lines.map(l => measureText(l.text, 13, { face: 'type' }))) + 2 * 15 + 16);
+  labelCard(X, { x: Math.min(FX1 - 40, TX1 - 21) - w, y: 140, w, lines, prog: span(t, ...TM.label), rot: -0.005, pad: 15, seed: 'label:05' });
+}
+
+// ---------- what the wings hold (for the notes; nothing here is drawn) ----------
+function cellStats() {
+  let n = 0, lad = 0, dmin = 9, dmax = 0; const hist = {};
+  for (const Wg of WING_LIST) {
+    const Rs = Wg.F.ras; n += Wg.S.length;
+    Wg.cells.forEach((poly, i) => {
+      const s = Wg.S[i]; dmin = Math.min(dmin, s.d); dmax = Math.max(dmax, s.d); if (s.lad) lad++;
+      if (!s.lad && poly.every(p => p[2] >= 0 && Rs.region(p[0], p[1]) === s.reg && Rs.clear(p[0], p[1]) > 0.3 * s.d)) { const m = nSides(poly, s.d); hist[m] = (hist[m] || 0) + 1; }
+    });
+  }
+  const tot = Object.values(hist).reduce((a, b) => a + b, 0);
+  return { n, lad, dmin, dmax, hist, tot };
+}
+let STATS;
+function planNotes() { STATS = cellStats(); }
+
+async function init() {
+  CARD = renderCard({ tone: 'white', seed: 'card:05' }); FRAME = renderFrame();
+  MAPS = wingMaps();
+  L_MEM = bakeMembrane(MAPS); L_VEIN = bakeMainVeins(); L_WALL = bakeWalls(); L_SHEEN = bakeSheen(MAPS);
+  L_PTP = bakePtero(PAL.pteroPale, shade(PAL.pteroPale, 0.8)); L_PTD = bakePtero(PAL.pteroDark, shade(PAL.pteroDark, 0.7)); L_BODY = bakeBody();
+  WALLPX = L_WALL.getContext('2d').getImageData(0, 0, SB.w, SB.h).data;
+  RHO_MAX = 0; for (const Wg of WING_LIST) for (const w of Wg.walls) { const s = Wg.S[w[4]]; RHO_MAX = Math.max(RHO_MAX, Math.hypot(w[0] - s.u, w[1] - s.v), Math.hypot(w[2] - s.u, w[3] - s.v)); }
+  RHO_MAX = Math.min(RHO_MAX, 1.6) + 0.04;
+  SPC = mk(SB.w, SB.h); SPS = mk(SB.w, SB.h); SPW = mk(SB.w, SB.h); WREV = mk(SB.w, SB.h);
+  planConstruction(); planConstruction2(); planTrials(); planNotes(); bakeTimed(); bakeNatural(); bakeConstruction();
+}
+function seek(t) {
+  t = clamp(t, 0, DUR);
+  X.setTransform(1, 0, 0, 1, 0, 0); X.filter = 'none'; X.globalAlpha = 1; X.globalCompositeOperation = 'source-over';
+  X.drawImage(CARD, 0, 0);
+  drawConstruction(X, t); drawSeeds(X, t); drawNaturalWalls(X, t); drawFigWalls(X, t);
+  drawSpecimen(t);
+  label(t);
+  X.drawImage(FRAME, 0, 0);
+  lightFalloff(X);
+  glass(X, t);
+}
+kitStart(init, seek);
+</script>
+</body></html>

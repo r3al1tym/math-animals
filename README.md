@@ -1,15 +1,17 @@
 # Computed form: Claude making art from the rules that shape living things
 
+**[Watch the film](film/math-animals.mp4)** (48 s, silent, 4:5): the ten animals grown from their equations, in the order below.
+
 ![Contact sheet of the film, one frame a second](images/film-contact-sheet.jpg)
 
 | | | | | |
 |---|---|---|---|---|
-| ![](out/02-honeybee.png) | ![](out/04-sea-urchin.png) | ![](out/05-dragonfly.png) | ![](out/03-orb-weaver.png) | ![](out/01-nautilus.png) |
+| ![](out/01-honeybee.png) | ![](out/02-sea-urchin.png) | ![](out/03-dragonfly.png) | ![](out/04-orb-weaver.png) | ![](out/05-nautilus.png) |
 | Fig. 1 Honeybee | Fig. 2 Sea urchin | Fig. 3 Dragonfly | Fig. 4 Orb-weaver | Fig. 5 Nautilus |
-| ![](out/11-camp-pitar.png) | ![](out/07-sea-fan.png) | ![](out/09-cone-shell.png) | ![](out/10-angelfish.png) | ![](out/06-tortoise.png) |
+| ![](out/06-camp-pitar.png) | ![](out/07-sea-fan.png) | ![](out/08-cone-shell.png) | ![](out/09-angelfish.png) | ![](out/10-tortoise.png) |
 | Fig. 6 Camp pitar | Fig. 7 Sea fan | Fig. 8 Cone shell | Fig. 9 Angelfish | Fig. 10 Tortoise |
 
-Claude (Opus 5.5) can take a published scientific model of how an animal's form arises, implement it, and render the result as finished artwork with no image files. It also directed, built and reviewed the work itself, running unattended for hours. The technique is general: the picture is the model's output, and the model's construction stays visible in it. The test set is the ten animals in an 82-second film, drawn by 15,227 lines of code. Each form is drawn by its cited rule. Reviewers still identify the surfaces as computed, and only the dragonfly passed review.
+Claude (Opus 5.5) can take a published scientific model of how an animal's form arises, implement it, and render the result as finished artwork with no image files. It also directed, built and reviewed the work itself, running unattended for hours. The technique is general: the picture is the model's output, and the model's construction stays visible in it. The test set is the ten animals in a 48-second film, drawn by 15,227 lines of code. Each form is drawn by its cited rule. Reviewers still identify the surfaces as computed, and only the dragonfly passed review.
 
 ## The technique
 
@@ -78,11 +80,12 @@ Any form with a published generative model: shells and horns, phyllotaxis, cryst
 - `kit/`: the shared light and material kit, inlined into every page by `node kit/sync.mjs <page.html>`.
 - `CONCEPT.md`: the concept card and the concept frames considered (`concept-frames/`). It describes the first series of ten, in which a glass sponge held the place the camp pitar holds in the film.
 - `BUILDERS.md`: the brief each builder worked from.
+- `film/math-animals.mp4`: the film, 1080 × 1350, 30 fps, silent.
 - `tools/render.mjs`: renders a page at given times and checks it is deterministic.
 
 ```
 cd tools && npm install
-node render.mjs ../01-nautilus/index.html /tmp/nautilus 0,1.5,3,4.5,5.2
+node render.mjs ../05-nautilus/index.html /tmp/nautilus 0,1.5,3,4.5,5.2
 ```
 
 Math-Animals extends [tenfold](https://github.com/r3al1tym/tenfold), and its bar for craft is tenfold's `16-specimen` page. Every page and every line of code was written by Claude Opus 5.5. MIT licence.
