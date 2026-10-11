@@ -1,0 +1,656 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>11 camp pitar</title>
+<style>html,body{margin:0;background:#2b2a27}canvas{display:block;width:720px;height:900px}</style>
+</head><body><canvas id="c" width="1080" height="1350"></canvas>
+<script>
+"use strict";
+// Math-Animals No. 11. One valve of a camp pitar, Lioconcha castrensis, on wet basalt sand at low tide.
+// The shell is grown the way the clam grows it: by accretion at the margin. The outline is a polar
+// table about the beak, every growth line is an iso-line of r = d / R(phi), age follows a von
+// Bertalanffy curve, and the tents are an activator-inhibitor reaction run along the mantle edge, one
+// row per growth increment. The page is the space-time diagram of that reaction, mapped onto the shell.
+const W = 1080, H = 1350, DUR = 6, HERO = 5.2, BUILD_END = 4.6;
+const cv = document.getElementById('c'), X = cv.getContext('2d');
+
+// ---------- seeded randomness ----------
+function hash(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rngFor(key) {
+  let a = hash(key);
+  return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function noiseFor(key) {
+  const r = rngFor(key), P = new Uint16Array(512), G = new Float32Array(512);
+  for (let i = 0; i < 256; i++) { P[i] = i; const a = r() * Math.PI * 2; G[2 * i] = Math.cos(a); G[2 * i + 1] = Math.sin(a); }
+  for (let i = 255; i > 0; i--) { const j = (r() * (i + 1)) | 0, t = P[i]; P[i] = P[j]; P[j] = t; }
+  for (let i = 0; i < 256; i++) P[i + 256] = P[i];
+  const g = (h, x, y) => G[2 * h] * x + G[2 * h + 1] * y;
+  return (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, Xi = xi & 255, Yi = yi & 255;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = P[P[Xi] + Yi], b = P[P[Xi + 1] + Yi], c = P[P[Xi] + Yi + 1], d = P[P[Xi + 1] + Yi + 1];
+    const x1 = g(a, xf, yf) + (g(b, xf - 1, yf) - g(a, xf, yf)) * u;
+    const x2 = g(c, xf, yf - 1) + (g(d, xf - 1, yf - 1) - g(c, xf, yf - 1)) * u;
+    return (x1 + (x2 - x1) * v) * 1.4;
+  };
+}
+const _nz = {}; const nzc = k => _nz[k] || (_nz[k] = noiseFor(k));
+function fbm(n, x, y, oct = 4) { let s = 0, a = 0.5, f = 1, t = 0; for (let i = 0; i < oct; i++) { s += a * n(x * f, y * f); t += a; a *= 0.5; f *= 2.03; } return s / t; }
+// a per-pixel hash in [0, 1), for grains: stable for a pixel and a salt
+function hpx(x, y, salt) { let h = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(salt, 2246822519); h = Math.imul(h ^ h >>> 13, 1274126177); return ((h ^ h >>> 16) >>> 0) / 4294967296; }
+const clamp = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const ease5 = s => { s = clamp(s); return s * s * s * (s * (s * 6 - 15) + 10); };
+const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+const hexL = h => [lin(parseInt(h.slice(1, 3), 16)), lin(parseInt(h.slice(3, 5), 16)), lin(parseInt(h.slice(5, 7), 16))];
+const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
+// ---------- palette: a decision, three colours ----------
+// CREAM is the aragonite of the shell, UMBER the pigment of the tents, BASALT the wet grey sand of
+// volcanic and quartz grains, a cool mid grey so the only warm colours on the page are the animal's. Every other
+// tone is one of these three under the light: chalk is cream worn matte, chestnut is umber laid thin.
+const PAL = { cream: hexL('#ece2cf'), umber: hexL('#4d2d10'), basalt: hexL('#7a766e') };
+// umber laid thin over cream reads warmer, as a glaze does: chestnut is that, not a mix toward grey
+// melanin's absorption per unit density, set so that a full density over cream gives umber
+const ABS = [0, 1, 2].map(k => -Math.log(PAL.umber[k] / PAL.cream[k]));
+const CHESTNUT = [PAL.umber[0] * 2.9, PAL.umber[1] * 2.6, PAL.umber[2] * 1.6], CHALK = mix3(PAL.cream, [1, 1, 1], 0.35);
+
+// ---------- light: one low sun, upper left ----------
+// The sun stands 13 degrees up, from the upper left. Shadows run down and to the right, 4.3 px
+// for every px of height. The sky is the only other light: a soft, cool fill from above.
+const SUN_EL = 13 * Math.PI / 180, SUN_DIR = [-0.8, -0.6]; // horizontal direction toward the sun
+const SUNV = [SUN_DIR[0] * Math.cos(SUN_EL), SUN_DIR[1] * Math.cos(SUN_EL), Math.sin(SUN_EL)];
+const TAN_EL = Math.tan(SUN_EL);
+const SUN_RGB = [1.55, 1.34, 1.06], SKY_RGB = [0.22, 0.27, 0.36];
+const HV0 = (() => { const v = [SUNV[0], SUNV[1], SUNV[2] + 1], m = Math.hypot(...v); return v.map(c => c / m); })(); // halfway between sun and eye
+
+// ---------- the valve: an outline, read as a polar table about the beak ----------
+// Local units are valve lengths, the beak at the origin, y down; this is a right valve seen from
+// outside, so the anterior end, and the way the beak turns, is to the right. The outline is an open
+// Catmull-Rom curve that leaves the beak and returns to it, so the beak keeps its point.
+const VAL = { L: 830, bx: 330, by: 262, rot: -0.62 };
+const OUTLINE = [[0, 0], [-0.1, 0.02], [-0.24, 0.07], [-0.38, 0.15], [-0.5, 0.26], [-0.58, 0.39], [-0.61, 0.52], [-0.58, 0.64], [-0.5, 0.75], [-0.36, 0.83], [-0.19, 0.865], [0, 0.86], [0.15, 0.82], [0.27, 0.73], [0.35, 0.61], [0.385, 0.48], [0.37, 0.35], [0.32, 0.23], [0.24, 0.13], [0.15, 0.06], [0.07, 0.02], [0, 0]];
+function openSpline(p, seg) {
+  const n = p.length, q = i => i < 0 ? [2 * p[0][0] - p[1][0], 2 * p[0][1] - p[1][1]] : i >= n ? [2 * p[n - 1][0] - p[n - 2][0], 2 * p[n - 1][1] - p[n - 2][1]] : p[i], out = [];
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = q(i - 1), p1 = q(i), p2 = q(i + 1), p3 = q(i + 2);
+    for (let k = 0; k < seg; k++) {
+      const t = k / seg, t2 = t * t, t3 = t2 * t, f = j => 0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3);
+      out.push([f(0), f(1)]);
+    }
+  }
+  out.push(p[n - 1]); return out;
+}
+// R[i] is the distance from the beak to the margin along angle i: 1440 entries round the circle,
+// zero outside the fan. r = d / R is then the fraction of the way from beak to margin, and since the
+// clam grows by adding to its margin in proportion, r is also the growth line a point lies on.
+const NB = 1440, POLY = openSpline(OUTLINE, 24), R = new Float32Array(NB), SIG = new Float32Array(NB);
+for (let i = 0; i < NB; i++) {
+  const a = -Math.PI + (i + 0.5) / NB * Math.PI * 2, dx = Math.cos(a), dy = Math.sin(a);
+  let best = 0;
+  for (let k = 0; k < POLY.length - 1; k++) {
+    const p = POLY[k], q = POLY[k + 1], ex = q[0] - p[0], ey = q[1] - p[1], den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-12) continue;
+    const t = (p[0] * ey - p[1] * ex) / den, u = (p[0] * dy - p[1] * dx) / den;
+    if (t > 1e-6 && u >= 0 && u <= 1 && t > best) best = t;
+  }
+  R[i] = best;
+}
+// sigma: arc length along the margin, 0 at the posterior end of the hinge and 1 at the anterior end.
+// It is the mantle edge's own coordinate, the "space" axis of the reaction.
+{
+  let s = 0; const dA = Math.PI * 2 / NB;
+  for (let i = NB - 1; i >= 0; i--) { const dR = (R[Math.min(NB - 1, i + 1)] - R[Math.max(0, i - 1)]) / (2 * dA); if (R[i] > 0) s += Math.hypot(R[i], dR) * dA; SIG[i] = s; }
+  for (let i = 0; i < NB; i++) SIG[i] /= s;
+  VAL.margin = s; // the margin's length in valve lengths
+}
+function polarAt(lx, ly) { // local point -> distance d, table radius Rr, fraction r, margin coordinate sig
+  const d = Math.hypot(lx, ly), f = (Math.atan2(ly, lx) + Math.PI) / (Math.PI * 2) * NB - 0.5;
+  const i = Math.floor(f), u = f - i, i0 = (i + NB) % NB, i1 = (i + 1) % NB;
+  const Rr = R[i0] * (1 - u) + R[i1] * u, sig = SIG[i0] * (1 - u) + SIG[i1] * u;
+  return { d, Rr, r: Rr > 0 ? d / Rr : 99, sig };
+}
+const VC = Math.cos(VAL.rot), VS = Math.sin(VAL.rot);
+const toLocal = (x, y) => { const dx = x - VAL.bx, dy = y - VAL.by; return [(dx * VC + dy * VS) / VAL.L, (-dx * VS + dy * VC) / VAL.L]; };
+const toScreen = (lx, ly) => [VAL.bx + (lx * VC - ly * VS) * VAL.L, VAL.by + (lx * VS + ly * VC) * VAL.L];
+
+// ---------- growth: von Bertalanffy, with two checks ----------
+// Age tau runs 0..TT. The margin's fraction r grows fast in youth and slows with age, so the
+// growth lines crowd toward the margin. Twice the clam stops growing for a while (a cold spell,
+// a spawning) and the reaction runs on with nothing to write on, so the record jumps across each check.
+const GROW = { TT: 330, r0: 0.022, slow: 2.5, checks: [[102, 13], [220, 11]] }; // [effective age, pause]
+GROW.E = GROW.TT - GROW.checks.reduce((s, c) => s + c[1], 0);
+GROW.k = Math.log(GROW.slow) / GROW.E;
+function effAge(tau) { let e = tau; for (const [at, p] of GROW.checks) { if (e > at) e = Math.max(at, e - p); } return e; }
+function rOfAge(tau) { const e = effAge(tau); return GROW.r0 + (1 - GROW.r0) * (1 - Math.exp(-GROW.k * e)) / (1 - Math.exp(-GROW.k * GROW.E)); }
+
+// ---------- the margin model: Meinhardt's activator-inhibitor, run along the mantle edge ----------
+//   da/dt = s (a^2 / (b (1 + sa a^2)) + ba) - ra a + Da d2a/dx2
+//   db/dt = kb s a^2 - rb b + rb b0
+// The inhibitor lives long and does not spread, so activation travels: a cell that fires sets off
+// two waves running apart (the peak of a tent), waves that meet annihilate (its foot), and the
+// inhibitor left behind keeps the tissue refractory for a while (the white inside). New cells are
+// inserted as the margin lengthens, so the pattern keeps its scale while the shell grows. Each
+// recorded row is one growth increment: the shell is the reaction's space-time diagram.
+// A cell fires at random (pt), but only once its inhibitor has fallen below brec, so new waves
+// start in rested tissue and the fronts stay clean. Each firing also releases a short pulse of a
+// fast-spreading signal (lifetime tD, reach tv cells per unit time, the wave's own speed): see the
+// tents below. The inhibitor's recovery rate drifts slowly by sector (rv: up to e^rv faster or
+// slower, rf sectors round the margin, drifting over rt), so rows of tents fall out of step.
+// bk lowers the dome at the beak (see the dome).
+const RD = { rv: 1.5, rf: 4, rt: 120, seed: 2, kg: 14, pw: 0.14, bk: 0.25, tv: 2.0, tc: 1.0, tD: 50, brec: 0.85, NF: 2470, M: 2560, T_ROW: 0.4, dt: 0.025, Da: 1.0, ra: 1, sa: 0.25, ba: 0.02, b0: 0.3, kb: 0.015, rb: 0.035, kick: 2, pt: 0.0008 };
+// pigment: melanin is laid where activator is high (the wave itself), and a pigment cell that the
+// wave sets laying keeps laying for a set time w (longer, by up to fill, where the cells are more
+// ready), so each arm is a line of even width behind its front, darkest at the front
+const PIGM = { a: 1.2, w: 4, fill: 3 };
+// a tuning hook for scratch/var.py: ?p=key:value,... sets RD (or PIGM, with a P prefix)
+{ const q = new URLSearchParams(location.search).get('p'); if (q) for (const kv of q.split(',')) { const [k, v] = kv.split(':'); if (k[0] === 'P') PIGM[k.slice(1)] = +v; else RD[k] = +v; } }
+let ROWS = 0, RROW = null, PIG = null, PIGA = null;
+function blurRecord(A, sx = 1.3, sy = 1.7) { // separable gaussian, sx cells along the margin, sy rows across
+  const M = RD.M, NR = ROWS, gk = (rad, sd) => { const k = []; let t = 0; for (let i = -rad; i <= rad; i++) { const v = Math.exp(-i * i / (2 * sd * sd)); k.push(v); t += v; } return k.map(v => v / t); };
+  const rx = Math.ceil(2.5 * sx), ry = Math.ceil(2.5 * sy), kx = gk(rx, sx), ky = gk(ry, sy), tmp = new Float32Array(Math.max(M, NR));
+  for (let r = 0; r < NR; r++) { const o = r * M; for (let j = 0; j < M; j++) { let q = 0; for (let k = -rx; k <= rx; k++) q += A[o + clamp(j + k, 0, M - 1)] * kx[k + rx]; tmp[j] = q; } A.set(tmp.subarray(0, M), o); }
+  for (let j = 0; j < M; j++) { for (let r = 0; r < NR; r++) { let q = 0; for (let k = -ry; k <= ry; k++) q += A[clamp(r + k, 0, NR - 1) * M + j] * ky[k + ry]; tmp[r] = q; } for (let r = 0; r < NR; r++) A[r * M + j] = tmp[r]; }
+}
+function runMargin() {
+  const rnd = rngFor('margin' + (RD.seed || '')), zn = nzc('zones'), zf = nzc('fill'), M = RD.M, NR = Math.round(GROW.TT / RD.T_ROW), sub = Math.round(RD.T_ROW / RD.dt);
+  RROW = new Float32Array(NR); PIG = new Float32Array(NR * M); PIGA = new Float32Array(NR * M); ROWS = NR;
+  // a cell's source density s carries over to its daughters, so the margin has zones: some sectors
+  // fire more readily than others, and their tents run smaller and closer
+  const sAt = (sig) => 1 + 0.035 * zn(sig * 5.0, 0.5);
+  // the posterior end of the mantle, under the escutcheon, fires far more often: there the waves
+  // are small and close, a dense field of fine zigzag lines, and no tents
+  const post = sig => 1 - smooth(0.25 * RD.pw, RD.pw, sig);
+  const ptAt = (sig, tau, juv) => RD.pt * (0.2 + 2.0 * smooth(-0.3, 0.4, zn(sig * 3.1 + 7, 2.5 + tau / 140))) * (1 + 14 * post(sig) * (1 - juv));
+  let n = Math.max(6, Math.round(RD.NF * GROW.r0));
+  const a = [], b = [], s = [], sg = [], lx = [], ev = [];
+  for (let i = 0; i < n; i++) { const g = i / (n - 1); a.push(RD.ba); b.push(RD.b0 * (0.6 + 0.8 * rnd())); s.push(sAt(g)); sg.push(g); lx.push(-1e9); }
+  const na = new Float64Array(RD.NF + 8), lin = new Float64Array(RD.NF + 8), pti = new Float64Array(RD.NF + 8), rbc = new Float64Array(RD.NF + 8), zr = nzc('recover'), tfl = new Float64Array(RD.NF + 8);
+  let tau = 0;
+  for (let row = 0; row < NR; row++) {
+    const r = rOfAge(tau), target = Math.max(n, Math.round(RD.NF * r));
+    while (n < target) { // a mantle cell divides; its daughter sits between two neighbours
+      const k = 1 + Math.floor(rnd() * (n - 1)), g = (sg[k - 1] + sg[k]) / 2;
+      a.splice(k, 0, (a[k - 1] + a[k]) / 2); b.splice(k, 0, (b[k - 1] + b[k]) / 2); s.splice(k, 0, (s[k - 1] + s[k]) / 2); sg.splice(k, 0, g); lx.splice(k, 0, Math.max(lx[k - 1], lx[k])); n++;
+    }
+    // the young clam grows fast, so a wake of the same duration would lay a broad band: its pigment
+    // cells lay only while the inhibitor is near its peak, and its tents are small, so the umbo
+    // carries fine zigzag lines and the bold tents come with size
+    const juv = 1 - smooth(0.1, 0.34, r);
+    for (let i = 0; i < n; i++) pti[i] = ptAt(sg[i], tau, juv) * RD.dt;
+    // the inhibitor's recovery runs at its own slowly drifting rate in each sector of the mantle,
+    // so sectors keep their own time: their rows of tents drift apart, and where a fast sector
+    // meets a slow one a row branches or two rows merge
+    for (let i = 0; i < n; i++) rbc[i] = RD.rb * Math.exp(RD.rv * zr(sg[i] * RD.rf + 4.3, tau / RD.rt + 2.1));
+    // a cell fires only in rested tissue clear of a running front: one that fired just ahead of a
+    // front would only make it jump, a step in the line
+    const nearFront = i => { for (let j = Math.max(0, i - RD.kg); j <= Math.min(n - 1, i + RD.kg); j++) if (a[j] > 0.3) return true; return false; };
+    for (let st = 0; st < sub; st++) {
+      for (let i = 0; i < n; i++) {
+        const al = a[i > 0 ? i - 1 : 1], ar = a[i < n - 1 ? i + 1 : n - 2], ai = a[i], bi = b[i];
+        na[i] = ai + RD.dt * (s[i] * (ai * ai / (bi * (1 + RD.sa * ai * ai)) + RD.ba) - RD.ra * ai + RD.Da * (al + ar - 2 * ai));
+        b[i] = bi + RD.dt * (RD.kb * s[i] * ai * ai - rbc[i] * (bi - RD.b0));
+      }
+      for (let i = 0; i < n; i++) { a[i] = na[i]; if (a[i] > PIGM.a) lx[i] = tau; }
+      for (let i = 0; i < n; i++) if (rnd() < pti[i] && b[i] < (RD.brec || 99) && !nearFront(i)) {
+        for (let j = Math.max(0, i - 2); j <= Math.min(n - 1, i + 2); j++) a[j] += RD.kick;
+        if (RD.tD) ev.push([sg[i], tau, (1 - post(sg[i])) * (1 - juv) * RD.tD * (0.7 + 0.6 * rnd()) * (0.6 + 0.8 * smooth(-0.1, 0.5, zf(sg[i] * 2.3 + 3.1, tau / 95 + 1.7)))]);
+      }
+      tau += RD.dt;
+    }
+    RROW[row] = r;
+    // the pigment cells: their readiness varies along the margin and slowly in time, and where it
+    // is high they lay longer, so the lines there thicken into chestnut fields; the young clam's
+    // and the escutcheon's lay briefly, so their lines are fine
+    for (let i = 0; i < n; i++) {
+      const g = sg[i], ready = smooth(-0.1, 0.5, zf(g * 2.3 + 3.1, tau / 95 + 1.7));
+      const Lw = (PIGM.w + PIGM.fill * ready * (1 - juv)) * (1 - 0.45 * post(g)) * (1 - 0.5 * juv);
+      lin[i] = smooth(Lw, Lw - 0.8, tau - lx[i]);
+    }
+    // A tent: a trigger also releases a pulse of a fast-spreading, short-lived signal. While it
+    // lasts, the pigment cells that its own wave has passed keep laying, so the peak of each Λ fills
+    // solid down to a base laid all at once when the pulse dies, and the arms run on as lines. A
+    // cell that a neighbouring wave reached first is not its own wave's, and is left alone.
+    if (RD.tD) {
+      tfl.fill(0, 0, n); let keep = 0;
+      for (const e of ev) {
+        const age = tau - e[1]; if (age > e[2]) continue; ev[keep++] = e;
+        // The pulse is weaker toward its reach, so the base of the tent arcs up to its corners. Its
+        // reach on each side is the wave's own run: while that arm still runs it is the pulse's full
+        // reach, and once the arm has met another wave or stalled in an older wake it is where the
+        // arm stopped, so the base comes down to meet the arm there and no tent ends in a wall.
+        const half = RD.tv * e[2] / n, own = i => lx[i] >= e[1] + Math.abs(sg[i] - e[0]) * n / RD.tv - 2;
+        let c = 0, hi = n - 1; while (c < hi) { const m = (c + hi) >> 1; if (sg[m] < e[0]) c = m + 1; else hi = m; }
+        if (!own(c) && c > 0 && own(c - 1)) c--;
+        if (!own(c)) continue;
+        let iL = c, iR = c;
+        while (iR + 1 < n && sg[iR + 1] <= e[0] + half && own(iR + 1)) iR++;
+        while (iL - 1 >= 0 && sg[iL - 1] >= e[0] - half && own(iL - 1)) iL--;
+        const runs = j => (a[j] > 0.3 || (j + 1 < n && a[j + 1] > 0.3) || (j > 0 && a[j - 1] > 0.3));
+        const ER = runs(iR) ? half : Math.max(1e-6, sg[iR] - e[0]), EL = runs(iL) ? half : Math.max(1e-6, e[0] - sg[iL]);
+        for (let i = iL; i <= iR; i++) {
+          const d = sg[i] - e[0], q = Math.min(1, Math.abs(d) / (d >= 0 ? ER : EL)), De = e[2] * (1 - RD.tc * q * q), v = smooth(De, De - 0.8, age);
+          if (v > tfl[i]) tfl[i] = v;
+        }
+      }
+      ev.length = keep;
+    }
+    for (let j = 0; j < M; j++) {
+      const f = j / (M - 1) * (n - 1), i = Math.min(n - 2, Math.floor(f)), u = f - i, aa = a[i] * (1 - u) + a[i + 1] * u;
+      // a pigment cell is either laying or not, so the record is nearly binary
+      const va = smooth(PIGM.a - 0.05, PIGM.a + 0.05, aa), vl = lin[i] * (1 - u) + lin[i + 1] * u;
+      const vt = RD.tD ? tfl[i] * (1 - u) + tfl[i + 1] * u : 0;
+      PIG[row * M + j] = Math.max(va, vl, vt); PIGA[row * M + j] = va;
+    }
+  }
+  // A blot smaller than a few cells is not laid: the mantle's pigment cells work in groups, so the
+  // record is averaged over a group (about 2.5 cells by 3 rows) and laid where the group agrees,
+  // which drops specks and fills pinholes. Then the pigment spreads a little in the shell layer as
+  // it is laid, about a cell along the margin and a growth increment or two across, so the edge is
+  // soft and no cell's step survives.
+  blurRecord(PIG, 2.5, 3); for (let k = 0; k < PIG.length; k++) PIG[k] = smooth(0.42, 0.58, PIG[k]);
+  blurRecord(PIG, 1.3, 2.6); blurRecord(PIGA, 1.3, 2.6);
+}
+
+// ---------- reading the record back: radius -> row ----------
+// The first row whose margin had reached r. During a growth check the margin stands still, so
+// those rows are never written on the shell, and the pattern after a check starts afresh.
+let RTAB = null;
+function buildRowTable() {
+  RTAB = new Float32Array(4097); let k = 0;
+  for (let i = 0; i <= 4096; i++) {
+    const r = i / 4096; while (k < ROWS - 1 && RROW[k] < r) k++;
+    if (k === 0) { RTAB[i] = 0; continue; }
+    const r0 = RROW[k - 1], r1 = RROW[k]; RTAB[i] = k - 1 + (r1 > r0 ? clamp((r - r0) / (r1 - r0)) : 1);
+  }
+}
+const rowAt = r => { const f = clamp(r) * 4096, i = Math.min(4095, Math.floor(f)), u = f - i; return RTAB[i] * (1 - u) + RTAB[i + 1] * u; };
+function pigAt(row, sig, A = PIG) { // bilinear in (row, sigma)
+  const PIG = A, M = RD.M, y = clamp(row, 0, ROWS - 1.001), x = clamp(sig, 0, 1) * (M - 1.001), j = Math.floor(y), i = Math.floor(x), u = x - i, v = y - j, o = j * M + i;
+  return (PIG[o] * (1 - u) + PIG[o + 1] * u) * (1 - v) + (PIG[o + M] * (1 - u) + PIG[o + M + 1] * u) * v;
+}
+
+// ---------- the dome ----------
+// A venus valve is most convex well down from the beak, on the line from beak to ventral margin,
+// and the small beak sits lower, turned forward over the lunule at the hinge. So the height is a
+// broad swell centred at DOME.c times an edge term in the growth line: the margin is a thin edge
+// standing almost straight up off the sand and the flank rounds over it. Fine growth ridges ride
+// on it, one for every few rows of the record, and each check leaves a step.
+// Near the beak the valve rolls down toward the hinge (RD.bk), so the beak sits below the swell.
+const HMAX = 0.15 * VAL.L, DOME = { c: [-0.05, 0.42], s: 0.32, base: 0.28 };
+function domeAt(lx, ly, r) {
+  if (r >= 1) return 0;
+  const dx = lx - DOME.c[0], dy = ly - DOME.c[1], e = Math.exp(-(dx * dx + dy * dy) / (2 * DOME.s * DOME.s));
+  return HMAX * Math.pow(1 - Math.pow(r, 6), 0.3) * (DOME.base + (1 - DOME.base) * e);
+}
+// The lunule: a heart-shaped depression in front of the beak, bounded by an incised line. In the
+// polar table it is the sliver of fan within LUN(d) of the anterior hinge edge, for d < LUN.d.
+const LUN = { d: 0.24, w: 0.3 };
+let PHI_A = 0;
+{ const i0 = NB >> 1; let i = i0; while (i < NB && R[i] <= 0) i++; PHI_A = -Math.PI + (i + 0.5) / NB * Math.PI * 2; }
+function lunuleAt(lx, ly) { // signed px distance inside the lunule's boundary (positive inside), or -99
+  const d = Math.hypot(lx, ly); if (d >= LUN.d || d < 1e-4) return -99;
+  const half = LUN.w * Math.pow(Math.sin(Math.PI * d / LUN.d), 0.75), da = Math.atan2(ly, lx) - PHI_A;
+  return (half - da) * d * VAL.L;
+}
+const CHECK_R = GROW.checks.map(([at]) => rOfAge(at + 1e-6));
+// The growth lines are fine, low and irregular: their spacing wanders with the clam's good and bad
+// weeks, and each is its own height, most of them faint, a few stronger.
+function ridge(row, pxPerRow) {
+  const nz = nzc('ridge'), ph = row / 6 + 9 * fbm(nz, row / 40, 0.5, 3) + 3 * nz(row / 9, 8.1), k = Math.floor(ph), f = ph - k;
+  const amp = Math.pow(hpx(k, 7, 31), 2.5) * (0.4 + 0.8 * clamp(0.5 + nz(row / 27, 3.7)));
+  const fine = Math.pow(Math.sin(Math.PI * f), 6) * amp * smooth(2.5, 6, 8 * pxPerRow);
+  const dist = Math.pow(Math.max(0, nz(row / 9, 11.3)), 3) * 1.4; // irregular disturbance lines
+  return 0.55 * (fine + 0.6 * dist * Math.pow(Math.sin(Math.PI * f), 2));
+}
+// a check: the margin thickened into a lip while growth stood still, and new shell starts just inside it
+function checkRelief(r, pxPerR) {
+  let h = 0;
+  for (const rc of CHECK_R) { const dpx = (r - rc) * pxPerR; h += 0.35 * Math.exp(-((dpx + 2) * (dpx + 2)) / 5) - 0.25 * smooth(-1, 1.5, dpx); }
+  return h;
+}
+
+// ---------- bake the finished valve ----------
+// Per pixel: its growth line r, px per unit r, height, normal, albedo and gloss. A frame of the
+// build shows only r <= r(t), lowered so that its margin rests on the sand.
+const NPX = W * H;
+const SR = new Float32Array(NPX).fill(99), RPX = new Float32Array(NPX), HF = new Float32Array(NPX);
+// slopes are kept apart: the dome's (GXD, GYD) belongs to the valve's shape, the relief's (GXR, GYR)
+// to the record itself, the ridges and pits written at each growth line
+const GXD = new Float32Array(NPX), GYD = new Float32Array(NPX), GXR = new Float32Array(NPX), GYR = new Float32Array(NPX);
+const AR = new Float32Array(NPX), AG = new Float32Array(NPX), AB = new Float32Array(NPX), GL = new Float32Array(NPX);
+// light scattered through the aragonite crosses the pigment layer on its way out, on a shorter path
+// than light reflected from beneath it, so in shade the tents stay a warm chestnut
+const TR = new Float32Array(NPX), TG = new Float32Array(NPX), TB = new Float32Array(NPX);
+let BOX = null;
+const REL = new Float32Array(NPX), BR = new Float32Array(NPX), BG = new Float32Array(NPX), BB = new Float32Array(NPX), PD = new Float32Array(NPX), SUB4 = [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]];
+function boxBlur(A, B, rad) { // separable running-sum box blur over the box, in place
+  const tmp = new Float32Array(Math.max(W, H));
+  for (let y = B.y0; y <= B.y1; y++) {
+    let acc = 0; const o = y * W, n = 2 * rad + 1;
+    for (let x = B.x0 - rad; x <= B.x1 + rad; x++) { const xi = clamp(x, B.x0, B.x1); acc += A[o + xi]; if (x - n >= B.x0 - rad) acc -= A[o + clamp(x - n, B.x0, B.x1)]; if (x - rad >= B.x0) tmp[x - rad] = acc / n; }
+    for (let x = B.x0; x <= B.x1; x++) A[o + x] = tmp[x];
+  }
+  for (let x = B.x0; x <= B.x1; x++) {
+    let acc = 0; const n = 2 * rad + 1;
+    for (let y = B.y0 - rad; y <= B.y1 + rad; y++) { const yi = clamp(y, B.y0, B.y1); acc += A[yi * W + x]; if (y - n >= B.y0 - rad) acc -= A[clamp(y - n, B.y0, B.y1) * W + x]; if (y - rad >= B.y0) tmp[y - rad] = acc / n; }
+    for (let y = B.y0; y <= B.y1; y++) A[y * W + x] = tmp[y];
+  }
+}
+function bakeShell() {
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const p of POLY) { const q = toScreen(p[0], p[1]); x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+  BOX = { x0: Math.max(1, Math.floor(x0) - 6), y0: Math.max(1, Math.floor(y0) - 6), x1: Math.min(W - 2, Math.ceil(x1) + 6), y1: Math.min(H - 2, Math.ceil(y1) + 6) };
+  const nCol = nzc('shellcol'), nEro = nzc('erode');
+  for (let y = BOX.y0; y <= BOX.y1; y++) for (let x = BOX.x0; x <= BOX.x1; x++) {
+    const i = y * W + x, l = toLocal(x + 0.5, y + 0.5), P = polarAt(l[0], l[1]);
+    if (P.Rr <= 0) continue;
+    const rpx = P.Rr * VAL.L; SR[i] = P.r; RPX[i] = rpx;
+    if (P.r > 1 + 3 / rpx) continue;
+    const r = Math.min(P.r, 1), row = rowAt(r), k = Math.min(ROWS - 2, Math.floor(row)), pxPerRow = Math.max(0.05, (RROW[k + 1] - RROW[k]) * rpx);
+    HF[i] = domeAt(l[0], l[1], r) * (1 - (RD.bk || 0) * (1 - smooth(0, 0.22, Math.hypot(l[0], l[1])))); REL[i] = (ridge(row, pxPerRow) + checkRelief(r, rpx)) * smooth(0.05, 0.2, r); // the umbo is worn smooth
+    // The pigment lies inside the outer shell layer as a melanin density. It is read from the
+    // softened record at four points across the pixel and laid over the cream as an absorbing
+    // glaze (Beer-Lambert), so where it thins at an edge it runs warm chestnut, and dense it is umber.
+    let cov = 0, front = 0;
+    for (const [ox, oy] of SUB4) {
+      const ls = toLocal(x + 0.5 + ox, y + 0.5 + oy), Q = polarAt(ls[0], ls[1]), rowq = rowAt(Math.min(Q.r, 1));
+      cov += smooth(0.3, 0.7, pigAt(rowq, Q.sig)) / 4; front += pigAt(rowq, Q.sig, PIGA) / 4;
+    }
+    let dens = cov * (0.9 + 0.12 * smooth(0.2, 0.8, front)) * smooth(0.05, 0.16, r); // no pigment in the larval shell, and the first rows faint
+    let c = mix3([PAL.cream[0], PAL.cream[1] * 0.98, PAL.cream[2] * 0.92], mix3(PAL.cream, CHESTNUT, 0.12), clamp(0.4 + fbm(nCol, x / 140, y / 140, 3) * 1.2));
+    // growth bands: seasons of faster and slower growth leave the shell faintly warmer or paler
+    const gb = nCol(row / 38, 17.3) + 0.5 * nCol(row / 11, 23.9);
+    c = [c[0] * (1 + 0.03 * gb), c[1] * (1 + 0.022 * gb), c[2] * (1 + 0.005 * gb)];
+    // the beak is worn: the outer layer, and its pigment, flakes off in patches with a defined
+    // edge, leaving plain chalk, matte and pitted
+    const db = Math.hypot(l[0] - 0.012, l[1] - 0.01), eraw = (1 - smooth(0.012, 0.06, db + 0.03 * nEro(x * 0.04, y * 0.04))) * (0.75 + 0.5 * nEro(x * 0.09, y * 0.09));
+    const ero = smooth(0.3, 0.7, eraw) * 0.8;
+    c = mix3(c, mix3(CHALK, PAL.cream, 0.7 + 0.25 * nEro(x * 0.3, y * 0.3)), ero * 0.7);
+    // the lunule: its shell is smoother and a shade darker, its pattern finer and fainter
+    const lu = lunuleAt(l[0], l[1]), lin = smooth(-0.5, 1.5, lu);
+    if (lu > -6) { c = mix3(c, mix3(c, CHESTNUT, 0.3), lin * 0.85); dens *= 1 - 0.5 * lin; REL[i] = REL[i] * (1 - 0.8 * lin) - 3.5 * lin * smooth(0, 12, lu) - 2.6 * Math.exp(-lu * lu / 2.2); }
+    dens *= 1 - ero;
+    REL[i] -= ero * 0.9 * Math.max(0, nEro(x * 0.6, y * 0.6));
+    BR[i] = c[0]; BG[i] = c[1]; BB[i] = c[2]; PD[i] = dens;
+    c = [c[0] * Math.exp(-dens * ABS[0]), c[1] * Math.exp(-dens * ABS[1]), c[2] * Math.exp(-dens * ABS[2])];
+    AR[i] = c[0]; AG[i] = c[1]; AB[i] = c[2]; GL[i] = 1 - 0.92 * ero;
+    TR[i] = BR[i] * BR[i] * Math.exp(-0.75 * dens * ABS[0]); TG[i] = BG[i] * BG[i] * Math.exp(-0.75 * dens * ABS[1]); TB[i] = BB[i] * BB[i] * Math.exp(-0.75 * dens * ABS[2]);
+  }
+  // Every growth line has its corner at the beak, so the bare profile has a point there; close to
+  // the beak the dome is softened so the beak is a small rounded hook, not a spike.
+  const HB = Float32Array.from(HF), nUnd = nzc('undulate'); boxBlur(HB, BOX, 10); boxBlur(HB, BOX, 10); boxBlur(HB, BOX, 10);
+  for (let y = BOX.y0; y <= BOX.y1; y++) for (let x = BOX.x0; x <= BOX.x1; x++) {
+    const i = y * W + x; if (SR[i] > 1) { HF[i] = 0; continue; }
+    const l = toLocal(x + 0.5, y + 0.5), wB = 1 - smooth(0.04, 0.16, Math.hypot(l[0], l[1]));
+    HF[i] = lerp(HF[i], HB[i], wB); REL[i] += (1.1 * fbm(nUnd, x / 70, y / 70, 3) + 2.2 * fbm(nUnd, x / 160 + 9, y / 160, 2)) * smooth(0, 0.25, 1 - SR[i]);
+  }
+  for (let y = BOX.y0; y <= BOX.y1; y++) for (let x = BOX.x0; x <= BOX.x1; x++) {
+    const i = y * W + x; if (SR[i] > 1.01) continue;
+    GXD[i] = (HF[i + 1] - HF[i - 1]) / 2; GYD[i] = (HF[i + W] - HF[i - W]) / 2;
+    GXR[i] = (REL[i + 1] - REL[i - 1]) / 2; GYR[i] = (REL[i + W] - REL[i - W]) / 2;
+  }
+}
+
+// ---------- the ligament ----------
+// The horny brown hinge ligament lies along the posterior dorsal margin just behind the beak, a
+// lens of tough protein that the clam lengthens as it grows. Baked as a lit sprite at the finished
+// size; a frame draws it scaled about the beak with the margin.
+let LIG = null;
+function bakeLigament() {
+  const seg = [], pts = POLY.slice(0, 84); let acc = 0;
+  for (let k = 0; k < pts.length - 1; k++) { const a = pts[k], b = pts[k + 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]); seg.push([a, b, acc, len]); acc += len; }
+  const A0 = 0.02, A1 = 0.27, WID = 0.017, nf = nzc('ligfibre');
+  LIG = document.createElement('canvas'); LIG.width = W; LIG.height = H;
+  const g = LIG.getContext('2d'), im = g.createImageData(W, H), D = im.data, col = mix3(PAL.umber, CHESTNUT, 0.45);
+  let lx0 = 1e9, ly0 = 1e9, lx1 = -1e9, ly1 = -1e9;
+  for (const p of pts) { const q = toScreen(p[0], p[1]); lx0 = Math.min(lx0, q[0]); ly0 = Math.min(ly0, q[1]); lx1 = Math.max(lx1, q[0]); ly1 = Math.max(ly1, q[1]); }
+  for (let y = Math.max(0, Math.floor(ly0) - 24); y <= Math.min(H - 1, ly1 + 24); y++) for (let x = Math.max(0, Math.floor(lx0) - 24); x <= Math.min(W - 1, lx1 + 24); x++) {
+    const l = toLocal(x + 0.5, y + 0.5); let best = 1e9, u = 0, off = 0;
+    for (const [a, b, s0, len] of seg) {
+      const vx = b[0] - a[0], vy = b[1] - a[1], t = clamp(((l[0] - a[0]) * vx + (l[1] - a[1]) * vy) / (len * len)), px = a[0] + vx * t, py = a[1] + vy * t, d = Math.hypot(l[0] - px, l[1] - py);
+      if (d < best) { best = d; u = s0 + t * len; off = (vx * (l[1] - a[1]) - vy * (l[0] - a[0])) / len; }
+    }
+    const f = (u - A0) / (A1 - A0); if (f <= 0 || f >= 1) continue;
+    const w = WID * Math.pow(Math.sin(Math.PI * f), 0.6), q = (-off - 0.1 * w) / w; // outward is -off on this side
+    const cov = clamp((1 - Math.abs(q)) * w * VAL.L * 0.9);
+    if (cov <= 0) { // its shadow falls inward, onto the shell, a soft dark band beside it
+      const sq = (off - 0.1 * w) / w; if (sq > 1 && sq < 1.8) { const k = (y * W + x) * 4; D[k] = 30; D[k + 1] = 22; D[k + 2] = 18; D[k + 3] = 255 * 0.32 * (1 - smooth(1, 1.8, sq)) * smooth(1, 1.15, sq); }
+      continue;
+    }
+    // a rounded strip: its normal turns across the width, toward the margin's outward side
+    const nO = toScreen(l[0], l[1] + 0.001), o0 = toScreen(l[0], l[1]);
+    let ox = -(nO[0] - o0[0]), oy = -(nO[1] - o0[1]); const om = Math.hypot(ox, oy) || 1; ox /= om; oy /= om;
+    const qq = clamp(q, -0.98, 0.98), nx = ox * qq, ny = oy * qq, nz = Math.sqrt(1 - qq * qq);
+    const lam = Math.max(0, nx * SUNV[0] + ny * SUNV[1] + nz * SUNV[2]), ndh = Math.max(0, nx * HV0[0] + ny * HV0[1] + nz * HV0[2]);
+    const fib = 0.85 + 0.3 * nf(u * 900, q * 2.5), spec = 0.7 * Math.pow(ndh, 70) * fib + 0.05 * Math.pow(Math.max(0, nz), 6);
+    const k = (y * W + x) * 4;
+    D[k] = tone(col[0] * fib * (SUN_RGB[0] * lam + SKY_RGB[0]) + SUN_RGB[0] * spec); D[k + 1] = tone(col[1] * fib * (SUN_RGB[1] * lam + SKY_RGB[1]) + SUN_RGB[1] * spec);
+    D[k + 2] = tone(col[2] * fib * (SUN_RGB[2] * lam + SKY_RGB[2]) + SUN_RGB[2] * spec); D[k + 3] = 255 * clamp(cov);
+  }
+  g.putImageData(im, 0, 0);
+}
+
+// ---------- bake the sand ----------
+// Wet basalt sand at low tide. Grains sit on a jittered grid about 2.6 px apart and each is a tiny
+// dome found by its nearest centre, so every grain is lit on its sunward side and the pores between
+// them hold water and shade. Most grains are basalt, a few darker magnetite, and the pale ones are
+// crumbs of shell. Ripples left by the ebb run across it, steep on their lee side; the odd wet grain
+// throws a glint of the sun. Stored as albedo, a sun term and a glint term, so a frame only
+// multiplies in its shadow.
+const SA = new Float32Array(NPX * 3), SSUN = new Float32Array(NPX), SGL = new Float32Array(NPX), SHN = new Float32Array(NPX);
+function bakeSand() {
+  const G = 3.3, nw = nzc('wet'), nt = nzc('tint'), nr = nzc('ripple'), nsz = nzc('grainsize');
+  const ra = 0.5, rc = Math.cos(ra), rs = Math.sin(ra), LAM = 215; let RPH = 0;
+  const rip = (x, y) => { // asymmetric ripple height in px: a long stoss slope, a short lee
+    // the wavelength wanders, and crests die out and resume, as ripples on a real flat do
+    const lam = LAM * (0.85 + 0.3 * smooth(-0.5, 0.5, nr(x / 520 + 9, y / 520)));
+    const u = (x * rc + y * rs + 70 * fbm(nr, x / 380, y / 380, 3) + 18 * nr(x / 120 + 3, y / 120)) / lam, f = u - Math.floor(u);
+    const p = f < 0.62 ? smooth(0, 0.62, f) : 1 - smooth(0.62, 1, f), k = Math.floor(u);
+    const alive = smooth(-0.55, 0.15, nr(x / 170 + k * 3.7, y / 170 - k * 1.3));
+    RPH = p * (0.3 + 0.7 * alive);
+    return (6.5 + 3 * nr(x / 260 + 5, y / 260)) * RPH;
+  };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x, gs = G, gsz = 0.8 + 0.35 * smooth(-0.4, 0.4, nsz(x / 150, y / 150));
+    const cx = Math.floor(x / gs), cy = Math.floor(y / gs);
+    let bd = 1e9, bx = 0, by = 0, bid = 0;
+    for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) {
+      const gx = cx + k, gy = cy + j, px = (gx + hpx(gx, gy, 3)) * gs, py = (gy + hpx(gx, gy, 5)) * gs;
+      const d = (x + 0.5 - px) ** 2 + (y + 0.5 - py) ** 2; if (d < bd) { bd = d; bx = px; by = py; bid = hpx(gx, gy, 9); }
+    }
+    const rad = gs * gsz * (0.55 + 0.25 * bid), d = Math.sqrt(bd), q = clamp(d / rad);
+    // grain dome normal plus the ripple's slope
+    const dome = Math.sqrt(Math.max(0, 1 - q * q)), gnx = (x + 0.5 - bx) / rad, gny = (y + 0.5 - by) / rad;
+    const r0 = rip(x, y), dry = smooth(0.15, 0.8, RPH), rx = rip(x + 1, y) - r0, ry = rip(x, y + 1) - r0;
+    let nx = gnx * 0.4 * (q < 1 ? 1 : 0) - rx, ny = gny * 0.4 * (q < 1 ? 1 : 0) - ry, nzv = 1;
+    const m = 1 / Math.hypot(nx, ny, nzv); nx *= m; ny *= m; nzv *= m;
+    const pore = 1 - smooth(0.75, 1.05, q); // water and shade between grains
+    SSUN[i] = Math.max(0, nx * SUNV[0] + ny * SUNV[1] + nzv * SUNV[2]) * (0.7 + 0.3 * pore);
+    // a wet grain glints if its facet happens to face halfway between sun and eye
+    const fct = hpx(Math.floor(bx * 7), Math.floor(by * 7), 21), fdx = (fct - 0.5) * 1.6, fdy = (hpx(Math.floor(bx * 7), Math.floor(by * 7), 23) - 0.5) * 1.6;
+    const fm = 1 / Math.hypot(fdx, fdy, 1), fd = Math.max(0, (fdx * HV0[0] + fdy * HV0[1] + HV0[2]) * fm);
+    SGL[i] = Math.pow(fd, 30000) * dome * 0.5 * (1 - dry);
+    let c = PAL.basalt, f = 0.78 + 0.34 * hpx(Math.floor(bx * 3), Math.floor(by * 3), 13);
+    if (bid > 0.9985) { c = mix3(PAL.basalt, PAL.cream, 0.22 + 0.25 * dome); f = 0.9; } // a crumb of shell
+    else if (bid > 0.95) f = 0.45 + 0.1 * dome; // magnetite
+    const wet = fbm(nw, x / 280, y / 280, 4), tint = nt(x / 90, y / 90);
+    // the ebb drains the crests first: the troughs still hold water, which fills the pores and
+    // darkens the sand, so the ripples read as a second, darker value of the same grey
+    f *= (0.88 + 0.26 * wet + 0.05 * tint) * lerp(0.9, 0.74 + 0.26 * pore, 0.4 + 0.6 * dry) * (0.74 + 0.34 * dry);
+    SHN[i] = fbm(nzc('halo'), x / 38, y / 38, 3);
+    SA[i * 3] = c[0] * f; SA[i * 3 + 1] = c[1] * f; SA[i * 3 + 2] = c[2] * f * (1 + 0.03 * tint);
+  }
+}
+
+// The card names the sand's colour as it is seen: grey sand #7a766e. Under a 13 degree sun the
+// sand's albedo that gives that is far paler than the swatch, so the albedo is set from it: each
+// channel is scaled so the open sand, lit by this sun and sky and toned for the screen, averages
+// the card's grey (averaged as displayed, in sRGB, over the whole frame).
+function calibrateSand() {
+  const tgt = [0x7a, 0x76, 0x6e];
+  for (let c = 0; c < 3; c++) {
+    let k = 1;
+    for (let it = 0; it < 6; it++) { // a few rounds of a secant on the displayed mean
+      let sum = 0, cnt = 0;
+      for (let i = 0; i < NPX; i += 7) { sum += tone(k * SA[i * 3 + c] * (SUN_RGB[c] * SSUN[i] + SKY_RGB[c])); cnt++; }
+      k *= Math.pow(tgt[c] / (sum / cnt), 2.2);
+    }
+    for (let i = 0; i < NPX; i++) SA[i * 3 + c] *= k;
+  }
+}
+
+// ---------- distance to the finished outline ----------
+// An exact Euclidean distance transform (Felzenszwalb) of the finished valve. The margin at any
+// moment of the build is the same outline scaled about the beak, so this one field serves them all.
+const EDT = new Float32Array(NPX);
+function edt1d(f, n, d, v, z) {
+  let k = 0; v[0] = 0; z[0] = -1e20; z[1] = 1e20;
+  for (let q = 1; q < n; q++) {
+    let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+    while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
+    k++; v[k] = q; z[k] = s; z[k + 1] = 1e20;
+  }
+  k = 0; for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) * (q - v[k]) + f[v[k]]; }
+}
+function bakeEDT() {
+  const n = Math.max(W, H), f = new Float64Array(n), d = new Float64Array(n), v = new Int32Array(n), z = new Float64Array(n + 1);
+  for (let i = 0; i < NPX; i++) EDT[i] = SR[i] <= 1 ? 0 : 1e12;
+  for (let x = 0; x < W; x++) { for (let y = 0; y < H; y++) f[y] = EDT[y * W + x]; edt1d(f, H, d, v, z); for (let y = 0; y < H; y++) EDT[y * W + x] = d[y]; }
+  for (let y = 0; y < H; y++) { for (let x = 0; x < W; x++) f[x] = EDT[y * W + x]; edt1d(f, W, d, v, z); for (let x = 0; x < W; x++) EDT[y * W + x] = Math.sqrt(d[x]); }
+}
+
+// ---------- the build ----------
+// 0.5 to 0.55 s: the larval shell, a smooth cap at the beak. Then the margin advances, eased in at
+// the start and out at the end, fastest while the clam is young, as von Bertalanffy growth is, so
+// the area added each second stays about even and each second is a distinct stage; as it nears
+// each growth check it slows almost to a stop and then resumes. The tents are written at
+// the margin as it moves. New shell is thin and pale and takes HARDEN seconds to thicken, so a
+// band of fresh margin rides ahead of the finished shell, the newest row still half laid.
+const LARVA_END = 0.55, HARDEN = 0.3, BT_DT = 0.001;
+let BT = null, TF = null; // t -> r at 1 ms, and r -> the moment that growth line was laid
+function buildSchedule() {
+  const n = Math.round((BUILD_END - LARVA_END) / BT_DT), base = t => smooth(LARVA_END, 0.75, t) * (1 - smooth(4.15, BUILD_END, t));
+  const hold = r => CHECK_R.reduce((q, rc) => q * (1 - 0.94 * Math.exp(-(((r - rc) / 0.014) ** 2))), 1);
+  const run = (k, out) => { let r = GROW.r0; for (let j = 0; j <= n; j++) { if (out) out[j] = r; const t = LARVA_END + j * BT_DT; r += k * base(t) * hold(r) * (1 + 3 * (1 - r) * (1 - r)) * BT_DT; } return r; };
+  let lo = 0.05, hi = 2; for (let it = 0; it < 40; it++) { const mid = (lo + hi) / 2; if (run(mid) < 1) lo = mid; else hi = mid; }
+  BT = new Float32Array(n + 1); run((lo + hi) / 2, BT); BT[n] = 1;
+  TF = new Float32Array(4097); let j = 0;
+  for (let q = 0; q <= 4096; q++) { const r = q / 4096; while (j < n && BT[j] < r) j++; TF[q] = r <= GROW.r0 ? 0.5 + (LARVA_END - 0.5) * r / GROW.r0 : LARVA_END + j * BT_DT; }
+}
+function marginAt(t) {
+  if (t <= 0.5) return 0;
+  if (t < LARVA_END) return GROW.r0 * ease5((t - 0.5) / (LARVA_END - 0.5));
+  const f = (t - LARVA_END) / BT_DT, j = Math.min(BT.length - 2, Math.floor(f));
+  return t >= BUILD_END ? 1 : BT[j] + (BT[j + 1] - BT[j]) * (f - j);
+}
+const laidAt = r => TF[Math.min(4096, Math.max(0, Math.round(r * 4096)))];
+// The valve at a given stage is a scaled replica of the finished one: bivalves grow nearly
+// isometrically. Its outline is the growth line r(t), so the record keeps its place on the sand,
+// and its dome is the finished dome scaled about the beak; replica() finds the matching pixel.
+function replica(x, y, rt) {
+  if (rt >= 1) return y * W + x;
+  const px = Math.round(VAL.bx + (x + 0.5 - VAL.bx) / rt - 0.5), py = Math.round(VAL.by + (y + 0.5 - VAL.by) / rt - 0.5);
+  return clamp(py, 0, H - 1) * W + clamp(px, 0, W - 1);
+}
+const HW = W >> 1, HH = H >> 1, SHD = new Float32Array(HW * HH);
+function shadowPass(rt) {
+  SHD.fill(1); if (rt <= 0) return;
+  const top = HMAX * rt + 2, dmax = top / TAN_EL + 6, PEN = 16;
+  const ht = (x, y) => { const xi = x | 0, yi = y | 0; if (xi < 0 || yi < 0 || xi >= W || yi >= H) return 0; const i = yi * W + xi; return SR[i] <= rt ? rt * HF[replica(xi, yi, rt)] : 0; };
+  const bx0 = Math.max(0, (BOX.x0 >> 1) - 4), by0 = Math.max(0, (BOX.y0 >> 1) - 4), bx1 = Math.min(HW - 1, ((BOX.x1 + dmax) >> 1) + 4), by1 = Math.min(HH - 1, ((BOX.y1 + dmax) >> 1) + 4);
+  for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
+    const px = x * 2 + 1, py = y * 2 + 1, z0 = ht(px, py) + 1.5;
+    let res = 1;
+    for (let d = 2; d < dmax; d += 2) {
+      const hq = ht(px + d * SUN_DIR[0], py + d * SUN_DIR[1]); if (hq <= 0) continue;
+      const zr = z0 + d * TAN_EL; if (hq >= zr) { res = 0; break; }
+      const q = PEN * (zr - hq) / d; if (q < res) res = q;
+    }
+    SHD[y * HW + x] = res * res * (3 - 2 * res);
+  }
+}
+const shdAt = (x, y) => { const fx = clamp(x / 2 - 0.5, 0, HW - 1.001), fy = clamp(y / 2 - 0.5, 0, HH - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j, o = j * HW + i; return (SHD[o] * (1 - u) + SHD[o + 1] * u) * (1 - v) + (SHD[o + HW] * (1 - u) + SHD[o + HW + 1] * u) * v; };
+// tone: exposure, a soft shoulder, then sRGB through a table
+const EXPO = 0.95, LW = 1.5, LUT = new Uint8ClampedArray(4097);
+for (let i = 0; i <= 4096; i++) { const v = i / 4096; LUT[i] = Math.round(255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055)); }
+const tone = x => { x *= EXPO; const y = x * (1 + x / (LW * LW)) / (1 + x); return LUT[Math.min(4096, Math.max(0, (y * 4096) | 0))]; };
+const HV = HV0, KD = 0.35;
+
+let IMG = null;
+function seek(t) {
+  t = clamp(t, 0, DUR);
+  const rt = marginAt(t), aoK = clamp(rt * HMAX / 70), aoS = Math.max(0.05, rt);
+  shadowPass(rt);
+  const D = IMG.data, S = SUN_RGB, K = SKY_RGB;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x, o = i * 4, sh = shdAt(x + 0.5, y + 0.5);
+    // the sand: darker where it is wetter by the shell, and in the crevice where shell meets it
+    let dist = 1e9;
+    let bank = 0;
+    if (rt > 0) {
+      const qx = VAL.bx + (x + 0.5 - VAL.bx) / rt, qy = VAL.by + (y + 0.5 - VAL.by) / rt;
+      if (qx >= 1 && qy >= 1 && qx < W - 1 && qy < H - 1) {
+        const qi = (qy | 0) * W + (qx | 0); dist = EDT[qi] * rt;
+        // sand banked against the margin: a low berm, so on the sunward side it catches the light
+        if (dist > 0 && dist < 40 * aoS) {
+          const gx = (EDT[qi + 1] - EDT[qi - 1]) / 2, gy = (EDT[qi + W] - EDT[qi - W]) / 2, wB = 7 * aoS, hB = 2.2 * aoK * Math.exp(-dist / wB);
+          bank = (hB / wB) * (gx * SUNV[0] + gy * SUNV[1]);
+        }
+      }
+    }
+    const ao = 1 - aoK * (0.55 * Math.exp(-dist / (5 * aoS)) + 0.25 * Math.exp(-dist / (26 * aoS))), wet = 1 - aoK * (0.12 * Math.exp(-dist / (30 * aoS)) + 0.46 * (1 - smooth(44, 66, dist / aoS + 26 * SHN[i])));
+    const sl = Math.max(0, SSUN[i] + bank) * sh * (1 - 0.7 * aoK * Math.exp(-dist / (1.6 * aoS))), sk = ao, gl = SGL[i] * sh * wet;
+    let cr = SA[i * 3] * (S[0] * sl + K[0] * sk) * wet + S[0] * gl, cg = SA[i * 3 + 1] * (S[1] * sl + K[1] * sk) * wet + S[1] * gl, cb = SA[i * 3 + 2] * (S[2] * sl + K[2] * sk) * wet + S[2] * gl;
+    const r = SR[i];
+    if (rt > 0 && r <= rt + 1.5 / (RPX[i] || 1)) {
+      const din = (rt - r) * RPX[i], cov = clamp(din + 0.5), pj = replica(x, y, rt);
+      // The fine relief is too low to shade the shell much, but it tilts the gloss: the diffuse light
+      // sees the dome and a little of the relief, the highlight and the sky reflection see all of it.
+      const gx = GXD[pj] + GXR[i], gy = GYD[pj] + GYR[i], nm = 1 / Math.hypot(gx, gy, 1), nx = -gx * nm, ny = -gy * nm, nz = nm;
+      const gdx = GXD[pj] + KD * GXR[i], gdy = GYD[pj] + KD * GYR[i], dm = 1 / Math.hypot(gdx, gdy, 1), ux = -gdx * dm, uy = -gdy * dm, uz = dm;
+      // Aragonite is translucent: sunlight that enters scatters through the shell and comes out warm
+      // on the side turned away, tinted by the shell itself (albedo squared), so that side stays cream.
+      const ndl = ux * SUNV[0] + uy * SUNV[1] + uz * SUNV[2], lam = Math.max(0, ndl) * sh, sky = 0.5 + 0.5 * uz;
+      const sss = 0.5 * clamp((ndl + 0.9) / 1.9) * (1 - 0.85 * clamp(ndl)) * (0.4 + 0.6 * sh);
+      // The surface is glossy and wet. The sun's highlight is a broad lobe that sits on the sunward
+      // shoulder, where the dome turns halfway to the sun; the growth ridges tilt it on and off, so
+      // it breaks into bands. The sky, brightest round the sun, reflects by Fresnel at the flanks.
+      const ndh = Math.max(0, nx * HV[0] + ny * HV[1] + nz * HV[2]), g = GL[i];
+      const spec = g * sh * (2.6 * Math.pow(ndh, 140) + 0.5 * Math.pow(ndh, 16));
+      const rz = 2 * nz * nz - 1, rs = 2 * nz * (nx * SUNV[0] + ny * SUNV[1]) + rz * SUNV[2];
+      const fr = 0.04 + 0.96 * Math.pow(1 - nz, 5), env = g * fr * 1.1;
+      // a ray reflected below the horizon sees the sand, not the sky
+      const up = smooth(-0.08, 0.08, rz), skyR = up * (1.3 + 1.4 * (1 - Math.max(0, rz))) + (1 - up) * 0.25, aur = up * 0.7 * Math.exp(9 * (rs - 1));
+      // fresh shell: thin, pale, its pigment not yet at full depth
+      const hard = Math.max(smooth(0, HARDEN, t - laidAt(Math.min(r, 1))), smooth(0, 30 * rt, din)), fz = (1 - hard) * 0.2;
+      let a0 = AR[i], a1 = AG[i], a2 = AB[i], t0 = TR[i], t1 = TG[i], t2 = TB[i];
+      if (hard < 1) { const dz = PD[i] * (0.12 + 0.88 * hard * hard), pl = 1 + 0.32 * (1 - hard); a0 = BR[i] * pl * Math.exp(-dz * ABS[0]); a1 = BG[i] * pl * Math.exp(-dz * ABS[1]); a2 = BB[i] * pl * Math.exp(-dz * ABS[2]); t0 = BR[i] * BR[i] * pl * pl * Math.exp(-0.75 * dz * ABS[0]); t1 = BG[i] * BG[i] * pl * pl * Math.exp(-0.75 * dz * ABS[1]); t2 = BB[i] * BB[i] * pl * pl * Math.exp(-0.75 * dz * ABS[2]); }
+      const tr = 1 + 2.2 * (1 - hard); // thin new shell passes more light through
+      let sr = a0 * (S[0] * lam + K[0] * sky) + S[0] * sss * tr * t0 + S[0] * spec + env * (K[0] * skyR + S[0] * aur);
+      let sg = a1 * (S[1] * lam + K[1] * sky) + S[1] * sss * tr * t1 + S[1] * spec + env * (K[1] * skyR + S[1] * aur);
+      let sb = a2 * (S[2] * lam + K[2] * sky) + S[2] * sss * tr * t2 + S[2] * spec + env * (K[2] * skyR + S[2] * aur);
+      // the margin itself is a thin edge: light passes through it, so it reads as a fine pale line
+      const lip = (1 - smooth(0.4, 2.2, din)) * 0.55;
+      if (lip > 0) { sr = lerp(sr, a0 * (S[0] * 0.55 + K[0]), lip); sg = lerp(sg, a1 * (S[1] * 0.55 + K[1]), lip); sb = lerp(sb, a2 * (S[2] * 0.55 + K[2]), lip); }
+      // and new shell is thin enough that a little of the sand shows through it
+      if (fz > 0) { sr = lerp(sr, sr * 0.62 + cr * 0.38, fz); sg = lerp(sg, sg * 0.62 + cg * 0.38, fz); sb = lerp(sb, sb * 0.62 + cb * 0.38, fz); }
+      cr = lerp(cr, sr, cov); cg = lerp(cg, sg, cov); cb = lerp(cb, sb, cov);
+    }
+    D[o] = tone(cr); D[o + 1] = tone(cg); D[o + 2] = tone(cb); D[o + 3] = 255;
+  }
+  X.putImageData(IMG, 0, 0);
+  if (rt > 0.15) { // the ligament keeps its place at the margin as the valve grows
+    X.save(); X.globalAlpha = smooth(0.15, 0.3, rt); X.setTransform(rt, 0, 0, rt, VAL.bx * (1 - rt), VAL.by * (1 - rt)); X.drawImage(LIG, 0, 0); X.restore();
+  }
+}
+function init() {
+  runMargin(); buildRowTable(); buildSchedule(); bakeShell(); bakeSand(); calibrateSand(); bakeEDT(); bakeLigament();
+  IMG = X.createImageData(W, H);
+  const q = new URLSearchParams(location.search).get('t');
+  seek(q !== null && q !== '' ? Number(q) : HERO);
+  window.__riso.ready = true;
+}
+window.__riso = { duration: DUR, ready: false, seek, hero: HERO, build: { end: BUILD_END } };
+init();
+</script>
+</body></html>

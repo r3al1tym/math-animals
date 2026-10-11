@@ -1,0 +1,9 @@
+{
+  "name": "math-animals-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "playwright-core": "1.56",
+    "sharp": "^0.35.5"
+  }
+}

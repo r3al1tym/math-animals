@@ -1,0 +1,1664 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>10 angelfish</title>
+<style>html,body{margin:0;background:#1b1712}body{min-height:100vh;display:flex;align-items:center;justify-content:center}canvas{display:block;width:720px;height:900px}</style>
+</head><body><canvas id="c" width="1080" height="1350"></canvas>
+<script>
+"use strict";
+// ===== math-animals kit v1 begin =====
+// The shared cabinet for Math-Animals. Every drawer is the same quartersawn oak under a glazed lid,
+// seen from straight above and lit by one window at the upper left. Its floor is a card mount; the
+// curator's construction is drawn on the card in graphite and one label is lettered in India ink.
+// A page pastes this block verbatim, then bakes its animal and composes each frame in seek(t).
+const W = 1080, H = 1350, DUR = 6, HERO = 5.2, BUILD_END = 4.5;
+
+// ---------- seeded randomness only: every mark comes from a stable string key ----------
+function hash(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rngFor(key) {
+  let a = hash(key);
+  return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function noiseFor(key) {
+  const r = rngFor(key), P = new Uint16Array(512), G = new Float32Array(512);
+  for (let i = 0; i < 256; i++) { P[i] = i; const a = r() * Math.PI * 2; G[2 * i] = Math.cos(a); G[2 * i + 1] = Math.sin(a); }
+  for (let i = 255; i > 0; i--) { const j = (r() * (i + 1)) | 0, t = P[i]; P[i] = P[j]; P[j] = t; }
+  for (let i = 0; i < 256; i++) P[i + 256] = P[i];
+  const g = (h, x, y) => G[2 * h] * x + G[2 * h + 1] * y;
+  return (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, Xi = xi & 255, Yi = yi & 255;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = P[P[Xi] + Yi], b = P[P[Xi + 1] + Yi], c = P[P[Xi] + Yi + 1], d = P[P[Xi + 1] + Yi + 1];
+    const x1 = g(a, xf, yf) + (g(b, xf - 1, yf) - g(a, xf, yf)) * u;
+    const x2 = g(c, xf, yf - 1) + (g(d, xf - 1, yf - 1) - g(c, xf, yf - 1)) * u;
+    return (x1 + (x2 - x1) * v) * 1.4;
+  };
+}
+const _nz = {}; const nzc = k => _nz[k] || (_nz[k] = noiseFor(k));
+function fbm(n, x, y, oct = 4) { let s = 0, a = 0.5, f = 1, t = 0; for (let i = 0; i < oct; i++) { s += a * n(x * f, y * f); t += a; a *= 0.5; f *= 2.03; } return s / t; }
+const clamp = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const hex = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const shade = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
+const rgba = (c, a = 1) => `rgba(${clamp(c[0], 0, 255) | 0},${clamp(c[1], 0, 255) | 0},${clamp(c[2], 0, 255) | 0},${a})`;
+function mk(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }
+const ease = t => { t = clamp(t); return 1 - Math.pow(1 - t, 3); };
+const ease5 = s => { s = clamp(s); return s * s * s * (s * (s * 6 - 15) + 10); };
+// Catmull-Rom through a pen's points, end points held
+function catmull(pts, seg = 8) {
+  if (pts.length < 3) return pts.map(p => p.slice());
+  const P = [pts[0], ...pts, pts[pts.length - 1]], out = [];
+  for (let i = 1; i < P.length - 2; i++) for (let k = 0; k < seg; k++) {
+    const t = k / seg, t2 = t * t, t3 = t2 * t, p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
+    const f = j => 0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3);
+    out.push([f(0), f(1)]);
+  }
+  out.push(pts[pts.length - 1].slice()); return out;
+}
+
+// ---------- light: one raking window, upper left ----------
+// Shadows fall down-right. A thing h px above the card throws its shadow h*K px along SH, and the
+// higher it is the softer the shadow. MM is the drawer's true scale.
+const SH = { x: 0.56, y: 0.83 }, K = 1.1, MM = 3.6; // px per millimetre across the whole drawer
+const SHC = 'rgb(44,30,20)'; // shadows multiply a warm brown into the card, so they stay warm and never go grey
+
+// ---------- the drawer: oak rails, inner walls in depth, glass edge ----------
+const RIM = 40, FRONT = 40, WALLV = 24, WALL_H = 22 * MM; // WALL_H: the drawer wall stands 22 mm above the card
+const FX0 = RIM + WALLV, FY0 = RIM + WALLV, FX1 = W - RIM - WALLV, FY1 = H - FRONT - WALLV; // the floor
+const OAK = { dark: hex('#3a2617'), mid: hex('#6b4628'), light: hex('#9a6c40') };
+function _oakAt(n1, n2, n3, u, v, piece) {
+  const wv = v + 6 * fbm(n1, u * 0.004 + piece, piece, 3) + 1.5 * n2(u * 0.02, piece);
+  const stripe = 0.5 + 0.5 * Math.sin(wv * 1.9 + 3 * n2(wv * 0.08, u * 0.003 + piece));
+  const col = mix(OAK.dark, OAK.mid, clamp(0.42 + fbm(n2, wv * 0.05 + piece, u * 0.006, 3) * 0.9 + stripe * 0.16));
+  const fleck = smooth(0.38, 0.62, n3(u * 0.045 + piece, wv * 0.32)) * smooth(0.05, 0.35, n1(u * 0.012 + piece, wv * 0.05)); // ray fleck
+  return shade(mix(col, OAK.light, fleck * 0.55), 1 + fleck * 0.04);
+}
+// The frame canvas covers everything but the floor (FX0, FY0)-(FX1, FY1), which it leaves clear.
+function renderFrame() {
+  const c = mk(W, H), ctx = c.getContext('2d'), img = ctx.createImageData(W, H), D = img.data;
+  const n1 = nzc('oak1'), n2 = nzc('oak2'), n3 = nzc('oak3');
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (x >= FX0 && x < FX1 && y >= FY0 && y < FY1) continue;
+    const k = (y * W + x) * 4; let col;
+    if (x >= RIM && x < W - RIM && y >= RIM && y < H - FRONT) {
+      // an inner wall face: t runs from the rim (0) down to the floor (1)
+      const tl = (x - RIM) / WALLV, tr = (W - RIM - 1 - x) / WALLV, tt = (y - RIM) / WALLV, tb = (H - FRONT - 1 - y) / WALLV;
+      const m = Math.min(tl, tr, tt, tb), side = m === tt ? 0 : m === tb ? 1 : m === tl ? 2 : 3, horiz = side < 2;
+      col = _oakAt(n1, n2, n3, horiz ? x : y, m * 9 + side * 40, 300 + side * 71);
+      const lit = side === 3 ? 1.0 : side === 1 ? 0.92 : side === 2 ? 0.46 : 0.4; // faces turned from the window go dark
+      col = shade(col, lit * (1 - 0.3 * smooth(0.6, 1, m)) * (1 - 0.12 * (1 - smooth(0, 0.15, m))));
+    } else {
+      const dt = (RIM - y) / RIM, db = (y - (H - FRONT)) / FRONT, dl = (RIM - x) / RIM, dr = (x - (W - RIM)) / RIM;
+      const m = Math.max(dt, db, dl, dr), side = m === dt ? 0 : m === db ? 1 : m === dl ? 2 : 3, horiz = side < 2;
+      col = _oakAt(n1, n2, n3, horiz ? x : y, horiz ? y : x, side * 97.3);
+      col = shade(col, 1 + Math.exp(-Math.pow((x * 0.55 + y * 0.83 - 300) / 560, 2)) * 0.09); // the rails' oiled sheen
+      const ins = side === 0 ? RIM - y : side === 1 ? y - (H - FRONT) + 1 : side === 2 ? RIM - x : x - (W - RIM) + 1;
+      if (ins <= 3) col = shade(mix(col, hex('#6f7a62'), 0.4), 0.8); // the glass edge, green in its thickness
+      const mt = [Math.abs(dt - dl), Math.abs(dt - dr), Math.abs(db - dl), Math.abs(db - dr)];
+      if (Math.min(...mt) * Math.min(RIM, FRONT) < 0.7 && m > 0) col = shade(col, 0.55); // mitred corners
+    }
+    D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+// ---------- the card mount ----------
+// Museum board cut to the drawer floor. Its tooth is baked once per pixel: short cotton fibres
+// pressed into a felted surface. Graphite catches on the crowns, ink wicks along the fibres, and
+// the raking window picks both out. The same field serves every pencil line and every letter.
+let _TOOTH = null, _FIB = null, _SHD = null, _AO = null, _TONE = 'white', _TSEED = '';
+function _bakeTooth(seed) {
+  if (_TOOTH && _TSEED === seed) return;
+  const T = new Float32Array(W * H), Fb = new Float32Array(W * H), n1 = nzc(seed + ':t1'), n2 = nzc(seed + ':t2'), n3 = nzc(seed + ':t3'), r = rngFor(seed + ':tw');
+  const F = mk(W, H), fc = F.getContext('2d'); fc.lineCap = 'round';
+  for (let i = 0; i < 12000; i++) { // fibres: short curling hairs, each a little ridge in the board
+    const x = r() * W, y = r() * H, a = r() * Math.PI, L = 4 + r() * r() * 30, bend = (r() - 0.5) * L * 0.5;
+    const dx = Math.cos(a) * L / 2, dy = Math.sin(a) * L / 2;
+    fc.strokeStyle = `rgba(0,0,0,${(0.3 + r() * 0.6).toFixed(2)})`; fc.lineWidth = 0.45 + r() * 0.7;
+    fc.beginPath(); fc.moveTo(x - dx, y - dy); fc.quadraticCurveTo(x - Math.sin(a) * bend, y + Math.cos(a) * bend, x + dx, y + dy); fc.stroke();
+  }
+  const fd = fc.getImageData(0, 0, W, H).data;
+  for (let k = 0; k < W * H; k++) {
+    const x = k % W, y = (k / W) | 0; Fb[k] = fd[k * 4 + 3] / 255;
+    T[k] = clamp(0.48 + 0.24 * n1(x * 0.7, y * 0.7) + 0.2 * n3(x * 0.33, y * 0.33) + 0.16 * n2(x * 0.12, y * 0.12) + (r() - 0.5) * 0.22 + 0.3 * Fb[k]);
+  }
+  _TOOTH = T; _FIB = Fb; _TSEED = seed;
+}
+// The board's surface tooth at a pixel: 1 on a fibre's crown, 0 down in a pit.
+function cardTooth(x, y) { _bakeTooth(_TSEED || 'card'); const i = x | 0, j = y | 0; return i < 0 || j < 0 || i >= W || j >= H ? 0.5 : _TOOTH[j * W + i]; }
+// Light on the card: the drawer walls' shadow s and the corners' occlusion ao, as baked by renderCard.
+function _lit(c, s, ao) { const k = 0.84 - ao; return mix(shade(c, 1 - ao), [c[0] * 0.86 * k, c[1] * 0.78 * k, c[2] * 0.68 * k], s); }
+// Any colour lying on the card at (x, y), put under the window light the card itself is under.
+function litAt(c, x, y) { if (!_SHD) return c; const i = x | 0, j = y | 0; if (i < 0 || j < 0 || i >= W || j >= H) return c; const k = j * W + i; return _lit(c, _SHD[k] / 255, _AO[k] / 255); }
+// ---------- the unit tray ----------
+// One card unit tray fills the drawer, as in 16-specimen: a narrow dark slot along the drawer walls,
+// the tray wall's cut card top, and its inner faces seen in depth (the camera is above the drawer's
+// centre, so each face shows toward the centre, foreshortened). Faces turned from the window go dark,
+// and the tray wall throws its own shadow across the floor inside the drawer wall's.
+const TRAY_SLOT = 4, TRAY_WALL = 3, TRAY_H = 12 * MM; // slot width px; the tray wall: 3 px of card, 12 mm high
+const _CXO = W / 2, _CYO = (FY0 + FY1) / 2, _faceW = d => d > 0 ? 0.0158 * d : 0;
+const _TRAY = (() => { const o = [FX0 + TRAY_SLOT, FY0 + TRAY_SLOT, FX1 - TRAY_SLOT, FY1 - TRAY_SLOT], i = [o[0] + TRAY_WALL, o[1] + TRAY_WALL, o[2] - TRAY_WALL, o[3] - TRAY_WALL];
+  return { o, i, f: [_faceW(_CXO - o[0]), _faceW(_CYO - o[1]), _faceW(o[2] - _CXO), _faceW(o[3] - _CYO)] }; })();
+// the tray floor, where the construction and the specimen lie
+const TX0 = Math.ceil(_TRAY.i[0] + _TRAY.f[0]), TY0 = Math.ceil(_TRAY.i[1] + _TRAY.f[1]), TX1 = Math.floor(_TRAY.i[2] - _TRAY.f[2]), TY1 = Math.floor(_TRAY.i[3] - _TRAY.f[3]);
+// One card tray filling the drawer floor: white museum board, or the matte black board web
+// collectors mount on (a black tray). opts: tone, seed, tray (false: a flat card to the walls).
+function renderCard(o = {}) {
+  const black = o.tone === 'black', seed = o.seed || 'card', tray = o.tray !== false;
+  _bakeTooth(seed); _TONE = black ? 'black' : 'white';
+  const c = mk(W, H), ctx = c.getContext('2d'), img = ctx.createImageData(W, H), D = img.data, T = _TOOTH, F = _FIB;
+  const n1 = nzc(seed + ':g1'), n2 = nzc(seed + ':g2'), nc = nzc(seed + ':cockle'), nm = nzc(seed + ':mottle'), ns = nzc('slot');
+  const base = black ? [hex('#302d2a'), hex('#262321')] : [hex('#f6f5f0'), hex('#e9e6dd')];
+  const fib = black ? hex('#6e675d') : hex('#fdfcf8'), SHEEN_K = hex('#6b665e'), LD = WALL_H * K, LT = TRAY_H * K;
+  // the tray wall in the board's own colours: the cut top catches the window, the inner faces show by side
+  const top = black ? hex('#5a544c') : hex('#f1ece0'), faceDark = black ? hex('#1a1815') : hex('#cfc6b6'), faceLit = black ? hex('#4a453e') : hex('#f4efe4');
+  const { o: TO, i: TI, f: TF } = _TRAY, [x0, y0, x1, y1] = tray ? [TX0, TY0, TX1, TY1] : [FX0, FY0, FX1, FY1];
+  _SHD = new Uint8Array(W * H); _AO = new Uint8Array(W * H);
+  // hard light, so a sharp edge; the fill from the room lifts the shadow a little away from the wall
+  const band = (d, len) => d < 0 ? 0 : (1 - smooth(len * 0.8, len * 1.1, d)) * (1 - 0.32 * clamp(d / len));
+  for (let y = FY0; y < FY1; y++) for (let x = FX0; x < FX1; x++) {
+    const k = y * W + x, sD = Math.max(band(y - FY0, LD * SH.y), band(x - FX0, LD * SH.x));
+    let col, s = sD, ao = 0;
+    const e = Math.min(x - TO[0], TO[2] - 1 - x, y - TO[1], TO[3] - 1 - y);
+    if (tray && e < 0) { // the slot between tray and drawer wall: the drawer's own floor, deep in shade
+      col = shade(mix(hex('#3a2a1d'), hex('#5a4030'), clamp(0.4 + ns(x * 0.4, y * 0.4))), 0.62); s = 1; ao = 0.3;
+    } else if (tray && e < TRAY_WALL) { // the tray wall's cut card top; its outer edge falls away
+      col = shade(top, (e < 1 ? 0.8 : 1) * (1 + (T[k] - 0.5) * 0.04));
+    } else if (tray && (x < TX0 || y < TY0 || x >= TX1 || y >= TY1)) {
+      // an inner face: t runs from the wall top (0) down to the floor (1); the faces meet in mitres
+      const tl = (x - TI[0]) / TF[0], tt = (y - TI[1]) / TF[1], tr = (TI[2] - 1 - x) / TF[2], tb = (TI[3] - 1 - y) / TF[3];
+      const m = Math.min(tl, tt, tr, tb), t = clamp(m);
+      col = m === tl ? shade(faceDark, 0.66 + 0.1 * t) : m === tt ? shade(faceDark, 0.7 + 0.1 * t) : m === tr ? shade(faceLit, 0.98) : shade(faceLit, 0.95);
+      col = shade(col, (1 - 0.1 * smooth(0.6, 1, t)) * (1 + (T[k] - 0.5) * (black ? 0.16 : 0.04))); s = sD * 0.7;
+      if (black) col = mix(col, fib, F[k] * 0.16); // the same board stands in the wall, its fibres showing
+    } else { // the floor: board with its fibres and formation
+      const g = n1(x * 0.5, y * 0.5) * 0.5 + n2(x * 0.07, y * 0.07) * 0.5;
+      col = mix(base[0], base[1], clamp(0.35 + g * 0.7));
+      col = mix(col, fib, F[k] * (black ? 0.17 : 0.2));
+      // raking light on the tooth and the fibres: slopes facing the window catch it. Formation: the
+      // pulp lies a little cloudy. Cockle: the board lifts a hair between its fixings.
+      const emb = (T[k + W + 1] - T[k - W - 1]) * 0.035 + (F[k + W + 1] - F[k - W - 1]) * 0.03 + (T[k] - 0.5) * 0.028;
+      if (black) {
+        // charcoal board: a multiply barely moves so dark a colour, so the window lies on the tooth's
+        // crowns and the fibres' backs as a warm grey sheen, and the pits sink. Formation is broader.
+        const rel = (T[k + W + 1] - T[k - W - 1]) * 0.3 + (F[k + W + 1] - F[k - W - 1]) * 0.14 + (T[k] - 0.5) * 0.36;
+        col = shade(col, 1 + 0.07 * fbm(nm, x * 0.018, y * 0.018, 3) + 0.03 * fbm(nc, x * 0.004, y * 0.004, 2) + Math.min(0, rel) * 0.4);
+        col = mix(col, SHEEN_K, clamp(rel * 0.7));
+      } else col = shade(col, 1 + emb + 0.017 * fbm(nm, x * 0.03, y * 0.03, 3) + 0.016 * fbm(nc, x * 0.004, y * 0.004, 2));
+      const dx = x - x0, dy = y - y0, dr = x1 - 1 - x, db = y1 - 1 - y, dm = Math.min(dx, dy, dr, db);
+      s = Math.max(sD, tray ? Math.max(band(dy, LT * SH.y), band(dx, LT * SH.x)) : 0);
+      ao = (1 - smooth(0, tray ? 9 : 11, dm)) * (tray ? 0.14 : 0.13) + (1 - smooth(0, 44, Math.hypot(Math.min(dx, dr), Math.min(dy, db)))) * 0.1;
+      if (!tray && dm < 1) ao += 0.22; // the card's cut edge against the wall
+    }
+    _SHD[k] = s * 255; _AO[k] = clamp(ao) * 255;
+    col = _lit(col, s, ao);
+    D[k * 4] = col[0]; D[k * 4 + 1] = col[1]; D[k * 4 + 2] = col[2]; D[k * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+// ---------- the window: falloff, glass lid, shadows ----------
+// One window, upper left: the drawer falls off from bright to dark across its width. Multiplied over
+// the whole composed frame, after the frame rails and before the glass.
+function lightFalloff(ctx) {
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'multiply';
+  const fall = ctx.createLinearGradient(40, 300, 1060, 700); fall.addColorStop(0, 'rgb(255,254,250)'); fall.addColorStop(0.45, 'rgb(228,219,206)'); fall.addColorStop(1, 'rgb(170,156,138)');
+  ctx.fillStyle = fall; ctx.fillRect(0, 0, W, H);
+  const fv = ctx.createLinearGradient(0, 0, 0, H); fv.addColorStop(0, 'rgb(255,255,255)'); fv.addColorStop(1, 'rgb(236,230,222)');
+  ctx.fillStyle = fv; ctx.fillRect(0, 0, W, H); ctx.restore();
+}
+// The lid: one soft reflection band, strongest high on the right, with dust and a few hairline
+// scratches on the glass. The glass catches the window early in the build, the band sliding in from
+// the right as it brightens; once the drawer is full the light only breathes. Drawn last.
+// The band and its veil are baked once at full strength, blurred, into full-size layers; each frame
+// only slides them by whole pixels and scales their alpha, so no filter runs per frame and any seek
+// order draws the same pixels.
+let _GLASS = null;
+function _glassLayers() {
+  // Each layer is a strip whose profile across is a soft bell, so the band has no edge to read as a
+  // stripe laid over the work. Over black board nothing else is bright, so there the band is wider still.
+  const black = _TONE === 'black', SW = black ? 420 : 300;
+  const bell = (rgb, peak, mid, sd) => Array.from({ length: 17 }, (_, i) => { const u = i / 16, a = peak * Math.exp(-(((u - mid) / sd) ** 2)) * Math.sqrt(Math.sin(Math.PI * u)); return [u, `rgba(${rgb},${a.toFixed(3)})`]; });
+  const f = (c) => { const g = c.createLinearGradient(0, -200, 0, 1250); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.6, 'rgba(0,0,0,0.85)'); g.addColorStop(0.95, 'rgba(0,0,0,0.8)'); g.addColorStop(1, 'rgba(0,0,0,0.5)'); return g; };
+  const strip = (stops) => {
+    const s = mk(SW, 1450), sc = s.getContext('2d'), g = sc.createLinearGradient(0, 0, SW, 0);
+    for (const [o, c] of stops) g.addColorStop(o, c);
+    sc.fillStyle = g; sc.fillRect(0, 0, SW, 1450); sc.globalCompositeOperation = 'destination-in'; sc.translate(SW / 2, 200); sc.fillStyle = f(sc); sc.fillRect(-SW / 2, -200, SW, 1450);
+    return s;
+  };
+  const lay = (s, blur, base) => {
+    const c = mk(W + 160, H), cc = c.getContext('2d');
+    if (base) { cc.fillStyle = base; cc.fillRect(0, 0, c.width, c.height); }
+    cc.translate(948 + 160, RIM - 10); cc.rotate(0.17); cc.filter = `blur(${blur}px)`; cc.drawImage(s, -SW / 2 - (black ? 40 : 0), -200);
+    return c;
+  };
+  // Over a white card a bright reflection all but vanishes; there the band reads by the dimmer room it
+  // also reflects, a cool grey veil a little darker than the board. On open card nothing breaks it up,
+  // so it is kept to a reflection you notice second: half the strength, the edges feathered out.
+  if (black) return { tone: _TONE, veil: lay(strip(bell('188,194,206', 0.34, 0.5, 0.3)), 10, null), band: lay(strip(bell('236,242,248', 0.3, 0.52, 0.2)), 14, null) };
+  return { tone: _TONE, veil: lay(strip(bell('188,194,206', 0.24, 0.5, 0.26)), 8, null), band: lay(strip(bell('236,242,248', 0.19, 0.46, 0.2)), 10, null) };
+}
+function glass(ctx, t) {
+  const e = ease5((t - 0.35) / 1.05), breath = 1 + 0.06 * Math.sin((t - BUILD_END) * Math.PI * 2 / 1.4) * smooth(BUILD_END, BUILD_END + 0.4, t);
+  const lit = (0.1 + 0.9 * e) * breath * (_TONE === 'black' ? 0.5 : 1); // over black board the reflection has nothing to hide in, so it is kept calmer
+  if (!_GLASS || _GLASS.tone !== _TONE) _GLASS = _glassLayers();
+  const dx = Math.round((1 - e) * 150) - 160; // the band slides in from the right as the glass catches the window
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none';
+  ctx.beginPath(); ctx.rect(RIM, RIM, W - 2 * RIM, H - FRONT - RIM); ctx.clip(); // the glass sits inside the rails
+  ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = clamp(lit); ctx.drawImage(_GLASS.veil, dx, 0);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = clamp(lit); ctx.drawImage(_GLASS.band, dx, 0);
+  ctx.restore();
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none'; ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.rect(RIM, RIM, W - 2 * RIM, H - FRONT - RIM); ctx.clip(); // dust and scratches lie on the glass, so only inside the rails
+  const r = rngFor('dust');
+  for (let i = 0; i < 70; i++) { const x = r() * W, y = r() * H, s = 0.5 + r() * 1.1; ctx.fillStyle = `rgba(232,228,218,${0.22 + r() * 0.3})`; ctx.beginPath(); ctx.arc(x, y, s, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(232,228,218,0.32)'; ctx.lineWidth = 0.7;
+  for (let i = 0; i < 3; i++) { let x = r() * W, y = r() * H; ctx.beginPath(); ctx.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (r() - 0.5) * 9; y += (r() - 0.3) * 7; ctx.lineTo(x, y); } ctx.stroke(); }
+  ctx.restore();
+}
+// An object's shadow on the card. img is the object (any canvas; its alpha is the silhouette), drawn
+// at (x, y) in the current transform as drawImage would. The shadow lies heightPx*K along SH in
+// screen space, blurred in proportion to height, and multiplies a warm brown into the card.
+// opts: alpha (0.5), blur (px, default 0.14*height), color (SHC), w, h (draw size).
+function castShadow(ctx, img, x, y, heightPx, o = {}) {
+  const off = heightPx * K, blur = o.blur ?? Math.max(0.5, heightPx * 0.14), w = o.w ?? img.width, h = o.h ?? img.height;
+  const s = mk(img.width, img.height), sc = s.getContext('2d');
+  sc.drawImage(img, 0, 0); sc.globalCompositeOperation = 'source-in'; sc.fillStyle = o.color || SHC; sc.fillRect(0, 0, s.width, s.height);
+  ctx.save(); const m = ctx.getTransform(); ctx.setTransform(m.a, m.b, m.c, m.d, m.e + SH.x * off, m.f + SH.y * off);
+  ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = o.alpha ?? 0.5; ctx.filter = blur > 0.3 ? `blur(${blur.toFixed(2)}px)` : 'none';
+  ctx.drawImage(s, x, y, w, h); ctx.restore();
+}
+
+// ---------- graphite ----------
+// A pencil line is graphite laid on the board's tooth. The lead rides the fibres' crowns, so light
+// pressure leaves a broken grey and heavy pressure fills the pits. Each line is rasterised per pixel
+// in screen space against the baked tooth, so the grain stays put while the line draws itself. The
+// hand is a draughtsman's: a faint tremor, pressure that swells and eases, a landing and a lift.
+// On the black board the lead is a white pencil worked lightly: a warm grey at about 50% value that
+// sits only on the tooth's crowns, so it reads as graphite on dark board, under the brighter specimen.
+const G_DARK = [46, 47, 53], G_SHEEN = [122, 125, 134], G_WHITE = [163, 157, 146], G_WHITE_SHEEN = [184, 178, 166];
+function _devPts(ctx, pts) { const m = ctx.getTransform(); return { P: pts.map(p => [m.a * p[0] + m.c * p[1] + m.e, m.b * p[0] + m.d * p[1] + m.f]), sc: Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1 }; }
+function _resample(P, step) {
+  const out = [P[0].slice()]; let acc = 0;
+  for (let i = 1; i < P.length; i++) {
+    const ax = P[i - 1][0], ay = P[i - 1][1], bx = P[i][0], by = P[i][1], L = Math.hypot(bx - ax, by - ay);
+    if (L < 1e-9) continue;
+    let d = step - acc;
+    while (d <= L) { const t = d / L; out.push([ax + (bx - ax) * t, ay + (by - ay) * t]); d += step; }
+    acc = L - (d - step);
+  }
+  const e = P[P.length - 1], l = out[out.length - 1]; if (Math.hypot(e[0] - l[0], e[1] - l[1]) > 0.05) out.push(e.slice());
+  return out;
+}
+// One pass of the hand along a device-space path: 1 px samples with tremor, pressure and overshoot.
+function _trace(P, o, sc, w) {
+  const seed = o.seed || 'pencil', ph = (hash(seed) % 9973) * 0.731, n = nzc('pencil:hand'), r = rngFor(seed + ':ends');
+  let Q = _resample(P, 1);
+  if (Q.length < 2) Q = [Q[0], [Q[0][0] + 0.05, Q[0][1]]];
+  // a draughtsman runs a construction line on past its ends, straight along the tangent, as the hand lifts
+  const ov = o.overshoot ? (o.overshoot === true ? 6 : o.overshoot) * sc : 0;
+  let pre = 0, post = 0;
+  if (ov > 0 && Q.length > 3) {
+    const k = Math.min(4, Q.length - 1), tan = (a, b) => { const dx = a[0] - b[0], dy = a[1] - b[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
+    const t0 = tan(Q[0], Q[k]), e = Q[Q.length - 1], t1 = tan(e, Q[Q.length - 1 - k]), s0 = Q[0];
+    pre = Math.round(ov * (0.35 + 0.7 * r())); post = Math.round(ov * (0.5 + 0.9 * r()));
+    const head = []; for (let i = pre; i >= 1; i--) head.push([s0[0] + t0[0] * i, s0[1] + t0[1] * i]);
+    const tail = []; for (let i = 1; i <= post; i++) tail.push([e[0] + t1[0] * i, e[1] + t1[1] * i]);
+    Q = head.concat(Q, tail);
+  }
+  const load = o.print ? 0.82 + 0.3 * r() : 1;
+  const dash = o.dash ? [o.dash[0] * sc, o.dash[1] * sc, Math.max(1, Math.round((o.dash[0] + o.dash[1]) * sc))] : null;
+  const N = Q.length, tone = o.tone ?? 1, trem = (o.tremor ?? 0.3) * sc, xs = new Float32Array(N), ys = new Float32Array(N), ps = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const a = Q[Math.max(0, i - 1)], b = Q[Math.min(N - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+    const tw = trem * (0.75 * n(i / 30 + ph, 0.5) + 0.25 * n(i / 6.5 + ph, 7.5));
+    xs[i] = Q[i][0] - dy / l * tw; ys[i] = Q[i][1] + dx / l * tw;
+    let p = tone * (0.84 + 0.16 * n(i / 45 + ph, 3.3)) * (0.9 + 0.1 * n(i / 11 + ph, 9.1));
+    const tp = o.taper ?? 1;
+    // printing a letter, the pencil lands firm and eases off along each stroke, and no two strokes get the same weight
+    if (o.print) p *= load * lerp(1.16, 0.7, smooth(0.15, 1, i / Math.max(1, N - 1))) * (0.84 + 0.16 * n(i / 3.2 + ph, 5.7));
+    p *= pre ? lerp(0.3, 1, clamp(i / pre)) : lerp(1 - 0.45 * tp, 1, clamp(i / 3)); // the lead lands
+    p *= post ? lerp(0.2, 1, clamp((N - 1 - i) / post)) : lerp(1 - 0.55 * tp, 1, clamp((N - 1 - i) / 4)); // and lifts
+    if (dash && (i % dash[2]) >= dash[0]) p = 0; // a dashed line: the lead lifts between dashes
+    ps[i] = p;
+  }
+  return { xs, ys, ps, n: N, lim: clamp(o.prog ?? 1) * (N - 1), w };
+}
+let _SCR = null; // one scratch canvas for writing finished pixels back
+function _scratch(w, h) { if (!_SCR || _SCR.width < w || _SCR.height < h) _SCR = mk(Math.max(w, _SCR ? _SCR.width : 0), Math.max(h, _SCR ? _SCR.height : 0)); return _SCR; }
+// Rasterise traces into one coverage buffer (max, so a line never darkens itself) and lay the
+// graphite: deposit = pressure gated by the tooth, grey with a little sheen where it is dense.
+function _graphite(ctx, trs, o) {
+  _bakeTooth(_TSEED || 'card');
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const t of trs) { const m = Math.min(t.n - 1, Math.ceil(t.lim)); for (let i = 0; i <= m; i++) { x0 = Math.min(x0, t.xs[i] - t.w); y0 = Math.min(y0, t.ys[i] - t.w); x1 = Math.max(x1, t.xs[i] + t.w); y1 = Math.max(y1, t.ys[i] + t.w); } }
+  if (x1 < x0) return;
+  const bx = Math.floor(x0) - 2, by = Math.floor(y0) - 2, bw = Math.ceil(x1) + 3 - bx, bh = Math.ceil(y1) + 3 - by, B = new Float32Array(bw * bh);
+  for (const tr of trs) {
+    const m = Math.min(tr.n - 1, Math.ceil(tr.lim));
+    for (let i = 0; i < m; i++) {
+      const ax = tr.xs[i], ay = tr.ys[i], f = Math.min(1, tr.lim - i), cx = ax + (tr.xs[i + 1] - ax) * f, cy = ay + (tr.ys[i + 1] - ay) * f;
+      const pa = tr.ps[i], pb = tr.ps[i + 1], vx = cx - ax, vy = cy - ay, vv = vx * vx + vy * vy || 1e-9;
+      const h = tr.w / 2 * (0.75 + 0.35 * (pa + pb) / 2), R = h + 1; // a harder press spreads the lead
+      const xa = Math.max(0, Math.floor(Math.min(ax, cx) - R) - bx), xb = Math.min(bw - 1, Math.ceil(Math.max(ax, cx) + R) - bx);
+      const ya = Math.max(0, Math.floor(Math.min(ay, cy) - R) - by), yb = Math.min(bh - 1, Math.ceil(Math.max(ay, cy) + R) - by);
+      for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
+        const px = x + bx + 0.5 - ax, py = y + by + 0.5 - ay, t = clamp((px * vx + py * vy) / vv), d = Math.hypot(px - vx * t, py - vy * t);
+        if (d >= R) continue;
+        const v = (1 - smooth(h - 0.5, h + 0.9, d)) * (pa + (pb - pa) * t), k = y * bw + x;
+        if (v > B[k]) B[k] = v;
+      }
+    }
+  }
+  const white = o.white ?? (_TONE === 'black'), img = new ImageData(bw, bh), D = img.data, T = _TOOTH, ns = nzc('pencil:sheen');
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const a = Math.min(1, B[y * bw + x]); if (a < 0.004) continue;
+    const X = x + bx, Y = y + by; if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+    const t = T[Y * W + X], th = 0.9 - 0.55 * a, dep = a * (0.28 + 0.72 * smooth(th - 0.28, th + 0.28, t));
+    let col, al;
+    if (white) { // the crowns take it, the pits stay board: the tooth breaks the line more than on white
+      const dw = a * (0.3 + 0.7 * smooth(th - 0.24, th + 0.24, t));
+      col = mix(G_WHITE, G_WHITE_SHEEN, 0.5 * smooth(0.6, 1, dw) * (0.5 + 0.5 * ns(X * 0.025, Y * 0.025))); al = Math.min(1, dw * 1.1);
+    }
+    else { col = mix(G_DARK, G_SHEEN, 0.32 * smooth(0.4, 0.95, dep) * (0.55 + 0.45 * ns(X * 0.025, Y * 0.025))); al = dep * 0.86; }
+    col = litAt(col, X, Y);
+    const k = (y * bw + x) * 4; D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = al * 255;
+  }
+  const s = _scratch(bw, bh); s.getContext('2d').putImageData(img, 0, 0);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = o.alpha ?? 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(s, 0, 0, bw, bh, bx, by, bw, bh); ctx.restore();
+}
+// pencil(ctx, pts, opts): pts [[x, y], ...] in the current transform. opts: w (px, 1.45), tone
+// (darkness 0..1, 1), seed, prog (0..1 of arc length), overshoot (true = 6 px, or px), tremor (px,
+// 0.3), dash ([on, off] px), white (white pencil; defaults to true on the black card), alpha.
+function pencil(ctx, pts, o = {}) {
+  if (!pts || !pts.length || (o.prog ?? 1) <= 0) return;
+  const { P, sc } = _devPts(ctx, pts);
+  _graphite(ctx, [_trace(P, o, sc, (o.w ?? 1.45) * sc)], o);
+}
+const pencilLine = (ctx, x0, y0, x1, y1, o = {}) => pencil(ctx, [[x0, y0], [x1, y1]], o);
+// canvas angles: radians, clockwise on screen from +x
+function pencilArc(ctx, cx, cy, r, a0, a1, o = {}) {
+  const n = Math.max(6, Math.ceil(Math.abs(a1 - a0) * r / 1.5)), pts = [];
+  for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+  pencil(ctx, pts, o);
+}
+// a compass circle closes a little past its start, as a drawn one does
+function pencilCircle(ctx, cx, cy, r, o = {}) { const a0 = rngFor((o.seed || 'circle') + ':a0')() * Math.PI * 2; pencilArc(ctx, cx, cy, r, a0, a0 + Math.PI * 2 + 0.1, o); }
+// a firm small dot, pressed and turned
+function pencilDot(ctx, x, y, o = {}) { const r = o.r ?? 1.1; pencilArc(ctx, x, y, r, 0, Math.PI * 2.2, { tone: 1, w: 2.1, tremor: 0, taper: 0, ...o }); }
+// a small + for a centre
+function pencilCross(ctx, x, y, s = 8, o = {}) {
+  const q = { overshoot: 1.5, tone: 1, w: 1.45, ...o }, p = clamp(o.prog ?? 1) * 2;
+  if (p > 0) pencil(ctx, [[x - s / 2, y], [x + s / 2, y]], { ...q, prog: Math.min(1, p), seed: (o.seed || 'x') + 'h' });
+  if (p > 1) pencil(ctx, [[x, y - s / 2], [x, y + s / 2]], { ...q, prog: p - 1, seed: (o.seed || 'x') + 'v' });
+}
+// the curator's tick: a short stroke down and a long one up, in one movement
+function pencilTick(ctx, x, y, s = 14, o = {}) {
+  pencil(ctx, catmull([[x - 0.48 * s, y - 0.06 * s], [x - 0.26 * s, y + 0.14 * s], [x - 0.12 * s, y + 0.34 * s], [x + 0.18 * s, y - 0.12 * s], [x + 0.56 * s, y - 0.6 * s]], 6), { tone: 1, w: 1.7, tremor: 0.15, ...o });
+}
+
+// ---------- the curator's hand ----------
+// A single-stroke upright technical hand, after Leroy and Rapidograph museum labels: careful, even,
+// monoline. Each glyph is its pen's centre-lines in cap-height units, y up from the baseline
+// (x-height 0.68, ascender 1, descender -0.3): [advance, strokes]. Strokes are split by ';'; in a
+// stroke "x,y" is a point and "(cx,cy,rx,ry,a0,a1)" an elliptic arc in degrees, counter-clockwise
+// for a1 > a0; a stroke starting with '~' is smoothed through its points.
+const HAND_SRC = {
+  A: [0.64, '0,0 0.32,1 0.64,0; 0.11,0.33 0.53,0.33'], B: [0.56, '0,0 0,1 0.3,1 (0.3,0.76,0.21,0.24,90,-90) 0,0.52; 0.3,0.52 (0.32,0.26,0.24,0.26,90,-90) 0,0'],
+  C: [0.6, '(0.34,0.5,0.34,0.5,42,318)'], D: [0.6, '0,0 0,1 0.22,1 (0.22,0.5,0.38,0.5,90,-90) 0,0'],
+  E: [0.5, '0.5,1 0,1 0,0 0.52,0; 0,0.53 0.4,0.53'], F: [0.48, '0.5,1 0,1 0,0; 0,0.53 0.4,0.53'],
+  G: [0.7, '(0.35,0.5,0.35,0.5,42,350) 0.7,0.46 0.42,0.46'], H: [0.58, '0,0 0,1; 0.58,0 0.58,1; 0,0.53 0.58,0.53'],
+  I: [0, '0,0 0,1'], J: [0.44, '0.44,1 0.44,0.26 (0.22,0.26,0.22,0.26,0,-180)'],
+  K: [0.56, '0,0 0,1; 0.56,1 0,0.34; 0.19,0.54 0.58,0'], L: [0.46, '0,1 0,0 0.48,0'],
+  M: [0.74, '0,0 0,1 0.37,0.18 0.74,1 0.74,0'], N: [0.6, '0,0 0,1 0.6,0 0.6,1'],
+  O: [0.76, '(0.38,0.5,0.38,0.5,90,450)'], P: [0.54, '0,0 0,1 0.3,1 (0.3,0.75,0.24,0.25,90,-90) 0,0.5'],
+  Q: [0.76, '(0.38,0.5,0.38,0.5,90,450); 0.48,0.24 0.78,-0.06'], R: [0.56, '0,0 0,1 0.3,1 (0.3,0.755,0.24,0.245,90,-90) 0,0.51; 0.3,0.51 0.58,0'],
+  S: [0.56, '(0.28,0.75,0.26,0.25,28,270) (0.29,0.25,0.27,0.25,90,-152)'], T: [0.6, '0,1 0.6,1; 0.3,1 0.3,0'],
+  U: [0.6, '0,1 0,0.3 (0.3,0.3,0.3,0.3,180,360) 0.6,1'], V: [0.62, '0,1 0.31,0 0.62,1'],
+  W: [0.88, '0,1 0.21,0 0.44,0.82 0.67,0 0.88,1'], X: [0.58, '0,1 0.58,0; 0.58,1 0,0'],
+  Y: [0.6, '0,1 0.3,0.48 0.6,1; 0.3,0.48 0.3,0'], Z: [0.56, '0.02,1 0.56,1 0,0 0.58,0'],
+  a: [0.48, '0.06,0.6 (0.26,0.5,0.22,0.18,145,0) 0.48,0; 0.48,0.38 0.22,0.38 (0.22,0.19,0.2,0.19,90,300) 0.48,0.1'],
+  b: [0.54, '0,1 0,0; (0.27,0.34,0.27,0.34,165,-165)'], c: [0.52, '(0.28,0.34,0.28,0.34,42,318)'],
+  d: [0.54, '(0.27,0.34,0.27,0.34,15,345); 0.54,1 0.54,0'], e: [0.54, '0.02,0.36 0.54,0.36 (0.28,0.34,0.27,0.34,4,316)'],
+  f: [0.38, '0.4,0.94 (0.3,0.82,0.14,0.18,50,180) 0.16,0; 0,0.66 0.36,0.66'],
+  g: [0.54, '(0.27,0.34,0.27,0.34,15,345); 0.54,0.68 0.54,-0.08 (0.31,-0.08,0.23,0.22,0,-155)'],
+  h: [0.52, '0,1 0,0; 0,0.42 (0.26,0.42,0.26,0.26,180,0) 0.52,0'], i: [0, '0,0.68 0,0; (0,0.9,0.03,0.03,0,360)'],
+  j: [0.22, '0.22,0.68 0.22,-0.1 (0.06,-0.1,0.16,0.2,0,-140); (0.22,0.9,0.03,0.03,0,360)'],
+  k: [0.48, '0,1 0,0; 0.46,0.68 0,0.24; 0.15,0.37 0.5,0'], l: [0, '0,1 0,0'],
+  m: [0.8, '0,0.68 0,0; 0,0.44 (0.2,0.46,0.2,0.22,180,0) 0.4,0; 0.4,0.46 (0.6,0.46,0.2,0.22,180,0) 0.8,0'],
+  n: [0.52, '0,0.68 0,0; 0,0.42 (0.26,0.42,0.26,0.26,180,0) 0.52,0'], o: [0.58, '(0.29,0.34,0.29,0.34,90,450)'],
+  p: [0.54, '0,0.68 0,-0.3; (0.27,0.34,0.27,0.34,165,-165)'], q: [0.54, '(0.27,0.34,0.27,0.34,15,345); 0.54,0.68 0.54,-0.3'],
+  r: [0.4, '0,0.68 0,0; 0,0.4 (0.25,0.42,0.25,0.26,180,45)'], s: [0.48, '(0.24,0.505,0.22,0.175,30,270) (0.25,0.17,0.24,0.17,90,-152)'],
+  t: [0.36, '0.14,0.92 0.14,0.14 (0.28,0.14,0.14,0.14,180,290); 0,0.66 0.34,0.66'],
+  u: [0.52, '0,0.68 0,0.26 (0.26,0.26,0.26,0.26,180,360); 0.52,0.68 0.52,0'], v: [0.54, '0,0.68 0.27,0 0.54,0.68'],
+  w: [0.78, '0,0.68 0.19,0 0.39,0.58 0.59,0 0.78,0.68'], x: [0.5, '0,0.68 0.5,0; 0.5,0.68 0,0'],
+  y: [0.56, '0,0.68 0.28,0.02; 0.56,0.68 0.22,-0.2 0.16,-0.27 0.06,-0.3'], z: [0.5, '0.02,0.68 0.5,0.68 0,0 0.52,0'],
+  0: [0.54, '(0.27,0.5,0.27,0.5,90,450)'], 1: [0.28, '0,0.78 0.26,1 0.26,0'],
+  2: [0.54, '(0.27,0.72,0.25,0.28,158,-38) 0,0 0.56,0'], 3: [0.54, '(0.25,0.76,0.23,0.24,152,-90); (0.26,0.27,0.28,0.27,90,-152)'],
+  4: [0.56, '0.42,0 0.42,1 0,0.3 0.58,0.3'], 5: [0.54, '0.5,1 0.08,1 0.04,0.57 (0.27,0.31,0.27,0.31,130,-150)'],
+  6: [0.54, '(0.3,0.52,0.26,0.48,52,180) 0.04,0.3 (0.28,0.3,0.24,0.3,180,540)'], 7: [0.52, '0,1 0.54,1 0.16,0'],
+  8: [0.54, '(0.27,0.765,0.22,0.235,-90,270); (0.27,0.27,0.27,0.27,90,450)'], 9: [0.54, '(0.26,0.7,0.24,0.3,0,360) 0.5,0.48 (0.24,0.48,0.26,0.48,0,-128)'],
+  ' ': [0.2, ''], '.': [0.06, '(0.03,0.03,0.03,0.03,0,360)'], ',': [0.06, '0.06,0.06 0.05,-0.02 0.01,-0.14'], ':': [0.06, '(0.03,0.03,0.03,0.03,0,360); (0.03,0.47,0.03,0.03,0,360)'],
+  ';': [0.06, '(0.04,0.47,0.03,0.03,0,360); 0.06,0.06 0.05,-0.02 0.01,-0.14'], "'": [0, '0,1 0,0.76'], '"': [0.16, '0,1 0,0.76; 0.16,1 0.16,0.76'],
+  '(': [0.2, '(0.4,0.4,0.4,0.68,118,242)'], ')': [0.2, '(-0.2,0.4,0.4,0.68,62,-62)'],
+  '[': [0.18, '0.18,1 0,1 0,-0.2 0.18,-0.2'], ']': [0.18, '0,1 0.18,1 0.18,-0.2 0,-0.2'],
+  '-': [0.3, '0,0.38 0.3,0.38'], '–': [0.5, '0,0.38 0.5,0.38'], '—': [0.96, '0,0.38 0.96,0.38'],
+  '=': [0.5, '0,0.5 0.5,0.5; 0,0.27 0.5,0.27'], '+': [0.5, '0,0.385 0.5,0.385; 0.25,0.135 0.25,0.635'], '−': [0.5, '0,0.385 0.5,0.385'],
+  '×': [0.4, '0.02,0.2 0.38,0.57; 0.38,0.2 0.02,0.57'], '·': [0.06, '(0.03,0.36,0.03,0.03,0,360)'], '/': [0.42, '0,-0.12 0.42,1.06'],
+  '°': [0.24, '(0.12,0.87,0.12,0.13,0,360)'], '%': [0.74, '(0.13,0.8,0.13,0.2,0,360); 0.62,1 0.12,0; (0.61,0.2,0.13,0.2,0,360)'],
+  '^': [0.4, '0,0.68 0.2,1 0.4,0.68'], '~': [0.5, '~0,0.34 0.12,0.43 0.25,0.385 0.38,0.34 0.5,0.43'],
+  '!': [0.06, '0.03,1 0.03,0.3; (0.03,0.03,0.03,0.03,0,360)'], '?': [0.44, '(0.22,0.77,0.22,0.23,155,-60) 0.22,0.4 0.22,0.28; (0.22,0.03,0.03,0.03,0,360)'],
+  '&': [0.66, '~0.64,0 0.4,0.26 0.18,0.52 0.12,0.74 0.2,0.95 0.36,0.97 0.44,0.82 0.38,0.66 0.12,0.44 0.04,0.22 0.14,0.03 0.34,0 0.52,0.14 0.62,0.36'],
+  '<': [0.44, '0.44,0.64 0,0.385 0.44,0.13'], '>': [0.44, '0,0.64 0.44,0.385 0,0.13'],
+  '≈': [0.5, '~0,0.46 0.12,0.55 0.25,0.505 0.38,0.46 0.5,0.55; ~0,0.22 0.12,0.31 0.25,0.265 0.38,0.22 0.5,0.31'],
+  '√': [0.72, '0,0.44 0.09,0.5 0.24,0 0.5,1.06 0.74,1.06'],
+  '∞': [0.76, '~0.38,0.38 0.48,0.5 0.6,0.55 0.72,0.48 0.75,0.38 0.72,0.28 0.6,0.21 0.48,0.26 0.38,0.38 0.28,0.5 0.16,0.55 0.04,0.48 0.01,0.38 0.04,0.28 0.16,0.21 0.28,0.26 0.38,0.38'],
+  '′': [0.08, '0.1,1 0,0.72'], '✓': [0.64, '0,0.44 0.22,0.08 0.64,0.92'],
+  'α': [0.62, '(0.25,0.34,0.25,0.34,0,360); ~0.58,0.7 0.51,0.42 0.5,0.18 0.56,0.03 0.64,0'],
+  'β': [0.5, '0,-0.3 0,0.78 (0.2,0.78,0.2,0.22,180,-90) (0.22,0.28,0.28,0.28,90,-155)'],
+  'γ': [0.56, '~0,0.6 0.07,0.68 0.14,0.62 0.29,0.04; ~0.56,0.68 0.36,0.2 0.29,0.04 0.19,-0.12 0.21,-0.27 0.29,-0.31 0.37,-0.22 0.29,0.04'],
+  'δ': [0.54, '(0.27,0.3,0.27,0.3,0,360); ~0.3,0.6 0.1,0.78 0.12,0.94 0.32,1 0.48,0.94'],
+  'θ': [0.5, '(0.25,0.5,0.25,0.5,90,450); 0,0.5 0.5,0.5'], 'λ': [0.56, '0.02,1 0.14,0.98 0.56,0; 0.3,0.5 0,0'],
+  'μ': [0.6, '0,0.68 0,-0.3; 0,0.26 (0.26,0.26,0.26,0.26,180,360); 0.52,0.68 0.52,0.06 0.6,0'],
+  'π': [0.62, '-0.02,0.6 0.06,0.68 0.62,0.68; 0.16,0.68 0.14,0; 0.46,0.68 0.46,0.06 0.56,0.02'],
+  'ρ': [0.54, '0,-0.3 0,0.34 (0.27,0.34,0.27,0.34,180,-180)'], 'σ': [0.66, '0.66,0.68 0.3,0.68 (0.27,0.34,0.27,0.34,95,455)'],
+  'φ': [0.6, '(0.3,0.34,0.3,0.32,0,360); 0.3,0.92 0.3,-0.3'], 'ψ': [0.56, '0,0.68 0,0.36 (0.28,0.36,0.28,0.36,180,360) 0.56,0.68; 0.28,0.92 0.28,-0.3'],
+  'ω': [0.76, '~0.12,0.68 0.02,0.46 0.02,0.18 0.12,0.02 0.26,0 0.36,0.12 0.38,0.38; ~0.38,0.38 0.4,0.12 0.5,0 0.64,0.02 0.74,0.18 0.74,0.46 0.64,0.68'],
+  'Δ': [0.68, '0,0 0.34,1 0.68,0 0,0'], 'Σ': [0.58, '0.56,1 0,1 0.3,0.5 0,0 0.58,0'], 'Φ': [0.72, '(0.36,0.5,0.36,0.3,0,360); 0.36,1 0.36,0'],
+};
+const HAND_CHARS = Object.keys(HAND_SRC).join('');
+// parse a face: "(cx,cy,rx,ry,a0,a1,rot)" arcs may turn their ellipse by rot degrees. Strokes are
+// resampled to short steps so a hand's wobble bends them smoothly.
+function _parseFace(SRC) {
+  const F = {};
+  for (const ch in SRC) {
+    const [adv, src] = SRC[ch], st = [];
+    for (let s of src.split(';')) {
+      s = s.trim(); if (!s) continue;
+      const sm = s[0] === '~', pts = [];
+      (sm ? s.slice(1) : s).replace(/\(([^)]*)\)|(-?[\d.]+),(-?[\d.]+)/g, (m, arc, x, y) => {
+        if (arc) {
+          const [cx, cy, rx, ry, a0, a1, rt = 0] = arc.split(',').map(Number), n = Math.max(4, Math.ceil(Math.abs(a1 - a0) / 8)), cr = Math.cos(rt * Math.PI / 180), sr = Math.sin(rt * Math.PI / 180);
+          for (let i = 0; i <= n; i++) { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180, u = rx * Math.cos(a), v = ry * Math.sin(a); pts.push([cx + u * cr - v * sr, cy + u * sr + v * cr]); }
+        } else pts.push([+x, +y]);
+        return '';
+      });
+      const q = sm ? catmull(pts, 6) : pts, out = [q[0]];
+      for (let i = 1; i < q.length; i++) { const a = q[i - 1], b = q[i], n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.07); for (let k = 1; k <= n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]); }
+      st.push(out);
+    }
+    F[ch] = { adv, st };
+  }
+  return F;
+}
+const HAND = _parseFace(HAND_SRC);
+// The pencil hand is the same curator printing more freely: bowls a little oval and leaning, the
+// apertures open, a single-storey a, the o closing just past its start. Every advance is the hand's.
+// At 13 px a pencil line is wider than these letters' gaps, so the forms that could merge are kept
+// apart: the a's bowl meets a straight stem in corners, the e's eye is tall above its bar, and the
+// i's dot sits low and to the right, clear of an l before it (or 'li' reads as 'fi'). The figures
+// likewise: each stroke lands firm and eases off, so the 4 is an open 4 in two strokes (its arm is
+// not left to the weak end of one long stroke, where '40' read as '10'), the 1's flag is a short
+// tick, the 3 stays open on the left, and the 6 and 9 run their stems off the loop, clear of a 0.
+const HAND_PENCIL_SRC = {
+  a: [0.48, '0.46,0.54 (0.25,0.3,0.22,0.3,72,290,-6) 0.46,0.09; 0.47,0.68 0.47,0.05 0.54,0'], b: [0.54, '0,1 0,0; (0.28,0.34,0.25,0.34,155,-155,-8)'],
+  c: [0.52, '(0.28,0.34,0.26,0.34,52,306,-8)'], d: [0.54, '(0.26,0.34,0.24,0.34,25,338,-8); 0.54,1 0.54,0'],
+  e: [0.54, '0.05,0.32 0.52,0.355 (0.28,0.34,0.25,0.34,6,304,-8)'], g: [0.54, '(0.26,0.36,0.24,0.32,25,338,-8); 0.53,0.68 0.53,-0.06 (0.3,-0.06,0.23,0.23,0,-150)'],
+  o: [0.58, '(0.29,0.34,0.25,0.35,75,437,-9)'], p: [0.54, '0,0.68 0,-0.3; (0.28,0.34,0.25,0.34,155,-155,-8)'],
+  q: [0.54, '(0.26,0.34,0.24,0.34,25,338,-8); 0.54,0.68 0.54,-0.3'], s: [0.48, '(0.25,0.51,0.21,0.17,40,270,-4) (0.25,0.17,0.24,0.17,90,-140,-4)'],
+  i: [0, '0,0.68 0,0; (0.04,0.87,0.022,0.022,0,360)'], j: [0.22, '0.22,0.68 0.22,-0.1 (0.06,-0.1,0.16,0.2,0,-140); (0.26,0.87,0.022,0.022,0,360)'],
+  C: [0.6, '(0.34,0.5,0.33,0.5,48,312,-6)'], O: [0.76, '(0.38,0.5,0.36,0.5,80,442,-6)'], 0: [0.54, '(0.27,0.5,0.25,0.5,80,442,-6)'],
+  1: [0.28, '0.1,0.86 0.26,1 0.26,0'], 3: [0.54, '(0.26,0.76,0.22,0.24,135,-90); (0.26,0.27,0.27,0.27,90,-135)'],
+  4: [0.56, '0.18,1 0.02,0.32 0.6,0.32; 0.44,0.84 0.44,0'], 7: [0.52, '0,1 0.56,1 0.2,0'],
+  6: [0.54, '~0.46,0.98 0.24,0.84 0.09,0.56 (0.28,0.3,0.24,0.3,180,540)'], 9: [0.54, '~(0.26,0.7,0.24,0.3,0,360) 0.49,0.42 0.43,0.14 0.32,0'],
+};
+const HAND_P = _parseFace({ ...HAND_SRC, ...HAND_PENCIL_SRC });
+for (const ch in HAND_P) HAND_P[ch].adv = HAND[ch].adv; // the layout never moves
+// The typewriter: a monospaced slab-serif face in the spirit of a 1950s office machine, every glyph
+// on a cell TYPE_PITCH cap heights wide (x-height 0.7), drawn as the slug's centre-lines with small
+// slab serifs. The Greek and the maths come off a symbol ball.
+const TYPE_PITCH = 0.6, TYPE_W = 0.11, TYPE_DOT = r => `(${r[0]},${r[1]},0.045,0.045,0,360)`;
+const TYPE_SRC = {
+  A: '0.3,1 0.08,0; 0.3,1 0.52,0; 0.15,0.34 0.45,0.34; 0.02,0 0.16,0; 0.44,0 0.58,0; 0.18,1 0.3,1',
+  B: '0.1,1 0.1,0; 0.02,1 0.34,1 (0.34,0.765,0.17,0.235,90,-90) 0.1,0.53; 0.1,0.53 0.36,0.53 (0.36,0.265,0.19,0.265,90,-90) 0.02,0',
+  C: '(0.31,0.5,0.25,0.5,42,318); 0.5,0.66 0.5,0.88', D: '0.1,1 0.1,0; 0.02,1 0.28,1 (0.28,0.5,0.26,0.5,90,-90) 0.02,0',
+  E: '0.1,1 0.1,0; 0.02,1 0.52,1 0.52,0.82; 0.1,0.53 0.38,0.53; 0.38,0.63 0.38,0.43; 0.02,0 0.54,0 0.54,0.2',
+  F: '0.1,1 0.1,0; 0.02,1 0.52,1 0.52,0.82; 0.1,0.53 0.38,0.53; 0.38,0.63 0.38,0.43; 0.02,0 0.26,0',
+  G: '(0.31,0.5,0.25,0.5,42,350); 0.56,0.44 0.56,0.1; 0.38,0.44 0.6,0.44; 0.5,0.66 0.5,0.88',
+  H: '0.1,0 0.1,1; 0.5,0 0.5,1; 0.1,0.53 0.5,0.53; 0.02,1 0.18,1; 0.42,1 0.58,1; 0.02,0 0.18,0; 0.42,0 0.58,0',
+  I: '0.3,0 0.3,1; 0.12,1 0.48,1; 0.12,0 0.48,0', J: '0.44,1 0.44,0.28 (0.29,0.28,0.15,0.28,0,-180) 0.14,0.4; 0.28,1 0.58,1',
+  K: '0.1,0 0.1,1; 0.02,1 0.18,1; 0.02,0 0.18,0; 0.5,1 0.1,0.36; 0.22,0.52 0.5,0; 0.4,1 0.58,1; 0.42,0 0.58,0',
+  L: '0.12,1 0.12,0; 0.02,1 0.24,1; 0.02,0 0.54,0 0.54,0.22', M: '0.07,0 0.07,1 0.3,0.36 0.53,1 0.53,0; 0,1 0.07,1; 0.53,1 0.6,1; 0,0 0.14,0; 0.46,0 0.6,0',
+  N: '0.08,0 0.08,1 0.52,0 0.52,1; 0,1 0.08,1; 0.44,1 0.6,1; 0,0 0.16,0', O: '(0.3,0.5,0.25,0.5,90,450)',
+  P: '0.1,1 0.1,0; 0.02,1 0.34,1 (0.34,0.75,0.2,0.25,90,-90) 0.1,0.5; 0.02,0 0.26,0', Q: '(0.3,0.5,0.25,0.5,90,450); 0.2,-0.1 0.32,0 0.44,-0.08 0.54,-0.04',
+  R: '0.1,1 0.1,0; 0.02,1 0.34,1 (0.34,0.755,0.19,0.245,90,-90) 0.1,0.51; 0.3,0.51 0.5,0 0.58,0; 0.02,0 0.2,0',
+  S: '(0.3,0.75,0.21,0.25,28,270) (0.3,0.25,0.23,0.25,90,-152); 0.49,0.78 0.49,0.94; 0.1,0.24 0.1,0.06',
+  T: '0.06,0.8 0.06,1 0.54,1 0.54,0.8; 0.3,1 0.3,0; 0.18,0 0.42,0', U: '0.1,1 0.1,0.3 (0.3,0.3,0.2,0.3,180,360) 0.5,1; 0.02,1 0.18,1; 0.42,1 0.58,1',
+  V: '0.08,1 0.3,0 0.52,1; 0,1 0.16,1; 0.44,1 0.6,1', W: '0.05,1 0.16,0 0.3,0.62 0.44,0 0.55,1; 0,1 0.12,1; 0.48,1 0.6,1',
+  X: '0.08,1 0.52,0; 0.52,1 0.08,0; 0,1 0.18,1; 0.42,1 0.6,1; 0,0 0.18,0; 0.42,0 0.6,0', Y: '0.08,1 0.3,0.5 0.52,1; 0.3,0.5 0.3,0; 0,1 0.18,1; 0.42,1 0.6,1; 0.16,0 0.44,0',
+  Z: '0.08,0.8 0.08,1 0.52,1 0.08,0 0.54,0 0.54,0.2',
+  a: '0.12,0.6 (0.3,0.52,0.18,0.18,150,0) 0.48,0.04 0.58,0.02; 0.48,0.4 0.27,0.4 (0.27,0.2,0.18,0.2,90,290) 0.48,0.12',
+  b: '0.1,1 0.1,0; 0,1 0.1,1; (0.31,0.35,0.21,0.35,165,-165); 0,0 0.1,0', c: '(0.32,0.35,0.24,0.35,42,318); 0.52,0.48 0.52,0.66',
+  d: '(0.29,0.35,0.21,0.35,15,345); 0.5,1 0.5,0 0.6,0; 0.4,1 0.5,1', e: '0.08,0.37 0.54,0.37 (0.31,0.35,0.23,0.35,4,318)',
+  f: '0.52,0.92 (0.4,0.84,0.14,0.16,40,180) 0.26,0; 0.08,0.7 0.48,0.7; 0.1,0 0.44,0', g: '(0.29,0.38,0.21,0.32,15,345); 0.5,0.7 0.5,-0.1 (0.3,-0.1,0.2,0.2,0,-160); 0.5,0.7 0.6,0.7',
+  h: '0.1,1 0.1,0; 0,1 0.1,1; 0.1,0.45 (0.3,0.45,0.2,0.25,180,0) 0.5,0; 0,0 0.2,0; 0.4,0 0.6,0', i: '0.3,0.7 0.3,0; 0.14,0.7 0.3,0.7; 0.1,0 0.5,0; ' + TYPE_DOT([0.3, 0.95]),
+  j: '0.4,0.7 0.4,-0.12 (0.26,-0.12,0.14,0.18,0,-150); 0.2,0.7 0.4,0.7; ' + TYPE_DOT([0.4, 0.95]),
+  k: '0.12,1 0.12,0; 0.02,1 0.12,1; 0.5,0.7 0.12,0.28; 0.26,0.42 0.52,0; 0.4,0.7 0.58,0.7; 0.02,0 0.22,0; 0.42,0 0.6,0', l: '0.3,1 0.3,0; 0.14,1 0.3,1; 0.1,0 0.5,0',
+  m: '0.06,0.7 0.06,0; 0.06,0.48 (0.18,0.5,0.12,0.2,180,0) 0.3,0; 0.3,0.5 (0.42,0.5,0.12,0.2,180,0) 0.54,0; 0,0.7 0.06,0.7; 0,0 0.12,0; 0.48,0 0.6,0',
+  n: '0.1,0.7 0.1,0; 0.1,0.45 (0.3,0.45,0.2,0.25,180,0) 0.5,0; 0,0.7 0.1,0.7; 0,0 0.2,0; 0.4,0 0.6,0', o: '(0.3,0.35,0.23,0.35,90,450)',
+  p: '0.1,0.7 0.1,-0.3; 0,0.7 0.1,0.7; (0.31,0.35,0.21,0.35,165,-165); 0,-0.3 0.24,-0.3', q: '(0.29,0.35,0.21,0.35,15,345); 0.5,0.7 0.5,-0.3; 0.5,0.7 0.6,0.7; 0.36,-0.3 0.6,-0.3',
+  r: '0.14,0.7 0.14,0; 0.14,0.42 (0.36,0.43,0.22,0.27,180,50); 0.04,0.7 0.14,0.7; 0.04,0 0.4,0', s: '(0.3,0.525,0.19,0.175,30,270) (0.3,0.175,0.21,0.175,90,-152); 0.47,0.56 0.47,0.7; 0.12,0.16 0.12,0.02',
+  t: '0.22,0.94 0.22,0.14 (0.36,0.14,0.14,0.14,180,300); 0.06,0.7 0.48,0.7', u: '0.1,0.7 0.1,0.25 (0.3,0.25,0.2,0.25,180,360); 0.5,0.7 0.5,0 0.6,0; 0,0.7 0.1,0.7; 0.4,0.7 0.5,0.7',
+  v: '0.08,0.7 0.3,0 0.52,0.7; 0,0.7 0.16,0.7; 0.44,0.7 0.6,0.7', w: '0.05,0.7 0.16,0 0.3,0.48 0.44,0 0.55,0.7; 0,0.7 0.11,0.7; 0.49,0.7 0.6,0.7',
+  x: '0.08,0.7 0.52,0; 0.52,0.7 0.08,0; 0,0.7 0.18,0.7; 0.42,0.7 0.6,0.7; 0,0 0.18,0; 0.42,0 0.6,0', y: '0.08,0.7 0.31,0.06; 0.52,0.7 0.22,-0.3; 0,0.7 0.16,0.7; 0.44,0.7 0.6,0.7; 0.08,-0.3 0.34,-0.3',
+  z: '0.1,0.54 0.1,0.7 0.5,0.7 0.1,0 0.52,0 0.52,0.16',
+  0: '(0.3,0.5,0.22,0.5,90,450)', 1: '0.14,0.8 0.3,1 0.3,0; 0.12,0 0.48,0', 2: '(0.3,0.73,0.21,0.27,160,-35) 0.1,0 0.52,0 0.52,0.12',
+  3: '(0.29,0.76,0.2,0.24,155,-90); (0.3,0.27,0.23,0.27,90,-155)', 4: '0.4,0 0.4,1 0.06,0.3 0.56,0.3; 0.26,0 0.54,0',
+  5: '0.5,1 0.14,1 0.12,0.57 (0.3,0.31,0.22,0.31,125,-150)', 6: '(0.34,0.52,0.22,0.48,55,180) 0.12,0.3 (0.31,0.3,0.19,0.3,180,540)',
+  7: '0.08,0.82 0.08,1 0.52,1 0.24,0', 8: '(0.3,0.765,0.18,0.235,-90,270); (0.3,0.27,0.22,0.27,90,450)', 9: '(0.29,0.7,0.19,0.3,0,360) 0.48,0.48 (0.26,0.48,0.22,0.48,0,-125)',
+  ' ': '', '.': TYPE_DOT([0.3, 0.04]), ',': TYPE_DOT([0.31, 0.05]) + '; 0.33,0.05 0.31,-0.04 0.25,-0.15', ':': TYPE_DOT([0.3, 0.04]) + '; ' + TYPE_DOT([0.3, 0.5]),
+  ';': TYPE_DOT([0.31, 0.5]) + '; ' + TYPE_DOT([0.31, 0.05]) + '; 0.33,0.05 0.31,-0.04 0.25,-0.15', "'": '0.3,1 0.3,0.74', '"': '0.22,1 0.22,0.74; 0.38,1 0.38,0.74',
+  '(': '(0.52,0.4,0.3,0.66,118,242)', ')': '(0.08,0.4,0.3,0.66,62,-62)', '[': '0.42,1.04 0.24,1.04 0.24,-0.22 0.42,-0.22', ']': '0.18,1.04 0.36,1.04 0.36,-0.22 0.18,-0.22',
+  '-': '0.12,0.38 0.48,0.38', '–': '0.03,0.38 0.57,0.38', '—': '0,0.38 0.6,0.38', '=': '0.08,0.5 0.52,0.5; 0.08,0.27 0.52,0.27',
+  '+': '0.08,0.385 0.52,0.385; 0.3,0.16 0.3,0.61', '−': '0.08,0.385 0.52,0.385', '×': '0.12,0.18 0.48,0.58; 0.48,0.18 0.12,0.58', '·': TYPE_DOT([0.3, 0.38]),
+  '/': '0.1,-0.1 0.5,1.06', '°': '(0.3,0.86,0.11,0.12,0,360)', '%': '(0.17,0.8,0.1,0.17,0,360); 0.52,0.98 0.08,0.02; (0.43,0.2,0.1,0.17,0,360)',
+  '^': '0.12,0.66 0.3,0.98 0.48,0.66', '~': '~0.06,0.34 0.17,0.43 0.3,0.38 0.43,0.33 0.54,0.42', '!': '0.3,1 0.3,0.3; ' + TYPE_DOT([0.3, 0.04]),
+  '?': '(0.3,0.77,0.2,0.23,155,-60) 0.3,0.4 0.3,0.28; ' + TYPE_DOT([0.3, 0.04]), '_': '0,-0.17 0.6,-0.17',
+  '&': '~0.56,0 0.36,0.26 0.18,0.52 0.14,0.74 0.22,0.95 0.34,0.97 0.42,0.82 0.36,0.66 0.14,0.44 0.08,0.22 0.16,0.03 0.32,0 0.46,0.14 0.54,0.36',
+  '<': '0.5,0.64 0.1,0.385 0.5,0.13', '>': '0.1,0.64 0.5,0.385 0.1,0.13',
+  '≈': '~0.06,0.47 0.17,0.56 0.3,0.51 0.43,0.46 0.54,0.55; ~0.06,0.23 0.17,0.32 0.3,0.27 0.43,0.22 0.54,0.31', '√': '0.04,0.44 0.12,0.5 0.26,0 0.46,1.04 0.6,1.04',
+  '∞': '~0.3,0.38 0.37,0.48 0.45,0.52 0.53,0.47 0.55,0.38 0.53,0.29 0.45,0.24 0.37,0.28 0.3,0.38 0.23,0.48 0.15,0.52 0.07,0.47 0.05,0.38 0.07,0.29 0.15,0.24 0.23,0.28 0.3,0.38',
+  '′': '0.34,1 0.26,0.74', '✓': '0.08,0.44 0.26,0.08 0.56,0.9',
+  'α': '(0.27,0.35,0.2,0.35,0,360); ~0.54,0.7 0.48,0.42 0.47,0.18 0.52,0.03 0.6,0', 'β': '0.12,-0.3 0.12,0.78 (0.29,0.78,0.17,0.22,180,-90) (0.31,0.28,0.22,0.28,90,-155)',
+  'γ': '~0.06,0.62 0.12,0.7 0.18,0.64 0.3,0.04; ~0.54,0.7 0.36,0.2 0.3,0.04 0.22,-0.12 0.24,-0.27 0.31,-0.31 0.38,-0.22 0.3,0.04',
+  'δ': '(0.3,0.3,0.22,0.3,0,360); ~0.32,0.6 0.14,0.78 0.16,0.94 0.34,1 0.48,0.94', 'θ': '(0.3,0.5,0.21,0.5,90,450); 0.09,0.5 0.51,0.5',
+  'λ': '0.08,1 0.18,0.98 0.54,0; 0.32,0.5 0.06,0', 'μ': '0.1,0.7 0.1,-0.3; 0.1,0.26 (0.3,0.26,0.2,0.26,180,360); 0.5,0.7 0.5,0.06 0.58,0',
+  'π': '0.04,0.62 0.1,0.7 0.58,0.7; 0.2,0.7 0.18,0; 0.44,0.7 0.44,0.06 0.54,0.02', 'ρ': '0.1,-0.3 0.1,0.35 (0.31,0.35,0.21,0.35,180,-180)',
+  'σ': '0.58,0.7 0.32,0.7 (0.29,0.35,0.21,0.35,95,455)', 'φ': '(0.3,0.36,0.24,0.32,0,360); 0.3,0.94 0.3,-0.3',
+  'ψ': '0.06,0.7 0.06,0.38 (0.3,0.38,0.24,0.38,180,360) 0.54,0.7; 0.3,0.94 0.3,-0.3',
+  'ω': '~0.12,0.7 0.04,0.46 0.04,0.18 0.12,0.02 0.22,0 0.29,0.12 0.3,0.38; ~0.3,0.38 0.31,0.12 0.38,0 0.48,0.02 0.56,0.18 0.56,0.46 0.48,0.7',
+  'Δ': '0.04,0 0.3,1 0.56,0 0.04,0', 'Σ': '0.54,0.82 0.54,1 0.06,1 0.32,0.5 0.06,0 0.56,0 0.56,0.18', 'Φ': '(0.3,0.5,0.26,0.3,0,360); 0.3,1 0.3,0; 0.18,1 0.42,1; 0.18,0 0.42,0',
+};
+const TYPE = _parseFace(Object.fromEntries(Object.entries(TYPE_SRC).map(([k, v]) => [k, [TYPE_PITCH, v]])));
+const HAND_GAP = 0.2, HAND_SUP = 0.62, HAND_SLANT = Math.tan(16 * Math.PI / 180), HAND_LEAN = Math.tan(1.5 * Math.PI / 180); // italic slant; a roman hand's own lean
+// Inline markup: ^{...} a raised superscript at 0.62 size, _{...} a subscript, *{...} italic.
+function _marks(str, italic) {
+  const out = [], st = [{ s: 1, dy: 0, it: !!italic }];
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i], top = st[st.length - 1];
+    if ((c === '^' || c === '_' || c === '*') && str[i + 1] === '{') { st.push(c === '*' ? { ...top, it: true } : { s: top.s * HAND_SUP, dy: top.dy + (c === '^' ? 0.42 : -0.16) * top.s, it: top.it }); i++; continue; }
+    if (c === '}' && st.length > 1) { st.pop(); continue; }
+    out.push({ ch: c, s: top.s, dy: top.dy, it: top.it });
+  }
+  return out;
+}
+// width in px of str set at cap height size (opts: face 'hand' | 'type', italic, tracking)
+function measureText(str, size, o = {}) {
+  const g = _marks(str, o.italic); let x = 0;
+  if (o.face === 'type') return g.length * TYPE_PITCH * size + Math.max(0, g.length - 1) * (o.tracking || 0);
+  g.forEach((q, i) => { const gl = HAND[q.ch]; x += ((gl ? gl.adv : 0.5) + (i < g.length - 1 ? HAND_GAP : 0)) * size * q.s + (i < g.length - 1 ? (o.tracking || 0) : 0); });
+  return x;
+}
+// Lay out str as pen strokes in the current coordinates. Every letter is made a little off by its
+// own seed, as a person's are: about 3% in size, a degree or so of turn and lean, uneven spacing.
+// The baseline wanders across the line and the whole line runs a hair up- or downhill.
+function _letterStrokes(str, x, y, o) {
+  const size = o.size || 13, seed = o.seed || ('t:' + str), g = _marks(str, o.italic), n = nzc('hand:wobble'), out = [], F = o._face || HAND;
+  let px = x - (o.align === 'center' ? 0.5 : o.align === 'right' ? 1 : 0) * measureText(str, size, o);
+  const drift = (hash(seed) % 997) * 0.31, wob = o.wobble ?? 1, x0 = px, hill = (rngFor(seed + ':line')() - 0.5) * 0.009 * wob;
+  g.forEach((q, i) => {
+    const gl = F[q.ch] || { adv: 0.5, st: [] }, s = size * q.s, r = rngFor(seed + ':' + i + q.ch);
+    const k = 1 + (r() - 0.5) * 0.06 * wob, sx = k * (1 + (r() - 0.5) * 0.02 * wob), sy = k * (1 + (r() - 0.5) * 0.02 * wob);
+    const rot = (r() - 0.5) * 0.05 * wob, off = r() * 60, sp = (r() - 0.5) * 0.045 * wob, lean = (q.it ? HAND_SLANT : HAND_LEAN) + (r() - 0.5) * 0.035 * wob;
+    const bx = (r() - 0.5) * 0.03 * wob, by = ((r() - 0.5) * 0.024 + 0.04 * n(px / size * 0.12 + drift, 0.5)) * wob;
+    const nib = (r() - 0.5) * 0.1 * wob, load = 0.9 + 0.1 * r(); // the pen turns a little in the fingers; the ink runs a little thinner
+    const cx = gl.adv / 2, cs = Math.cos(rot), sn = Math.sin(rot), base = y - q.dy * size - (px - x0) * hill;
+    for (const st of gl.st) {
+      const jx = (r() - 0.5) * 0.026 * wob, jy = (r() - 0.5) * 0.02 * wob; // each stroke set down on its own, so joins overshoot or fall a hair short
+      const pts = st.map(([gx, gy]) => {
+        let u = gx * sx + jx + 0.024 * wob * n(gx * 1.9 + off, gy * 1.9), v = gy * sy + jy + 0.024 * wob * n(gx * 1.9, gy * 1.9 + off + 31);
+        const du = u - cx, dv = v - 0.35; u = cx + du * cs - dv * sn; v = 0.35 + du * sn + dv * cs;
+        return [px + (u + bx + v * lean) * s, base - (v + by) * s];
+      });
+      let L = 0; for (let k = 1; k < pts.length; k++) L += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+      out.push({ pts, L: Math.max(L, 0.3), s, nib, load });
+    }
+    px += (gl.adv + HAND_GAP + sp) * s + (o.tracking || 0); // a hand never spaces quite evenly
+  });
+  return out;
+}
+// cut a polyline at fraction f of its length
+function _cut(pts, f) {
+  if (f >= 1) return pts; let L = 0; for (let k = 1; k < pts.length; k++) L += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+  const lim = L * f, out = [pts[0]]; let acc = 0;
+  for (let k = 1; k < pts.length; k++) {
+    const a = pts[k - 1], b = pts[k], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (acc + l >= lim) { const t = l ? (lim - acc) / l : 0; out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); break; }
+    out.push(b); acc += l;
+  }
+  return out;
+}
+// India ink from a fine, slightly broad nib held at a fixed angle: the stroke is the swept nib, so
+// it thickens and thins with direction (about 1.8 : 1), lands a touch heavier, has angled ends, and
+// is near-black with a hint of blue. The edge follows the board's fibres and a faint bleed lies under it.
+const INK = hex('#1c1b22'), INK_SHEEN = [76, 78, 94], NIB_ANGLE = 38 * Math.PI / 180, NIB_RATIO = 1.8;
+function _ink(ctx, list, o) {
+  const m = ctx.getTransform(), rot = Math.atan2(m.b, m.a);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const s of list) { const r = 0.09 * s.s + 1.5; for (const p of s.pts) { x0 = Math.min(x0, p[0] - r); y0 = Math.min(y0, p[1] - r); x1 = Math.max(x1, p[0] + r); y1 = Math.max(y1, p[1] + r); } }
+  if (x1 < x0) return;
+  const bx = Math.floor(x0) - 2, by = Math.floor(y0) - 2, bw = Math.ceil(x1) + 3 - bx, bh = Math.ceil(y1) + 3 - by, M = new Float32Array(bw * bh), LD = new Float32Array(bw * bh);
+  for (const st of list) {
+    const A = Math.max(0.62, 0.0625 * st.s), B = Math.max(0.42, A / NIB_RATIO), ph = -NIB_ANGLE + rot + st.nib, cu = Math.cos(ph), su = Math.sin(ph);
+    const Q = _resample(st.pts, 0.35); let acc = 0;
+    for (let j = 0; j < Q.length; j++) {
+      if (j) acc += Math.hypot(Q[j][0] - Q[j - 1][0], Q[j][1] - Q[j - 1][1]);
+      const land = 1 + 0.2 * (1 - smooth(0, 0.14 * st.s, acc)), a = A * land, b = B * land, R = a + 1, cx = Q[j][0], cy = Q[j][1];
+      const xa = Math.max(0, Math.floor(cx - R) - bx), xb = Math.min(bw - 1, Math.ceil(cx + R) - bx), ya = Math.max(0, Math.floor(cy - R) - by), yb = Math.min(bh - 1, Math.ceil(cy + R) - by);
+      for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
+        const dx = x + bx + 0.5 - cx, dy = y + by + 0.5 - cy, u = dx * cu + dy * su, v = dy * cu - dx * su;
+        const f = Math.hypot(u / a, v / b), gr = Math.hypot(u / (a * a), v / (b * b)), d = f > 1e-6 ? (f - 1) * f / gr : -b; // distance to the nib's edge
+        const cov = clamp(0.5 - d), k = y * bw + x; if (cov > M[k]) { M[k] = cov; LD[k] = st.load; }
+      }
+    }
+  }
+  const Bl = new Float32Array(bw * bh), Bt = new Float32Array(bw * bh); // the bleed: the ink spread a pixel or so into the board
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { let s = 0; for (let i = -1; i <= 1; i++) s += M[y * bw + clamp(x + i, 0, bw - 1)]; Bt[y * bw + x] = s / 3; }
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { let s = 0; for (let j = -1; j <= 1; j++) s += Bt[clamp(y + j, 0, bh - 1) * bw + x]; Bl[y * bw + x] = s / 3; }
+  _bakeTooth(_TSEED || 'card');
+  const img = new ImageData(bw, bh), D = img.data, T = _TOOTH, ns = nzc('ink:sheen');
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const i = y * bw + x, a = M[i], b = Bl[i]; if (a + b < 0.01) continue;
+    const X = x + bx, Y = y + by, t = X < 0 || Y < 0 || X >= W || Y >= H ? 0.5 : T[Y * W + X];
+    const core = a > 0.97 ? 1 : a * clamp(0.8 + 0.5 * (t - 0.5)), bleed = b * 0.22 * (0.3 + 0.7 * t), al = core + bleed * (1 - core);
+    const col = litAt(mix(INK, INK_SHEEN, 0.14 * core * (0.5 + 0.5 * ns(X * 0.05, Y * 0.05)) + (1 - (LD[i] || 1)) * 1.4), X, Y), k = i * 4; // thinner ink dries a little greyer
+    D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = al * 255;
+  }
+  const s = _scratch(bw, bh); s.getContext('2d').putImageData(img, 0, 0);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = o.alpha ?? 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(s, 0, 0, bw, bh, bx, by, bw, bh); ctx.restore();
+}
+// The typewriter at work: each character is one strike of its slug through the ribbon, a little
+// harder or softer, a hair off the line and off square, and the odd key prints heavier. A raised
+// character is typed full size on a half-turned platen. Italic spans are underlined after typing,
+// a row of underscore strikes, which is how a typed label marks a binomial.
+function _typeStrikes(str, x, y, o, wd) {
+  const size = o.size || 13, seed = o.seed || ('t:' + str), g = _marks(str, o.italic), out = [], cw = TYPE_PITCH * size + (o.tracking || 0);
+  const x0 = x - (o.align === 'center' ? 0.5 : o.align === 'right' ? 1 : 0) * wd;
+  const strike = (ch, cx, base, key) => {
+    const gl = TYPE[ch]; if (!gl || !gl.st.length) return;
+    const r = rngFor(seed + ':' + key), dx = (r() - 0.5) * 0.04, dy = (r() - 0.5) * 0.07, rot = (r() - 0.5) * 0.04, k = r(), heavy = k < 0.07, cs = Math.cos(rot), sn = Math.sin(rot);
+    // the odd key prints heavier, the odd one is struck light
+    out.push({ heavy, dens: heavy ? 1 : k > 0.93 ? 0.62 : 0.8 + 0.2 * r(), ga: r() * Math.PI * 2, gs: (r() - 0.5) * 0.7, ph: r() * 40, c: [cx + 0.3 * size, base - 0.35 * size],
+      st: gl.st.map(s => s.map(([gx, gy]) => { const u = gx - 0.3, v = gy - 0.35; return [cx + (0.3 + u * cs - v * sn + dx) * size, base - (0.35 + u * sn + v * cs + dy) * size]; })) });
+  };
+  let run = null;
+  const flush = () => {
+    if (!run) return; let a = run.a, b = run.b; while (a <= b && g[a].ch === ' ') a++; while (b >= a && g[b].ch === ' ') b--;
+    for (let i = a; i <= b; i++) strike('_', x0 + i * cw, y, 'u' + i);
+    run = null;
+  };
+  g.forEach((q, i) => { strike(q.ch, x0 + i * cw, y - q.dy * size, i + q.ch); if (q.it) { if (run) run.b = i; else run = { a: i, b: i }; } else flush(); });
+  flush();
+  return out;
+}
+// Ribbon ink: a strike prints the slug's face through an inked fabric ribbon, so the ink lies in a
+// fine weave, denser where the key was struck harder and on the side of the slug that met the
+// platen first. Overlapping strikes (an underline through a descender) add their ink.
+const RIBBON = [31, 29, 33];
+function _ribbon(ctx, S, size, prog, o) {
+  const cnt = Math.floor(clamp(prog) * S.length + 1e-6); if (!cnt) return;
+  const m = ctx.getTransform(), sc = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1, dev = p => [m.a * p[0] + m.c * p[1] + m.e, m.b * p[0] + m.d * p[1] + m.f];
+  const L = S.slice(0, cnt).map(s => ({ ...s, st: s.st.map(t => t.map(dev)), c: dev(s.c) })), h0 = TYPE_W * size * sc / 2, pad = h0 * 1.3 + 2;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const s of L) for (const t of s.st) for (const p of t) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+  const bx = Math.floor(x0 - pad), by = Math.floor(y0 - pad), bw = Math.ceil(x1 + pad) - bx + 1, bh = Math.ceil(y1 + pad) - by + 1, T = new Float32Array(bw * bh).fill(1), nf = nzc('ribbon');
+  for (const s of L) {
+    const h = h0 * (s.heavy ? 1.2 : 1) * (0.9 + 0.12 * s.dens), R = h + 0.8;
+    let sx0 = 1e9, sy0 = 1e9, sx1 = -1e9, sy1 = -1e9;
+    for (const t of s.st) for (const p of t) { sx0 = Math.min(sx0, p[0]); sy0 = Math.min(sy0, p[1]); sx1 = Math.max(sx1, p[0]); sy1 = Math.max(sy1, p[1]); }
+    const lx = Math.max(0, Math.floor(sx0 - R) - bx), ly = Math.max(0, Math.floor(sy0 - R) - by), lw = Math.min(bw - 1, Math.ceil(sx1 + R) - bx) - lx + 1, lh = Math.min(bh - 1, Math.ceil(sy1 + R) - by) - ly + 1;
+    if (lw <= 0 || lh <= 0) continue;
+    const Lb = new Float32Array(lw * lh);
+    for (const t of s.st) for (let i = 0; i < Math.max(1, t.length - 1); i++) {
+      const a = t[i], b = t[Math.min(i + 1, t.length - 1)], vx = b[0] - a[0], vy = b[1] - a[1], vv = vx * vx + vy * vy || 1e-9;
+      const xa = Math.max(0, Math.floor(Math.min(a[0], b[0]) - R) - bx - lx), xb = Math.min(lw - 1, Math.ceil(Math.max(a[0], b[0]) + R) - bx - lx);
+      const ya = Math.max(0, Math.floor(Math.min(a[1], b[1]) - R) - by - ly), yb = Math.min(lh - 1, Math.ceil(Math.max(a[1], b[1]) + R) - by - ly);
+      for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
+        const px = x + lx + bx + 0.5 - a[0], py = y + ly + by + 0.5 - a[1], u = clamp((px * vx + py * vy) / vv), d = Math.hypot(px - vx * u, py - vy * u);
+        const c = 1 - smooth(h - 0.55, h + 0.55, d), k = y * lw + x; if (c > Lb[k]) Lb[k] = c;
+      }
+    }
+    const gx = Math.cos(s.ga), gy = Math.sin(s.ga), span = size * sc;
+    for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) {
+      const c = Lb[y * lw + x]; if (c <= 0) continue;
+      const X = x + lx + bx, Y = y + ly + by, dl = s.dens * (1 + s.gs * ((X - s.c[0]) * gx + (Y - s.c[1]) * gy) / span);
+      const fab = 0.86 + 0.1 * Math.sin(2.3 * (X + Y) + s.ph) * Math.sin(2.3 * (X - Y) + s.ph * 1.7) + 0.12 * nf(X * 0.85 + s.ph, Y * 0.85);
+      T[(y + ly) * bw + x + lx] *= 1 - clamp(c * dl * fab);
+    }
+  }
+  _bakeTooth(_TSEED || 'card');
+  const img = new ImageData(bw, bh), D = img.data, TT = _TOOTH;
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    const i = y * bw + x, a = 1 - T[i]; if (a < 0.004) continue;
+    const X = x + bx, Y = y + by, t = X < 0 || Y < 0 || X >= W || Y >= H ? 0.5 : TT[Y * W + X], col = litAt(RIBBON, X, Y), k = i * 4;
+    D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = 255 * a * 0.95 * clamp(0.88 + 0.24 * (t - 0.5));
+  }
+  const sc2 = _scratch(bw, bh); sc2.getContext('2d').putImageData(img, 0, 0);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = o.alpha ?? 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(sc2, 0, 0, bw, bh, bx, by, bw, bh); ctx.restore();
+}
+// letterText(ctx, str, x, y, opts): letters str with its baseline at y. opts: size (cap height px,
+// 13), medium ('ink' | 'pencil' | 'white'; pencil turns white on the black card), italic, align
+// ('left' | 'center' | 'right'), prog (0..1, the pen writes left to right), seed, tracking (px),
+// tone (pencil darkness), wobble (1; 1.25 for pencil), face ('hand' | 'type'). Returns the width.
+function letterText(ctx, str, x, y, o = {}) {
+  const size = o.size || 13, med = o.medium || 'ink', prog = clamp(o.prog ?? 1), wd = measureText(str, size, o);
+  if (prog <= 0 || !str) return wd;
+  if (o.face === 'type') { _ribbon(ctx, _typeStrikes(str, x, y, o, wd), size, prog, o); return wd; }
+  const S = _letterStrokes(str, x, y, med === 'ink' ? o : { wobble: 1.25, ...o, _face: HAND_P }), m = ctx.getTransform(), sc = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1;
+  let tot = 0; for (const s of S) tot += s.L;
+  let lim = prog * tot; const list = [];
+  for (const s of S) { if (lim <= 0) break; const f = Math.min(1, lim / s.L); lim -= s.L; list.push({ pts: _devPts(ctx, _cut(s.pts, f)).P, s: s.s * sc, L: s.L * sc, nib: s.nib, load: s.load }); }
+  if (med === 'ink') _ink(ctx, list, o);
+  else { // a person printing with a pencil: each stroke lands firm and eases off, each its own weight
+    const seed = o.seed || ('t:' + str), tone = o.tone ?? 1;
+    const trs = list.map((s, i) => _trace(s.pts, { tone, tremor: 0.08, taper: 0.25, print: s.L >= 1.2, seed: seed + ':' + i }, sc, Math.max(1.45, 0.125 * s.s) * (s.L < 1.2 ? 1.25 : 1)));
+    _graphite(ctx, trs, { white: med === 'white' ? true : undefined, alpha: o.alpha });
+  }
+  return wd;
+}
+
+// ---------- the label ----------
+// A slip of buff label stock cut from a sheet with a knife along a rule: crisp edges a hair off
+// straight and square, fibres and formation in the paper, a faint sheen. It lies flat on the mount,
+// so its shadow is a crisp hairline below and right with only a breath of ambient shade beyond it.
+const _STOCK = {}, _SP = 4; // the slip sits _SP px inside its canvas so its cut can wander
+function _labelStock(w, h, seed) {
+  const key = w + 'x' + h + ':' + seed; if (_STOCK[key]) return _STOCK[key];
+  const cw = w + 2 * _SP, ch = h + 2 * _SP, r = rngFor(seed + ':cut'), rr = rngFor(seed + ':s3');
+  const C = [[0, 0], [w, 0], [w, h], [0, h]].map(([x, y]) => [x + _SP + (r() - 0.5) * 1.3, y + _SP + (r() - 0.5) * 1.3]); // corners, each a hair off square
+  const bow = [0, 1, 2, 3].map(() => (r() - 0.5) * 0.9), lit = [1, 0, 0, 1]; // each edge bowed a little; top and left face the window
+  const E = C.map((A, e) => { const B = C[(e + 1) % 4], ex = B[0] - A[0], ey = B[1] - A[1], l = Math.hypot(ex, ey); return { A, ex, ey, ll: l * l, nx: ey / l, ny: -ex / l }; });
+  const F = mk(cw, ch), fc = F.getContext('2d'); fc.lineCap = 'round'; fc.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < cw * ch / 70; i++) { // fibres in the sheet: most pale, a few tan
+    const x = r() * cw, y = r() * ch, a = r() * Math.PI, L = 3 + r() * r() * 16, bend = (r() - 0.5) * L * 0.5;
+    fc.strokeStyle = r() < 0.8 ? `rgba(255,0,0,${(0.25 + r() * 0.5).toFixed(2)})` : `rgba(0,0,255,${(0.2 + r() * 0.4).toFixed(2)})`; fc.lineWidth = 0.4 + r() * 0.5;
+    fc.beginPath(); fc.moveTo(x, y); fc.quadraticCurveTo(x + Math.cos(a) * L / 2 - Math.sin(a) * bend, y + Math.sin(a) * L / 2 + Math.cos(a) * bend, x + Math.cos(a) * L, y + Math.sin(a) * L); fc.stroke();
+  }
+  const fd = fc.getImageData(0, 0, cw, ch).data, c = mk(cw, ch), g = c.getContext('2d'), img = g.createImageData(cw, ch), D = img.data;
+  const n1 = nzc(seed + ':s1'), n2 = nzc(seed + ':s2'), ne = nzc(seed + ':edge'), Fp = (x, y) => fd[(clamp(y, 0, ch - 1) * cw + clamp(x, 0, cw - 1)) * 4] / 255;
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const px = x + 0.5, py = y + 0.5; let d = -1e9, ed = 0;
+    for (let e = 0; e < 4; e++) { const q = E[e], t = clamp(((px - q.A[0]) * q.ex + (py - q.A[1]) * q.ey) / q.ll), de = (px - q.A[0]) * q.nx + (py - q.A[1]) * q.ny - bow[e] * 4 * t * (1 - t); if (de > d) { d = de; ed = e; } }
+    d += 0.2 * ne(x * 0.9, y * 0.9); // the knife tears a fibre here and there
+    const al = clamp(0.5 - d); if (al <= 0) continue;
+    const k = (y * cw + x) * 4, fp = fd[k] / 255, ft = fd[k + 2] / 255;
+    // a buff stock, warmer than either board, so the slip reads as its own material from across the room
+    let col = mix(hex('#f2e5ca'), hex('#e3d1ae'), clamp(0.42 + fbm(n1, x * 0.07, y * 0.07, 3) * 0.6 + n2(x * 0.5, y * 0.5) * 0.1)); // formation, a little cloudy
+    col = mix(mix(col, hex('#f8efda'), fp * 0.42), hex('#bfa77e'), ft * 0.3);
+    const sheen = 0.035 * Math.exp(-Math.pow(((px / cw) * 0.6 + (py / ch) * 0.8 - 0.38) / 0.42, 2)); // the window's faint sheen on the stock
+    col = shade(col, 1 + sheen + (Fp(x + 1, y + 1) - Fp(x - 1, y - 1)) * 0.05 + (rr() - 0.5) * 0.025);
+    if (d > -1.4) col = shade(col, lit[ed] ? 1.06 : 0.84); // the cut edge: a bright lip toward the window, a dull one away
+    D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = al * 255;
+  }
+  g.putImageData(img, 0, 0);
+  return (_STOCK[key] = c);
+}
+// labelCard(ctx, opts): x, y (top-left), w (auto), lines [{text, size (15 if italic, else 12.5),
+// italic, align}], prog (0..1 across all lines, line by line), rot (radians), pad (12), lead (1.7),
+// lift (px, height of its faint ambient shade), seed, face ('type', the default: typed in one size,
+// typeSize 13, binomials underlined; or 'hand', lettered in ink). Returns its bbox {x, y, w, h} before rotation.
+function labelCard(ctx, o = {}) {
+  const pad = o.pad ?? 12, lead = o.lead ?? 1.7, seed = o.seed || 'label';
+  const L = (o.lines || []).map(l => ({ ...l, size: l.size || (l.italic || l.text.includes('*{') ? 15 : 12.5) })); // the binomial line a size up
+  let wMax = 0, yb = pad;
+  L.forEach((l, i) => { l.w = measureText(l.text, l.size, l); wMax = Math.max(wMax, l.w); yb += i ? l.size * lead : l.size * 1.05; l.y = yb; });
+  const w = Math.round(o.w ?? wMax + 2 * pad + 6), h = Math.round(yb + (L.length ? L[L.length - 1].size * 0.42 : 0) + pad);
+  const stock = _labelStock(w, h, seed), tot = L.reduce((a, l) => a + l.w, 0) || 1, P = clamp(o.prog ?? 1) * tot;
+  ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rot || 0);
+  castShadow(ctx, stock, -_SP, -_SP, o.lift ?? 1.2 * MM, { alpha: 0.12, blur: 3 }); // a breath of ambient shade
+  castShadow(ctx, stock, -_SP, -_SP, 0.5 * MM, { alpha: 0.5, blur: 0 }); // the contact line where the slip lies on the board: a crisp hairline below and right
+  ctx.drawImage(stock, -_SP, -_SP);
+  let acc = 0;
+  const ax = l => l.align === 'center' ? w / 2 : l.align === 'right' ? w - pad : pad;
+  if ((o.face ?? 'type') === 'type') {
+    // one machine, one size: the type is set smaller only if the slip is too narrow for its longest line
+    const n = L.map(l => _marks(l.text).length), ts = Math.min(o.typeSize ?? 13, (w - 2 * pad) / (Math.max(1, ...n) * TYPE_PITCH));
+    const yA = pad + ts * 1.05, yB = L.length ? L[L.length - 1].y : yA, tn = n.reduce((a, b) => a + b, 0) || 1, Pn = clamp(o.prog ?? 1) * tn;
+    L.forEach((l, i) => {
+      const f = clamp((Pn - acc) / Math.max(1, n[i])); acc += n[i]; if (f <= 0) return;
+      letterText(ctx, l.text, ax(l), L.length > 1 ? lerp(yA, yB, i / (L.length - 1)) : yA, { face: 'type', size: ts, italic: l.italic, align: l.align, prog: f, seed: seed + ':' + i });
+    });
+  } else L.forEach((l, i) => {
+    const f = clamp((P - acc) / l.w); acc += l.w; if (f <= 0) return;
+    letterText(ctx, l.text, ax(l), l.y, { size: l.size, italic: l.italic, align: l.align, prog: f, seed: seed + ':' + i, medium: 'ink' });
+  });
+  ctx.restore();
+  return { x: o.x, y: o.y, w, h };
+}
+
+// ---------- the page contract ----------
+// kitStart(init, seek): window.__riso for the render tools; ?t=2.5 shows that moment, ?play plays the
+// build in real time from 0 and holds at the hero. seek may be async; frames drop if it is slow.
+function kitStart(init, seek) {
+  const R = window.__riso = { duration: DUR, ready: false, seek, hero: HERO, build: { end: BUILD_END } }, q = new URLSearchParams(location.search);
+  (async () => {
+    await init();
+    if (q.has('play')) {
+      await seek(0); R.ready = true; const t0 = performance.now();
+      for (;;) { await new Promise(requestAnimationFrame); const t = Math.min(HERO, (performance.now() - t0) / 1000); await seek(t); if (t >= HERO) break; }
+    } else { const t = Number(q.get('t')); await seek(q.has('t') && isFinite(t) ? t : HERO); R.ready = true; }
+  })();
+}
+// ===== math-animals kit v1 end =====
+
+// Plate No. 10. A juvenile semicircle angelfish, Pomacanthus semicirculatus, lies on the card over
+// its own growth drawing. Its stripes are a Turing reaction-diffusion pattern solved on its skin as
+// the skin grows from 20 to 120 mm: the stripes keep their spacing, so as the fish grows new stripes
+// insert between the old ones (Kondo & Asai, 1995). The pencil is the same solution: the fish grows
+// in place, and below it the same fish at 20, 40, 60 and 80 mm is drawn at true size with its stripes
+// and their count; past the body each semicircular stripe is carried on round the tail point.
+const X = document.getElementById('c').getContext('2d');
+const TL_MM = 120, TLP = TL_MM * MM, L0_MM = 20; // the hero is 120 mm long; the drawing starts at 20 mm
+const span = (t, a, b) => clamp((t - a) / (b - a));
+const stag = (p, i, n, d = 0.15) => clamp((p - i * d) / (1 - (n - 1) * d)); // line i of n starts d later and all finish at p = 1
+
+// ---------- the fish: outlines in TL units, snout at the origin, x toward the tail, y up ----------
+function crClosed(pts, seg = 16) {
+  const out = [], n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    for (let k = 0; k < seg; k++) {
+      const t = k / seg, t2 = t * t, t3 = t2 * t, f = j => 0.5 * (2 * p1[j] + (-p0[j] + p2[j]) * t + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * t2 + (-p0[j] + 3 * p1[j] - 3 * p2[j] + p3[j]) * t3);
+      out.push([f(0), f(1)]);
+    }
+  }
+  return out;
+}
+function inPoly(poly, x, y) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+  }
+  return c;
+}
+// the whole skin: body with the dorsal, caudal and anal fins (the reaction runs on all but the caudal).
+// The dorsal and anal fins' rounded rear lobes come back down to a narrow caudal peduncle, and the
+// caudal fin fans out from it.
+const DORS_C = [
+  [-0.004, 0.0], [0.002, 0.026], [0.014, 0.06], [0.036, 0.104], [0.068, 0.15], [0.11, 0.194], [0.16, 0.232], [0.21, 0.262], [0.262, 0.29],
+  [0.34, 0.335], [0.44, 0.372], [0.54, 0.395], [0.63, 0.392], [0.71, 0.362], [0.775, 0.306], [0.822, 0.236], [0.848, 0.165], [0.846, 0.116], [0.828, 0.08]];
+const CAUD_C = [[0.85, 0.078], [0.888, 0.104], [0.932, 0.126], [0.972, 0.11], [0.994, 0.06], [1.0, 0.0], [0.994, -0.06], [0.972, -0.11], [0.932, -0.126], [0.888, -0.104], [0.85, -0.078]];
+const VENT_C = [
+  [0.828, -0.08], [0.846, -0.116], [0.848, -0.165], [0.822, -0.232], [0.775, -0.3], [0.71, -0.352], [0.63, -0.382], [0.545, -0.372], [0.475, -0.335],
+  [0.425, -0.288], [0.365, -0.274], [0.3, -0.264], [0.235, -0.243], [0.172, -0.208], [0.118, -0.164], [0.072, -0.114], [0.036, -0.066], [0.012, -0.03]];
+const SKIN_C = DORS_C.concat(CAUD_C, VENT_C);
+// the body alone: the dorsal and anal fins rise from its upper and lower edges, the caudal from its end
+const BODY_C = [
+  [-0.004, 0.0], [0.002, 0.026], [0.014, 0.06], [0.036, 0.104], [0.068, 0.15], [0.11, 0.194], [0.16, 0.232], [0.21, 0.262], [0.262, 0.286],
+  [0.35, 0.292], [0.45, 0.283], [0.55, 0.255], [0.64, 0.205], [0.71, 0.15], [0.755, 0.105], [0.785, 0.075], [0.802, 0.062],
+  [0.808, 0.0], [0.802, -0.062], [0.785, -0.075], [0.755, -0.105], [0.71, -0.152], [0.64, -0.205], [0.55, -0.25], [0.47, -0.278],
+  [0.425, -0.285], [0.365, -0.274], [0.3, -0.264], [0.235, -0.243], [0.172, -0.208], [0.118, -0.164], [0.072, -0.114], [0.036, -0.066], [0.012, -0.03],
+];
+// the reaction's domain: the skin without the caudal fin, cut across the peduncle at the fin's base
+const RD_C = DORS_C.concat([[0.81, 0.064], [0.814, 0.0], [0.81, -0.064]], VENT_C);
+const SKIN = crClosed(SKIN_C), BODY = crClosed(BODY_C), RDOM = crClosed(RD_C);
+const BOX = [-0.01, 0.4, 1.01, -0.4]; // the solver's frame in TL units: left, top, right, bottom
+const TAIL = [0.8, 0]; // the reaction starts at the caudal peduncle, and the arcs are centred there
+// the skin's centroid: the centre of growth by similarity
+const GC = (() => { let x = 0, y = 0, n = 0; for (let j = 0; j < 160; j++) for (let i = 0; i < 200; i++) { const px = (i + 0.5) / 200, py = 0.4 - (j + 0.5) / 160 * 0.8; if (inPoly(SKIN, px, py)) { x += px; y += py; n++; } } return [x / n, y / n]; })();
+// where the hero lies on the card (px), and its snout tip
+const GX = 506, GY = 452, SX = GX + (-0.004 - GC[0]) * TLP, SY = GY + GC[1] * TLP; // the centroid, and the snout tip
+const hero = (x, y) => [GX + (x - GC[0]) * TLP, GY - (y - GC[1]) * TLP];
+// TL units on the fish at scale k (1 = the 120 mm hero) to card px: the hero scaled by k about a point
+// in its head just behind the snout tip (X 0.07 on the midline), the nest's centre
+const GPX = GX + (0.07 - GC[0]) * TLP, GPY = GY + GC[1] * TLP;
+const toCard = (x, y, k = 1) => { const h = hero(x, y); return [GPX + k * (h[0] - GPX), GPY + k * (h[1] - GPY)]; };
+
+// ---------- the mathematics: Turing's reaction-diffusion on the growing skin ----------
+// Solved in the fish's own (material) frame: growth by similarity only scales diffusion by 1/s^2
+// and dilutes both substances at 2r, so no field is resampled while it grows. A coarse grid carries
+// the small fish and is refined twice as it grows (o.refine sets when), so the physical cell stays
+// near the base cell. Explicit Euler, isotropic nine-point Laplacian, zero flux at the skin's edge.
+// Kinetics (piecewise linear, as in Kondo's simulations and Painter, Maini & Othmer 1999):
+//   u_t = clamp(0.08u - 0.08v + c, 0, 0.18) - 0.03u + Du*lap(u) + Du*e*(t.grad)^2 u - 2r u
+//   v_t = clamp(0.10u - 0.15, 0, 0.5) - 0.06v + Dv*lap(v) - 2r v
+// t is the unit tangent of circles about the tail point: the activator spreads (1+e) times faster
+// along those arcs than across them (Shoji, Iwasa, Mochizuki & Kondo 2002 on anisotropic diffusion).
+function rdModel(o) {
+  const TL = o.TL, L0 = o.L0, L1 = o.L1, hb = o.h, Du = o.Du, Dv = o.Dv, e = o.e, cU = o.c, T2 = o.T2, TA = o.TA;
+  const inside = o.inside, box = o.box; // inside(x, y) in TL units; box [x0, y0top, x1, y1bottom] in TL units (y up)
+  const tail = o.tail, nSnapA = o.snapA ?? 8, nSnapB = o.snapB ?? 64;
+  // homogeneous steady state: 0.05u - 0.08v + c = 0, 0.1u - 0.15 - 0.06v = 0
+  const U0 = (0.2 + cU) / (0.08 / 0.06 * 0.1 - 0.05), V0 = (0.1 * U0 - 0.15) / 0.06;
+  // base grid (the hero frame, cell hb mm)
+  const mmW = (box[2] - box[0]) * TL, mmH = (box[1] - box[3]) * TL;
+  const BW = Math.ceil(mmW / hb), BH = Math.ceil(mmH / hb);
+  const toTL = (i, j, hc) => [box[0] + (i + 0.5) * hc / TL, box[1] - (j + 0.5) * hc / TL];
+  function level(k) { // grid at cell hb*2^k (material mm)
+    const hc = hb * (1 << k), gw = Math.ceil(mmW / hc) + 2, gh = Math.ceil(mmH / hc) + 2, n = gw * gh, a = new Uint8Array(n);
+    for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) { const p = toTL(i - 1, j - 1, hc); a[j * gw + i] = inside(p[0], p[1]) ? 1 : 0; }
+    const L = []; for (let q = 0; q < n; q++) if (a[q]) L.push(q);
+    const list = Int32Array.from(L), nb = new Int32Array(L.length * 8), cf = new Float32Array(L.length * 3);
+    const tI = (tail[0] - box[0]) * TL / hc + 0.5, tJ = (box[1] - tail[1]) * TL / hc + 0.5;
+    L.forEach((q, m) => {
+      const off = [q - 1, q + 1, q - gw, q + gw, q - gw - 1, q - gw + 1, q + gw - 1, q + gw + 1];
+      for (let z = 0; z < 8; z++) nb[m * 8 + z] = a[off[z]] ? off[z] : q; // zero flux at the skin's edge
+      const i = q % gw, j = (q / gw) | 0; let rx = i - tI, ry = j - tJ; const rl = Math.hypot(rx, ry) || 1; rx /= rl; ry /= rl;
+      const tx = -ry, ty = rx; cf[m * 3] = tx * tx; cf[m * 3 + 1] = ty * ty; cf[m * 3 + 2] = tx * ty * 0.5;
+    });
+    return { k, hc, gw, gh, n, a, list, nb, cf, u: new Float32Array(n), v: new Float32Array(n), u2: new Float32Array(n), v2: new Float32Array(n) };
+  }
+  // sample a level's field at base-grid cell (i, j) of the hero frame
+  function sampleTo(G, out, which) {
+    const f = hb / G.hc, F = which === 'u' ? G.u : G.v;
+    for (let j = 0; j < BH; j++) for (let i = 0; i < BW; i++) {
+      const x = (i + 0.5) * f - 0.5 + 1, y = (j + 0.5) * f - 0.5 + 1, x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+      let s = 0, w = 0;
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+        const q = (y0 + dy) * G.gw + x0 + dx, ww = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy);
+        if (q >= 0 && q < G.n && G.a[q] && ww > 0) { s += F[q] * ww; w += ww; }
+      }
+      out[j * BW + i] = w > 1e-6 ? s / w : (which === 'u' ? U0 : V0);
+    }
+  }
+  function refine(G, H) { // carry the field from level G onto the finer level H
+    const f = H.hc / G.hc;
+    for (const q of H.list) {
+      const i = q % H.gw, j = (q / H.gw) | 0, x = (i - 0.5) * f + 0.5, y = (j - 0.5) * f + 0.5, x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+      let su = 0, sv = 0, w = 0;
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+        const p = (y0 + dy) * G.gw + x0 + dx, ww = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy);
+        if (p >= 0 && p < G.n && G.a[p] && ww > 0) { su += G.u[p] * ww; sv += G.v[p] * ww; w += ww; }
+      }
+      H.u[q] = w > 1e-6 ? su / w : U0; H.v[q] = w > 1e-6 ? sv / w : V0;
+    }
+  }
+  function steps(G, n, s, r, dt) {
+    const hp = G.hc * s, du6 = Du / (hp * hp) / 6, dv6 = Dv / (hp * hp) / 6, de = Du * e / (hp * hp);
+    const dr = 1 - dt * (0.03 + 2 * r), dq = 1 - dt * (0.06 + 2 * r), L = G.list, NB = G.nb, C = G.cf, cnt = L.length;
+    let u = G.u, v = G.v, u2 = G.u2, v2 = G.v2;
+    for (let st = 0; st < n; st++) {
+      for (let m = 0; m < cnt; m++) {
+        const q = L[m], b = m << 3, c3 = m * 3, uk = u[q], vk = v[q];
+        const iW = NB[b], iE = NB[b + 1], iN = NB[b + 2], iS = NB[b + 3], iNW = NB[b + 4], iNE = NB[b + 5], iSW = NB[b + 6], iSE = NB[b + 7];
+        let su = 0.08 * (uk - vk) + cU; su = su < 0 ? 0 : su > 0.18 ? 0.18 : su;
+        let sv = 0.1 * uk - 0.15; sv = sv < 0 ? 0 : sv > 0.5 ? 0.5 : sv;
+        const uE = u[iE], uW = u[iW], uN = u[iN], uS = u[iS], uNW = u[iNW], uNE = u[iNE], uSW = u[iSW], uSE = u[iSE];
+        const lu = du6 * (4 * (uE + uW + uN + uS) + uNW + uNE + uSW + uSE - 20 * uk)
+          + de * (C[c3] * (uW + uE - 2 * uk) + C[c3 + 1] * (uN + uS - 2 * uk) + C[c3 + 2] * (uSE + uNW - uNE - uSW));
+        const lv = dv6 * (4 * (v[iE] + v[iW] + v[iN] + v[iS]) + v[iNW] + v[iNE] + v[iSW] + v[iSE] - 20 * vk);
+        u2[q] = uk * dr + dt * (su + lu); v2[q] = vk * dq + dt * (sv + lv);
+      }
+      let t = u; u = u2; u2 = t; t = v; v = v2; v2 = t;
+    }
+    G.u = u; G.v = v; G.u2 = u2; G.v2 = v2;
+  }
+  const levels = [level(2), level(1), level(0)];
+  let G = levels[0];
+  G.u.fill(U0); G.v.fill(V0);
+  const rnd = o.seedNoise ? o.rng : null;
+  if (rnd) { for (const q of G.list) G.u[q] = U0 + (rnd() - 0.5) * 0.2; }
+  else { // the reaction starts at the tail: a small excess of activator at the caudal peduncle
+    const tI = (tail[0] - box[0]) * TL / G.hc + 0.5, tJ = (box[1] - tail[1]) * TL / G.hc + 0.5, s0 = L0 / TL;
+    for (const q of G.list) { const i = q % G.gw, j = (q / G.gw) | 0, d = Math.hypot(i - tI, j - tJ) * G.hc * s0; G.u[q] += 1.5 * Math.exp(-d * d / 1.0); }
+  }
+  const snaps = [];
+  const snap = (s, phase) => { const f = new Float32Array(BW * BH), fv = new Float32Array(BW * BH); sampleTo(G, f, 'u'); sampleTo(G, fv, 'v'); snaps.push({ s, L: s * TL, phase, u: f, v: fv }); };
+  const dtk = o.dtk ?? 0.2, rf = o.refine ?? 1.4; const dtFor = (s) => Math.min(1, dtk * (G.hc * s) * (G.hc * s) / Dv);
+  let s = L0 / TL, upd = 0;
+  // phase A: the small fish holds its size while the reaction spreads forward from the tail
+  for (let q = 0; q < nSnapA; q++) { const dt = dtFor(s), n = Math.round(TA / nSnapA / dt); steps(G, n, s, 0, dt); upd += n * G.list.length; snap(s, 'A'); }
+  // phase B: exponential growth, doubling every T2, from L0 to L1
+  const r = Math.log(2) / T2, Tg = Math.log(L1 / L0) / r;
+  for (let q = 1; q <= nSnapB; q++) {
+    const tEnd = Tg * q / nSnapB; let t = Tg * (q - 1) / nSnapB;
+    while (t < tEnd - 1e-9) {
+      while (G.k > 0 && G.hc * s > hb * rf) { const H = levels[3 - G.k]; refine(G, H); G = H; } // refine as the cells grow
+      const dt = Math.min(dtFor(s), tEnd - t), n = Math.max(1, Math.min(40, Math.floor((tEnd - t) / dt)));
+      steps(G, n, s, r, dt); upd += n * G.list.length; t += n * dt; s = L0 / TL * Math.exp(r * t);
+    }
+    s = L0 / TL * Math.exp(r * tEnd); snap(s, 'B');
+  }
+  const vEnd = new Float32Array(BW * BH); sampleTo(G, vEnd, 'v');
+  return { snaps, BW, BH, hb, U0, V0, box, upd, vEnd };
+}
+
+// ---------- the solutions: the fish, and the same reaction at other settings ----------
+// The real setting: Dv/Du = 25, the activator 3 times faster along arcs round the tail (alpha = 3),
+// basal activator production c = 0.05, doubling time 3000, the 20 mm fish held 900 while the
+// reaction spreads from its tail, then grown by similarity to 120 mm.
+const REAL = { TL: TL_MM, L0: L0_MM, L1: TL_MM, Du: 0.0075, Dv: 0.1875, e: 2, c: 0.05, T2: 3000, TA: 900, box: BOX, tail: TAIL, inside: (x, y) => inPoly(RDOM, x, y), dtk: 0.33 };
+// The trials are the same solver on the same outline at a coarser grid (0.8 mm), each changing one
+// setting (the spots change two: the anisotropy and the basal production). alpha = 1 + e.
+// c = 0.26 raises the activator's basal production until the dark skin breaks into dots.
+const TRIALS = [
+  { key: 'spots', o: { e: 0, c: 0.26 }, text: 'α = 1,  c = 0.26', name: 'spots', th: [0.78, 0.96] },
+  { key: 'laby', o: { e: 0 }, text: 'α = 1', name: 'labyrinth' },
+  { key: 'real', o: {}, text: 'α = 3', name: 'semicircles', real: true },
+];
+let SOL = null;
+// Stripe positions along the midline (y = 0, snout to tail point) at every saved length: peaks of
+// the activator above U0 + 1.2, averaged over five rows, linked from length to length by nearest
+// material position. A track that starts after the first row is a stripe that inserted.
+function stripeTracks(sol) {
+  const { snaps, BW, hb, U0 } = sol, jm = Math.round(BOX[1] * TL_MM / hb - 0.5), iT = Math.floor((0.81 - BOX[0]) * TL_MM / hb), inD = i => inPoly(RDOM, BOX[0] + (i + 0.5) * hb / TL_MM, 0);
+  const first = snaps.findIndex(q => q.phase === 'B') - 1, rows = snaps.slice(first), tracks = [], counts = [], profiles = [];
+  rows.forEach((sn, r) => {
+    const p = new Float32Array(iT + 1);
+    for (let i = 0; i <= iT; i++) { let a = 0; for (let d = -2; d <= 2; d++) a += sn.u[(jm + d) * BW + i]; p[i] = a / 5; }
+    profiles.push({ L: sn.L, p });
+    const peaks = [];
+    for (let i = 1; i <= iT; i++) if (inD(i) && p[i] > U0 + 1.0 && p[i] >= p[i - 1] && (i === iT || !inD(i + 1) || p[i] > p[i + 1])) { // the skin's end counts as lower ground
+      const end = i === iT || !inD(i + 1), den = end ? 0 : p[i - 1] - 2 * p[i] + p[i + 1], d = den < 0 ? clamp(0.5 * (p[i - 1] - p[i + 1]) / den, -0.5, 0.5) : 0;
+      peaks.push(BOX[0] + (i + 0.5 + d) * hb / TL_MM);
+    }
+    counts.push({ L: sn.L, n: peaks.length });
+    const used = new Set();
+    for (const X0 of peaks) {
+      let best = null, bd = 0.016;
+      for (const tr of tracks) { if (tr.end !== r - 1 || used.has(tr)) continue; const d = Math.abs(tr.pts[tr.pts.length - 1][0] - X0); if (d < bd) { bd = d; best = tr; } }
+      if (best) { best.pts.push([X0, sn.L]); best.end = r; used.add(best); } else { const tr = { pts: [[X0, sn.L]], start: r, end: r }; tracks.push(tr); used.add(tr); }
+    }
+  });
+  return { tracks: tracks.filter(t => t.pts.length > 2), counts, profiles, iT, inD };
+}
+
+// ---------- the fish's own raster: hero scale, 3.6 px per mm ----------
+const FPAD = 8, FW = Math.ceil((BOX[2] - BOX[0]) * TLP) + 2 * FPAD, FH = Math.ceil((BOX[1] - BOX[3]) * TLP) + 2 * FPAD;
+const loc = (x, y) => [(x - BOX[0]) * TLP + FPAD, (BOX[1] - y) * TLP + FPAD]; // TL units -> fish px
+const tlAt = (i, j) => [BOX[0] + (i + 0.5 - FPAD) / TLP, BOX[1] - (j + 0.5 - FPAD) / TLP];
+const GL = loc(GC[0], GC[1]); // the centroid in fish px
+// the canvas transform that lays the fish raster at scale k: the hero scaled by k about the nest's centre
+const fishMat = k => [k, 0, 0, k, (1 - k) * GPX + k * (GX - GL[0]), (1 - k) * GPY + k * (GY - GL[1])];
+function coverage(poly) { // antialiased fill of a TL-unit polygon, read back as 0..1 per fish pixel
+  const c = mk(FW, FH), g = c.getContext('2d'); g.fillStyle = '#fff'; g.beginPath();
+  poly.forEach((p, i) => { const q = loc(p[0], p[1]); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }); g.closePath(); g.fill();
+  const d = g.getImageData(0, 0, FW, FH).data, o = new Float32Array(FW * FH); for (let i = 0; i < o.length; i++) o[i] = d[i * 4 + 3] / 255; return o;
+}
+function insideDist(cov) { // chamfer distance (px) from each inside pixel to the outline
+  const D = new Float32Array(FW * FH), B = 1e6, a = 1, b = Math.SQRT2;
+  for (let i = 0; i < D.length; i++) D[i] = cov[i] > 0.5 ? B : 0;
+  for (let j = 1; j < FH - 1; j++) for (let i = 1; i < FW - 1; i++) { const k = j * FW + i; if (!D[k]) continue; D[k] = Math.min(D[k], D[k - 1] + a, D[k - FW] + a, D[k - FW - 1] + b, D[k - FW + 1] + b); }
+  for (let j = FH - 2; j > 0; j--) for (let i = FW - 2; i > 0; i--) { const k = j * FW + i; if (!D[k]) continue; D[k] = Math.min(D[k], D[k + 1] + a, D[k + FW] + a, D[k + FW + 1] + b, D[k + FW - 1] + b); }
+  for (let i = 0; i < D.length; i++) if (D[i] > 0) D[i] = Math.max(0, D[i] - 0.5 + (cov[i] - 0.5));
+  return D;
+}
+function boxBlur(A, r, pass = 3) { // separable box blur, three passes ~ gaussian
+  const T = new Float32Array(A.length); let S = A;
+  for (let p = 0; p < pass; p++) {
+    for (let j = 0; j < FH; j++) { let acc = 0; const row = j * FW; for (let i = -r; i <= r; i++) acc += S[row + clamp(i, 0, FW - 1)]; for (let i = 0; i < FW; i++) { T[row + i] = acc / (2 * r + 1); acc += S[row + Math.min(FW - 1, i + r + 1)] - S[row + Math.max(0, i - r)]; } }
+    const O = new Float32Array(A.length);
+    for (let i = 0; i < FW; i++) { let acc = 0; for (let j = -r; j <= r; j++) acc += T[clamp(j, 0, FH - 1) * FW + i]; for (let j = 0; j < FH; j++) { O[j * FW + i] = acc / (2 * r + 1); acc += T[Math.min(FH - 1, j + r + 1) * FW + i] - T[Math.max(0, j - r) * FW + i]; } }
+    S = O;
+  }
+  return S;
+}
+// polyline arc-length sampler over a TL polygon between two of its vertices (walking forward)
+function polyPart(poly, a, b) { const n = poly.length, out = []; for (let i = a; ; i = (i + 1) % n) { out.push(poly[i]); if (i === b) break; } return out; }
+function nearestIdx(poly, p) { let bi = 0, bd = 1e9; poly.forEach((q, i) => { const d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd) { bd = d; bi = i; } }); return bi; }
+function sampler(pts) {
+  const acc = [0]; for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const L = acc[acc.length - 1];
+  return t => { const d = clamp(t) * L; let i = 1; while (i < acc.length - 1 && acc[i] < d) i++; const f = (d - acc[i - 1]) / (acc[i] - acc[i - 1] || 1); return [lerp(pts[i - 1][0], pts[i][0], f), lerp(pts[i - 1][1], pts[i][1], f)]; };
+}
+// Fin rays join matching fractions of the fin's base (on the body) and its margin (on the skin).
+// Dorsal XIII spines and 21 soft rays, anal III and 20, caudal 17 principal rays (the species has
+// dorsal XIII, 20-23 and anal III, 18-22).
+function finRays() {
+  const seg = (poly, p0, p1) => polyPart(poly, nearestIdx(poly, p0), nearestIdx(poly, p1));
+  const rays = [];
+  const fin = (base, margin, spines, soft, split, kind) => {
+    const B = sampler(base), M = sampler(margin), n = spines + soft;
+    for (let k = 0; k < n; k++) {
+      const t = k < spines ? (k + 0.5) / spines * split : split + (k - spines + 0.6) / soft * (1 - split) * 0.985;
+      rays.push({ a: B(t), b: M(t), spine: k < spines, kind, t });
+    }
+  };
+  fin(seg(BODY, [0.262, 0.286], [0.785, 0.075]), seg(SKIN, [0.262, 0.29], [0.828, 0.08]), 13, 21, 0.33, 'dorsal');
+  fin(seg(BODY, [0.785, -0.075], [0.425, -0.285]).reverse(), seg(SKIN, [0.828, -0.08], [0.425, -0.288]).reverse(), 3, 20, 0.11, 'anal');
+  const cb = [[0.81, 0.062], [0.814, 0.0], [0.81, -0.062]], cm = seg(SKIN, [0.85, 0.078], [0.85, -0.078]);
+  { const B = sampler(cb), M = sampler(cm); for (let k = 0; k < 17; k++) { const t = (k + 0.5) / 17; rays.push({ a: B(t), b: M(t), spine: false, kind: 'caudal', t }); } }
+  return rays;
+}
+
+// ---------- the bake: everything about the fish that does not change as its pattern does ----------
+// One window, upper left, about 42 degrees up (a shadow falls K = 1.1 of the height away): L is the
+// direction toward it; the camera looks straight down.
+const LIT = (() => { const v = [-SH.x * K, -SH.y * K, 1], l = Math.hypot(...v); return v.map(c => c / l); })();
+const HALF = (() => { const v = [LIT[0], LIT[1], LIT[2] + 1], l = Math.hypot(...v); return v.map(c => c / l); })();
+const EYE = [0.142, 0.074, 0.036]; // centre and radius, TL units
+let F = null;
+function bakeFish(sol) {
+  const n = FW * FH, skin = coverage(SKIN), body = coverage(BODY), rays = finRays();
+  const kind = new Uint8Array(n), h = new Float32Array(n);
+  const dB = insideDist(body);
+  for (let k = 0; k < n; k++) {
+    if (skin[k] <= 0) continue; const i = k % FW, j = (k / FW) | 0, [x, y] = tlAt(i, j);
+    kind[k] = body[k] > 0.5 ? 1 : !inPoly(RDOM, x, y) ? 4 : y > 0 ? 2 : 3;
+    // a laterally compressed fish lying on its side: about 11 mm thick at the middle (120 mm long),
+    // still 2 mm thick at the fins' bases; the fins are membranes 0.3 mm thick lying on the card
+    const q = clamp(dB[k] / (0.2 * TLP)), hb = body[k] > 0 ? 2.2 + 9 * Math.pow(Math.sin(q * Math.PI / 2), 0.85) : 0;
+    h[k] = Math.max(hb * body[k], 0.3 * skin[k]);
+  }
+  // ray coverage on the fins, nearest ray of the pixel's own fin
+  const ray = new Float32Array(n), spine = new Uint8Array(n), rayT = new Float32Array(n);
+  const RP = rays.map(r => ({ ...r, A: loc(r.a[0], r.a[1]), B: loc(r.b[0], r.b[1]) }));
+  for (let k = 0; k < n; k++) {
+    const kd = kind[k]; if (kd < 2) continue; const i = k % FW + 0.5, j = ((k / FW) | 0) + 0.5, want = ['', '', 'dorsal', 'anal', 'caudal'][kd];
+    let bd = 1e9, br = null, bt = 0;
+    for (const r of RP) {
+      if (r.kind !== want) continue; const vx = r.B[0] - r.A[0], vy = r.B[1] - r.A[1], tt = clamp(((i - r.A[0]) * vx + (j - r.A[1]) * vy) / (vx * vx + vy * vy));
+      const d = Math.hypot(i - r.A[0] - vx * tt, j - r.A[1] - vy * tt); if (d < bd) { bd = d; br = r; bt = tt; }
+    }
+    if (!br) continue; const w = (br.spine ? 1.05 : 0.62) * (1 - 0.45 * bt);
+    ray[k] = 1 - smooth(w - 0.55, w + 0.6, bd); spine[k] = br.spine ? 1 : 0; rayT[k] = bt;
+  }
+  // a fixed fin is stiff: it rests on its rays near the body and its margin stands off the card, up to 2 mm
+  for (let k = 0; k < n; k++) if (kind[k] > 1) h[k] = Math.max(h[k], (0.3 + 1.9 * Math.pow(smooth(0.25, 1, rayT[k]), 1.5) * (kind[k] === 4 ? 0.7 : 1)) * skin[k]);
+  const hs = boxBlur(h, 4);
+  // the body's own shadow on its fins and flanks: march toward the window; a point is in shade where
+  // the surface rises above the ray (heights and distances scale together, so this holds at any size)
+  const self = new Float32Array(n), sx0 = -SH.x, sy0 = -SH.y;
+  for (let k = 0; k < n; k++) {
+    if (skin[k] <= 0) continue; const i = k % FW, j = (k / FW) | 0, h0 = hs[k] * MM; let m = -9;
+    for (let d = 1.5; d < 44; d += 1.5) { const x = Math.round(i + sx0 * d), y = Math.round(j + sy0 * d); if (x < 0 || y < 0 || x >= FW || y >= FH) break; const q = hs[y * FW + x] * MM - (h0 + d / K); if (q > m) m = q; }
+    self[k] = smooth(-0.6, 2.2, m);
+  }
+  // light: diffuse relative to a flat surface, compressed, since a preserved specimen is matte and a
+  // little flattened; only a faint broad sheen where the slopes face the window
+  const shade = new Float32Array(n), spec = new Float32Array(n);
+  for (let j = 1; j < FH - 1; j++) for (let i = 1; i < FW - 1; i++) {
+    const k = j * FW + i; if (skin[k] <= 0) continue;
+    const sx = (hs[k + 1] - hs[k - 1]) * MM / 2 + ray[k + 1] * 0.25 - ray[k - 1] * 0.25, sy = (hs[k + FW] - hs[k - FW]) * MM / 2 + ray[k + FW] * 0.25 - ray[k - FW] * 0.25;
+    const l = Math.hypot(sx, sy, 1), nx = -sx / l, ny = -sy / l, nz = 1 / l;
+    shade[k] = clamp(1 + 0.85 * ((nx * LIT[0] + ny * LIT[1] + nz * LIT[2]) / LIT[2] - 1), 0.45, 1.3);
+    const nh = Math.max(0, nx * HALF[0] + ny * HALF[1] + nz * HALF[2]);
+    spec[k] = Math.pow(nh, 8) * 0.06;
+  }
+  for (let k = 0; k < n; k++) if (self[k] > 0) { shade[k] *= 1 - 0.55 * self[k]; spec[k] *= 1 - self[k]; }
+  // where body ends and fin begins: the body's edge stands 2 mm proud of its fins, lit along its upper
+  // side and shaded along its lower, and it darkens a narrow strip of each fin's root
+  { const notB = new Float32Array(n); for (let k = 0; k < n; k++) notB[k] = 1 - body[k];
+    const dF = insideDist(notB);
+    for (let k = 0; k < n; k++) { if (skin[k] <= 0) continue; const [, y] = tlAt(k % FW, (k / FW) | 0);
+      if (kind[k] > 1) shade[k] *= 1 - 0.34 * Math.exp(-Math.pow(dF[k] / 1.8, 2));
+      else shade[k] *= 1 + (y > 0 ? 0.16 : -0.14) * Math.exp(-Math.pow(dB[k] / 1.4, 2)); } }
+  // a soft broad highlight along the upper flank, where the rounded side turns toward the window
+  const sheen = new Float32Array(n);
+  for (let k = 0; k < n; k++) { if (body[k] <= 0) continue; const [x, y] = tlAt(k % FW, (k / FW) | 0);
+    sheen[k] = body[k] * Math.exp(-Math.pow((y - 0.15) / 0.085, 2)) * smooth(0.1, 0.3, x) * (1 - smooth(0.6, 0.8, x)) * (1 - self[k]); }
+  return { n, skin, body, kind, h: hs, ray, spine, rayT, shade, spec, RP, self, sheen };
+}
+// Scales: small ctenoid scales in oblique rows rising toward the tail, about 0.95 mm apart (smaller
+// on the head), so the lateral series from the gill cover to the tail counts about 67 (the species
+// has 65 to 70). Each is a disk fixed at its front; its free back edge lies over the scale behind, so
+// the scale seen at a point is the most anterior one covering it. The back edge catches a thin rim of
+// light and drops a hairline shadow on the scale behind. Each scale also nudges the stripe threshold,
+// so a stripe's edge steps along the scale rows.
+function bakeScales(B) {
+  const { n, body, kind } = B, smod = new Float32Array(n).fill(1), soff = new Float32Array(n), sglint = new Float32Array(n).fill(1), srim = new Float32Array(n), th = -0.36, ct = Math.cos(th), st = Math.sin(th);
+  for (let k = 0; k < n; k++) {
+    if (kind[k] !== 1) continue; const i = k % FW + 0.5, j = ((k / FW) | 0) + 0.5, [x] = tlAt(i - 0.5, j - 0.5);
+    const p = 3.45 * lerp(0.62, 1, smooth(0.12, 0.3, x)) * lerp(1, 0.82, smooth(0.66, 0.8, x)), R = 0.66 * p, rh = 0.866 * p;
+    const a = i * ct - j * st, b = i * st + j * ct, r0 = Math.round(b / rh);
+    let vis = null, vd = 0, best = 1e9, near = 1e9;
+    for (let r = r0 - 1; r <= r0 + 1; r++) {
+      const off = (r & 1) * 0.5, m0 = Math.round(a / p - off);
+      for (let m = m0 - 1; m <= m0 + 1; m++) {
+        const ca = (m + off) * p, cb = r * rh, cx = ca * ct + cb * st, cy = -ca * st + cb * ct, d = Math.hypot(i - cx, j - cy);
+        if (d < R && cx < best) { best = cx; vis = [cx, cy, m, r]; vd = d; }
+      }
+    }
+    if (!vis) continue;
+    for (let r = r0 - 1; r <= r0 + 1; r++) { // the hairline shadow of a more anterior scale's free edge
+      const off = (r & 1) * 0.5, m0 = Math.round(a / p - off);
+      for (let m = m0 - 1; m <= m0 + 1; m++) {
+        const ca = (m + off) * p, cb = r * rh, cx = ca * ct + cb * st, cy = -ca * st + cb * ct; if (cx >= vis[0] - 0.01) continue;
+        const d = Math.hypot(i - cx, j - cy) - R; if (d >= 0 && d < near) near = d;
+      }
+    }
+    const rr = vd / R, back = i > vis[0] ? 1 : 0, rg = rngFor('sc:' + vis[2] + ':' + vis[3]);
+    let f = 1 + (rg() - 0.5) * 0.03 + 0.07 * (rr - 0.55);
+    f *= 1 + 0.18 * back * smooth(0.74, 0.9, rr) * (1 - smooth(0.9, 1, rr));
+    f *= 1 - 0.5 * (1 - smooth(0.1, 0.9, near));
+    const fade = smooth(0.0, 0.6, body[k]) * lerp(0.55, 1, smooth(0.1, 0.26, x)); // faint on the head
+    smod[k] = lerp(1, f, fade); soff[k] = 0; srim[k] = fade * back * smooth(0.62, 0.86, rr) * (1 - smooth(0.9, 1, rr)) * (0.6 + 0.8 * rg());
+    // each scale is tilted a little its own way, so in the window's sheen some flash and some go dark
+    const tilt = rg(); sglint[k] = lerp(1, (0.25 + 1.5 * tilt * tilt) * (0.7 + 0.5 * smooth(0.3, 0.9, rr) * back), fade);
+  }
+  return { smod, soff, sglint, srim };
+}
+// Relief on the head: the gill cover's free edge and the preopercle's, each a step down behind it,
+// the strong spine at the preopercle's angle that names the family (Pomacanthidae, "cover-thorn"),
+// the lateral line arching high under the dorsal fin, the nostrils and the mouth.
+const OPERCLE = [[0.262, 0.215], [0.276, 0.13], [0.284, 0.04], [0.286, -0.05], [0.278, -0.13], [0.262, -0.19]];
+const PREOP = [[0.196, 0.165], [0.205, 0.08], [0.212, 0.0], [0.218, -0.075], [0.226, -0.108], [0.2, -0.132], [0.168, -0.147]];
+const SPINE = [[0.222, -0.103], [0.236, -0.1], [0.322, -0.126], [0.232, -0.122], [0.222, -0.115]];
+const LATLINE = [[0.276, 0.206], [0.33, 0.228], [0.4, 0.238], [0.48, 0.228], [0.56, 0.2], [0.63, 0.16], [0.675, 0.13]];
+function bakeRelief(B, S) {
+  const { n, skin } = B, rel = new Float32Array(n).fill(1), pale = new Float32Array(n);
+  const edge = (pts, depth, wd) => { // signed distance to a TL polyline: posterior side (to its right going down) darkens
+    const P = catmull(pts, 10).map(p => loc(p[0], p[1]));
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const p of P) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    for (let j = Math.max(0, Math.floor(y0 - 5)); j < Math.min(FH, y1 + 5); j++) for (let i = Math.max(0, Math.floor(x0 - 5)); i < Math.min(FW, x1 + 5); i++) {
+      const k = j * FW + i; if (skin[k] <= 0) continue; let bd = 1e9, sg = 1;
+      for (let q = 1; q < P.length; q++) { const a = P[q - 1], b = P[q], vx = b[0] - a[0], vy = b[1] - a[1], t = clamp(((i + 0.5 - a[0]) * vx + (j + 0.5 - a[1]) * vy) / (vx * vx + vy * vy)), dx = i + 0.5 - a[0] - vx * t, dy = j + 0.5 - a[1] - vy * t, d = Math.hypot(dx, dy); if (d < bd) { bd = d; sg = (dx * -vy + dy * vx) < 0 ? -1 : 1; } }
+      const sd = bd * sg; // > 0 in front of the edge, < 0 behind it
+      rel[k] *= 1 + depth * (0.28 * Math.exp(-Math.pow((sd - 0.4) / 0.7, 2)) - 0.45 * smooth(-wd, -0.3, sd) * (1 - smooth(-0.3, 0.2, sd)) * smooth(-wd - 2.5, -wd, sd));
+    }
+  };
+  edge(OPERCLE, 1.5, 3.2); edge(PREOP, 1.1, 2.2);
+  // the spine: a raised wedge, lit along its upper edge and shadowed below
+  const SP = SPINE.map(p => loc(p[0], p[1])), spc = mk(FW, FH), sg = spc.getContext('2d');
+  sg.fillStyle = '#fff'; sg.beginPath(); SP.forEach((p, i) => i ? sg.lineTo(p[0], p[1]) : sg.moveTo(p[0], p[1])); sg.closePath(); sg.fill();
+  const sd = sg.getImageData(0, 0, FW, FH).data;
+  for (let j = 3; j < FH - 1; j++) for (let i = 3; i < FW - 1; i++) {
+    const k = j * FW + i, a = sd[k * 4 + 3] / 255, up = sd[(k - FW - 1) * 4 + 3] / 255, dn = sd[(k - 2 * FW - 2) * 4 + 3] / 255; // dn: the spine lies up-left, toward the window
+    if (a > 0) rel[k] *= 1 + 0.55 * a * (1 - up) + 0.12 * a; else if (dn > 0) rel[k] *= 1 - 0.4 * dn;
+  }
+  // lateral line: a row of pores, each a pale dot
+  const LL = sampler(catmull(LATLINE, 12)), nP = 58;
+  for (let q = 0; q < nP; q++) { const p = LL(q / (nP - 1)), [cx, cy] = loc(p[0], p[1]); for (let j = Math.floor(cy - 2); j <= cy + 2; j++) for (let i = Math.floor(cx - 2); i <= cx + 2; i++) { const k = j * FW + i, d = Math.hypot(i + 0.5 - cx, j + 0.5 - cy); if (k >= 0 && k < n) pale[k] = Math.max(pale[k], 0.5 * (1 - smooth(0.4, 1.3, d))); } }
+  // nostrils and the mouth's gape
+  for (const [x, y, r] of [[0.084, 0.103, 1.3], [0.1, 0.097, 1.1]]) { const [cx, cy] = loc(x, y); for (let j = Math.floor(cy - 3); j <= cy + 3; j++) for (let i = Math.floor(cx - 3); i <= cx + 3; i++) { const k = j * FW + i, d = Math.hypot(i + 0.5 - cx, j + 0.5 - cy); rel[k] *= 1 - 0.55 * (1 - smooth(r - 0.5, r + 0.5, d)) + 0.25 * Math.exp(-Math.pow((d - r - 0.6) / 0.5, 2)) * (i + 0.5 < cx ? 1 : 0.2); } }
+  edge([[0.002, 0.004], [0.012, 0.002], [0.026, -0.004]], 1.4, 1.0);
+  return { rel, pale };
+}
+// membranes, margins and the pattern's sampling positions on the solver's base grid
+function bakeMembrane(B, sol) {
+  const { n, skin, kind, rayT } = B, alpha = new Float32Array(n), hyal = new Float32Array(n), marg = new Float32Array(n), dS = insideDist(skin);
+  const PI = new Int32Array(n).fill(-1), PX = new Float32Array(n), PY = new Float32Array(n), cell = sol.hb * MM, gt = new Float32Array(n), tp = new Float32Array(n), nb = nzc('ground');
+  const list = [];
+  for (let k = 0; k < n; k++) {
+    if (skin[k] <= 0) continue; list.push(k);
+    const i = k % FW, j = (k / FW) | 0, [x] = tlAt(i, j), kd = kind[k];
+    const bx = clamp((i + 0.5 - FPAD) / cell - 0.5, 0, sol.BW - 1.001), by = clamp((j + 0.5 - FPAD) / cell - 0.5, 0, sol.BH - 1.001);
+    PI[k] = Math.floor(by) * sol.BW + Math.floor(bx); PX[k] = bx - Math.floor(bx); PY[k] = by - Math.floor(by);
+    // the ground: near-black along the back, a lighter navy on the belly (1 = back, 0 = belly); the
+    // white stripes thin toward the arcs' centre at the tail
+    { const [, y] = tlAt(i, j); gt[k] = clamp(smooth(-0.3, 0.26, y) + 0.1 * fbm(nb, x * 9, y * 9, 2) + 0.15 * (1 - smooth(0.06, 0.2, x)));
+      tp[k] = 0.24 * (1 - smooth(0.06, 0.3, Math.hypot(x - TAIL[0], y - TAIL[1]))); if (kd === 2 || kd === 3) gt[k] = Math.max(gt[k], 0.82); }
+    if (kd === 1) { alpha[k] = 1; continue; }
+    if (kd === 4) { const hy = smooth(0.82, 0.92, x); hyal[k] = hy; alpha[k] = 1 - smooth(0.84, 0.99, x) * 0.62 * (1 - 0.7 * B.ray[k]); }
+    else { alpha[k] = 1 - 0.34 * smooth(0.45, 1, rayT[k]) * (1 - 0.6 * B.ray[k]); marg[k] = Math.exp(-Math.pow((dS[k] - 1.7) / 0.75, 2)) * smooth(0.25, 0.6, rayT[k]); }
+  }
+  return { alpha, hyal, marg, PI, PX, PY, gt, tp, list: Int32Array.from(list) };
+}
+// Overlays that lie on the body and carry no pattern: the clear pectoral fin, the pelvic fin with its
+// white spine, and the eye. Each is a sprite in fish px with its own small shadow on the body.
+const PECT = [[0.296, 0.0], [0.33, 0.012], [0.375, 0.008], [0.415, -0.012], [0.432, -0.04], [0.428, -0.068], [0.405, -0.092], [0.365, -0.104], [0.325, -0.096], [0.303, -0.072]];
+const PELV = [[0.258, -0.222], [0.29, -0.245], [0.322, -0.262], [0.352, -0.264], [0.37, -0.266], [0.35, -0.256], [0.322, -0.248], [0.296, -0.234], [0.282, -0.228]];
+function polyCov(pts, closed = true) { return coverage(closed ? crClosed(pts, 10) : pts); }
+function bakeOverlays() {
+  const n = FW * FH, pc = polyCov(PECT), vc = polyCov(PELV);
+  const pect = mk(FW, FH), pv = mk(FW, FH), eye = mk(FW, FH);
+  // pectoral: 19 rays from its base to its margin; membrane and rays clear, a little pale
+  { const g = pect.getContext('2d'), im = g.createImageData(FW, FH), D = im.data, base = sampler([PECT[9], PECT[0]]), mar = sampler(PECT.slice(0, 10)), R = [];
+    for (let k = 0; k < 19; k++) { const t = (k + 0.5) / 19, a = loc(...base(1 - t)), b = loc(...mar(t)); R.push([a, b]); }
+    for (let k = 0; k < n; k++) { const a = pc[k]; if (a <= 0) continue; const i = k % FW + 0.5, j = ((k / FW) | 0) + 0.5; let bd = 9;
+      for (const [A, Bp] of R) { const vx = Bp[0] - A[0], vy = Bp[1] - A[1], t = clamp(((i - A[0]) * vx + (j - A[1]) * vy) / (vx * vx + vy * vy)); bd = Math.min(bd, Math.hypot(i - A[0] - vx * t, j - A[1] - vy * t)); }
+      const rc = 1 - smooth(0.25, 1.0, bd), al = a * (0.2 + 0.32 * rc); const c = mix([140, 160, 188], [206, 214, 224], rc);
+      D[k * 4] = c[0]; D[k * 4 + 1] = c[1]; D[k * 4 + 2] = c[2]; D[k * 4 + 3] = al * 255; }
+    g.putImageData(im, 0, 0); }
+  // pelvic: dark as the body, its leading spine white and pale blue, five soft rays
+  { const g = pv.getContext('2d'), im = g.createImageData(FW, FH), D = im.data, lead = catmull(PELV.slice(0, 5), 8).map(p => loc(p[0], p[1]));
+    for (let k = 0; k < n; k++) { const a = vc[k]; if (a <= 0) continue; const i = k % FW + 0.5, j = ((k / FW) | 0) + 0.5; let bd = 9;
+      for (let q = 1; q < lead.length; q++) { const A = lead[q - 1], Bp = lead[q], vx = Bp[0] - A[0], vy = Bp[1] - A[1], t = clamp(((i - A[0]) * vx + (j - A[1]) * vy) / (vx * vx + vy * vy)); bd = Math.min(bd, Math.hypot(i - A[0] - vx * t, j - A[1] - vy * t)); }
+      const [x] = tlAt(i - 0.5, j - 0.5), sp = 1 - smooth(1.2, 2.4, bd), blue = 1 - smooth(2.2, 5.5, bd), edgeL = a < 0.98 ? 1 : 0;
+      let c = mix([18, 28, 70], [60, 104, 190], blue * 0.85); c = mix(c, [226, 236, 246], sp * (1 - 0.3 * smooth(0.36, 0.43, x)));
+      c = shade(c, (1.08 - 0.12 * smooth(0.3, 0.43, x)) * (1 + 0.25 * edgeL));
+      D[k * 4] = c[0]; D[k * 4 + 1] = c[1]; D[k * 4 + 2] = c[2]; D[k * 4 + 3] = a * 255; }
+    g.putImageData(im, 0, 0); }
+  // the eye: a dark convex ball under its cornea, a fine bronze ring round the pupil, the orbit's
+  // rim, and the window caught small and bright on the cornea
+  { const g = eye.getContext('2d'), [ex, ey] = loc(EYE[0], EYE[1]), r = EYE[2] * TLP, im = g.createImageData(FW, FH), D = im.data, nf = nzc('iris');
+    for (let j = Math.floor(ey - r - 4); j <= ey + r + 4; j++) for (let i = Math.floor(ex - r - 4); i <= ex + r + 4; i++) {
+      const k = j * FW + i, dx = (i + 0.5 - ex) / r, dy = (j + 0.5 - ey) / r, d = Math.hypot(dx, dy); let c, a;
+      if (d < 1) {
+        const nz = Math.sqrt(1 - d * d), lam = clamp(dx * LIT[0] + dy * LIT[1] + nz * LIT[2]), nh = Math.max(0, dx * HALF[0] + dy * HALF[1] + nz * HALF[2]);
+        const ang = Math.atan2(dy, dx), fib = 0.5 + 0.5 * nf(ang * 6, d * 3);
+        c = mix([20, 24, 40], [128, 108, 70], smooth(0.47, 0.6, d) * (1 - smooth(0.82, 0.96, d)) * (0.4 + 0.6 * fib));
+        c = mix(c, [44, 70, 120], smooth(0.84, 0.97, d) * 0.6); // a blue rim to the iris
+        c = mix(c, [4, 5, 9], 1 - smooth(0.4, 0.47, d));
+        c = shade(c, 0.72 + 0.5 * lam); const hi = Math.pow(nh, 420) * 2.2 + Math.pow(nh, 60) * 0.1;
+        c = mix(c, [250, 250, 246], clamp(hi)); a = 1 - smooth(0.93, 1, d) * 0.3;
+      } else if (d < 1.22) { const rim = (dx * LIT[0] + dy * LIT[1]) < 0 ? 0.55 : 0.3; c = [10, 14, 34]; a = rim * (1 - smooth(1.05, 1.22, d)); }
+      else continue;
+      D[k * 4] = c[0]; D[k * 4 + 1] = c[1]; D[k * 4 + 2] = c[2]; D[k * 4 + 3] = clamp(a) * 255;
+    }
+    g.putImageData(im, 0, 0); }
+  return { pect, pv, eye };
+}
+// The overlays combined once: each fin's shadow falls on the fish only (clipped to its skin), then
+// the fin itself, then the eye.
+function bakeOverlayLayer(B, O) {
+  const c = mk(FW, FH), g = c.getContext('2d'), skinC = mk(FW, FH), sg = skinC.getContext('2d'), im = sg.createImageData(FW, FH);
+  for (let k = 0; k < B.n; k++) im.data[k * 4 + 3] = B.skin[k] * 255; sg.putImageData(im, 0, 0);
+  const shadowOn = (spr, hmm, al) => { const s = mk(FW, FH), q = s.getContext('2d'); q.drawImage(skinC, 0, 0); q.globalCompositeOperation = 'source-in';
+    q.filter = `blur(${(0.25 + hmm * MM * 0.14).toFixed(2)}px)`; q.drawImage(spr, SH.x * hmm * MM * K, SH.y * hmm * MM * K); q.filter = 'none';
+    q.globalCompositeOperation = 'source-in'; q.fillStyle = 'rgb(4,6,14)'; q.fillRect(0, 0, FW, FH); g.globalAlpha = al; g.drawImage(s, 0, 0); g.globalAlpha = 1; };
+  shadowOn(O.pv, 0.9, 0.55); g.drawImage(O.pv, 0, 0);
+  shadowOn(O.pect, 0.7, 0.35); g.drawImage(O.pect, 0, 0);
+  g.drawImage(O.eye, 0, 0);
+  return c;
+}
+// height slices of the whole fish for its shadow on the card: the shadow of a height field is the
+// union of each level's silhouette moved z*K along the light
+const SLICES = [0.25, 0.7, 1.2, 1.8, 2.6, 3.6, 4.8, 6.2, 7.8, 9.6, 11.2];
+function bakeSlices(B, M) {
+  const op = k => B.kind[k] === 4 ? M.alpha[k] : 1; // a clear membrane stops a little of the light
+  const sl = SLICES.map(z => { const c = mk(FW, FH), g = c.getContext('2d'), im = g.createImageData(FW, FH);
+    for (let k = 0; k < B.n; k++) { const a = smooth(z - 0.15, z + 0.15, B.h[k]) * B.skin[k] * op(k); if (a > 0) im.data[k * 4 + 3] = a * 255; }
+    g.putImageData(im, 0, 0); return { z, c }; });
+  // the window is broad, so the body's mass throws a faint soft shadow well beyond its rounded edge
+  // (the whole silhouette: tight at 0.35 mm where it touches the card, soft at 2.6 mm)
+  for (const [z, w, soft] of [[0.35, 1, 0], [2.6, 0.75, 1]]) { const c = mk(FW, FH), g = c.getContext('2d'), im = g.createImageData(FW, FH);
+    for (let k = 0; k < B.n; k++) { const a = B.skin[k] * op(k) * w; if (a > 0) im.data[k * 4 + 3] = a * 255; } g.putImageData(im, 0, 0); sl.push({ z, c, soft }); }
+  return sl;
+}
+// ---------- the pattern on the skin, frame by frame ----------
+// The thin pale-blue lines between the white stripes lie along the inhibitor's valleys: v is lowest
+// midway between two stripes, where the next stripe will insert. A cell is on a valley line where v
+// curves upward across it (the larger eigenvalue of its Hessian is positive) and its distance from
+// the valley floor, |grad v| over that eigenvalue, is under about a cell.
+function blueLines(sol) {
+  const { BW, BH, U0 } = sol, inD = new Uint8Array(BW * BH);
+  for (let j = 0; j < BH; j++) for (let i = 0; i < BW; i++) inD[j * BW + i] = inPoly(RDOM, BOX[0] + (i + 0.5) * sol.hb / TL_MM, BOX[1] - (j + 0.5) * sol.hb / TL_MM) ? 1 : 0;
+  for (const sn of sol.snaps) {
+    const v = sn.v, u = sn.u, lam = new Float32Array(BW * BH), dd = new Float32Array(BW * BH), pos = [];
+    for (let j = 1; j < BH - 1; j++) for (let i = 1; i < BW - 1; i++) {
+      const k = j * BW + i; if (!inD[k] || !inD[k - 1] || !inD[k + 1] || !inD[k - BW] || !inD[k + BW]) continue;
+      const vx = (v[k + 1] - v[k - 1]) / 2, vy = (v[k + BW] - v[k - BW]) / 2, vxx = v[k + 1] - 2 * v[k] + v[k - 1], vyy = v[k + BW] - 2 * v[k] + v[k - BW];
+      const vxy = inD[k - BW - 1] && inD[k + BW + 1] && inD[k - BW + 1] && inD[k + BW - 1] ? (v[k + BW + 1] - v[k + BW - 1] - v[k - BW + 1] + v[k - BW - 1]) / 4 : 0;
+      const l1 = (vxx + vyy) / 2 + Math.sqrt(((vxx - vyy) / 2) ** 2 + vxy * vxy); if (l1 <= 0) continue;
+      lam[k] = l1; dd[k] = Math.hypot(vx, vy) / l1; if (u[k] < U0 && (k % 5) === 0) pos.push(l1);
+    }
+    pos.sort((a, b) => a - b); const l0 = pos.length ? 0.35 * pos[pos.length >> 1] : 1, bl = new Float32Array(BW * BH);
+    for (let k = 0; k < bl.length; k++) if (lam[k] > 0) bl[k] = Math.exp(-Math.pow(dd[k] / 0.8, 2)) * smooth(l0, 2.5 * l0, lam[k]);
+    sn.bl = bl;
+  }
+}
+// The activator u is read through a threshold, as the pigment cells read it: low u is the ground,
+// rising u turns blue at a stripe's edge and white at its crest. The ground runs from a near-black
+// back to a lighter navy belly, and the inhibitor's valleys draw the thin pale-blue lines.
+const NAVY_B = [26, 40, 98], NAVY_T = [5, 8, 21], BLUE = [56, 104, 196], WHITE = [238, 243, 247], PBLUE = [104, 156, 222], PALE = [150, 188, 236];
+const CAUD = [30, 40, 70], RAYC = [16, 22, 44]; // the caudal's dark clear membrane and its rays
+let FCAN, FIMG, OVER;
+function composeFish(Sa, Sb, f) {
+  const { list, PI, PX, PY, alpha, hyal, marg, gt, tp } = F.M, { kind, ray, spine, shade, skin } = F.B, { smod, soff, srim } = F.S, { rel, pale } = F.R;
+  const D = FIMG.data, BW = SOL.BW, U0 = SOL.U0, g = 1 - f, ua = Sa.u, ub = Sb.u, la = Sa.bl, lb = Sb.bl;
+  D.fill(0);
+  for (let m = 0; m < list.length; m++) {
+    const k = list[m], q = PI[k], fx = PX[k], fy = PY[k], w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
+    let u = g * (ua[q] * w00 + ua[q + 1] * w10 + ua[q + BW] * w01 + ua[q + BW + 1] * w11) + f * (ub[q] * w00 + ub[q + 1] * w10 + ub[q + BW] * w01 + ub[q + BW + 1] * w11);
+    const bl = g * (la[q] * w00 + la[q + 1] * w10 + la[q + BW] * w01 + la[q + BW + 1] * w11) + f * (lb[q] * w00 + lb[q + 1] * w10 + lb[q + BW] * w01 + lb[q + BW + 1] * w11);
+    u += soff[k] - U0;
+    const t = tp[k], a = smooth(0.7 + t, 1.65 + t, u), b = smooth(1.98 + t, 2.16 + t, u) * (kind[k] > 1 ? 0.86 : 1), t0 = gt[k];
+    let r = lerp(NAVY_B[0], NAVY_T[0], t0), gg = lerp(NAVY_B[1], NAVY_T[1], t0), bb = lerp(NAVY_B[2], NAVY_T[2], t0);
+    r += (BLUE[0] - r) * a * 0.85; gg += (BLUE[1] - gg) * a * 0.85; bb += (BLUE[2] - bb) * a * 0.85;
+    const pb = bl * (1 - a) * 0.88; r += (PBLUE[0] - r) * pb; gg += (PBLUE[1] - gg) * pb; bb += (PBLUE[2] - bb) * pb;
+    r += (WHITE[0] - r) * b; gg += (WHITE[1] - gg) * b; bb += (WHITE[2] - bb) * b;
+    const kd = kind[k];
+    if (kd > 1) {
+      const rc = ray[k] * (spine[k] ? 0.32 : 0.24) * (kd === 4 ? 0 : 1); r += (170 - r) * rc; gg += (190 - gg) * rc; bb += (226 - bb) * rc;
+      const mg = marg[k]; r += (PALE[0] - r) * mg; gg += (PALE[1] - gg) * mg; bb += (PALE[2] - bb) * mg;
+      const hy = hyal[k]; if (hy > 0) { const rr = ray[k] * 0.9; r += (CAUD[0] * (1 - rr) + RAYC[0] * rr - r) * hy; gg += (CAUD[1] * (1 - rr) + RAYC[1] * rr - gg) * hy; bb += (CAUD[2] * (1 - rr) + RAYC[2] * rr - bb) * hy; }
+    } else { const pl = pale[k] * (1 - b); r += (PALE[0] - r) * pl; gg += (PALE[1] - gg) * pl; bb += (PALE[2] - bb) * pl; }
+    // matte: no sheen; each scale's free rim is a hair lighter, so the lattice shows on the dark ground
+    const sh = kd === 1 ? srim[k] * (7 + 22 * b) : 0;
+    const L = shade[k] * (1 - (1 - smod[k]) * (1 - 0.75 * b)) * rel[k], sp = sh;
+    const o = k * 4; D[o] = r * L + sp * 0.8; D[o + 1] = gg * L + sp * 0.92; D[o + 2] = bb * L + sp * 1.15; D[o + 3] = 255 * skin[k] * alpha[k];
+  }
+  FCAN.getContext('2d').putImageData(FIMG, 0, 0);
+  FCAN.getContext('2d').drawImage(OVER, 0, 0);
+}
+
+// ---------- the pencil construction ----------
+// A group draws itself between t0 and t1 with draw(ctx, p); once finished it is a cached layer.
+const GROUPS = [];
+function group(key, t0, t1, draw, over = false) { GROUPS.push({ key, t0, t1, draw, layer: null, over }); } // over: drawn on top of the fish
+function bakeGroup(gp) {
+  const c = mk(W, H), g = c.getContext('2d'); gp.draw(g, 1);
+  const d = g.getImageData(0, 0, W, H).data; let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) { gp.layer = null; return; }
+  const o = mk(x1 - x0 + 1, y1 - y0 + 1); o.getContext('2d').drawImage(c, -x0, -y0); gp.layer = { c: o, x: x0, y: y0 };
+}
+function drawGroups(ctx, t, over = false) {
+  for (const gp of GROUPS) {
+    if (t <= gp.t0 || gp.over !== over) continue;
+    if (t >= gp.t1) { if (gp.layer) ctx.drawImage(gp.layer.c, gp.layer.x, gp.layer.y); }
+    else gp.draw(ctx, span(t, gp.t0, gp.t1));
+  }
+}
+// The growth, as Kondo and Asai showed it: the same fish at 20, 40, 60 and 80 mm, each at true size
+// and drawn from the solver's saved state at that length, its outline and its white stripes shaded in
+// pencil, laid in a row on one midline under the 120 mm fish; the stripes can be counted as they
+// insert while their spacing holds. The fish itself grows in place about a point in its head. The
+// stripes are arcs about the tail point, so past the body the pencil carries each one on round the
+// tail, and one spacing between two of them is dimensioned.
+const AGES = [20, 40, 60, 80];
+const ROW = { y: 800, gap: 36 }, RX = {};
+{ let x = 540 - (AGES.reduce((a, L) => a + 1.004 * L * MM, 0) + ROW.gap * (AGES.length - 1)) / 2; for (const L of AGES) { RX[L] = x; x += 1.004 * L * MM + ROW.gap; } }
+const rowPt = (x, y, L) => [RX[L] + (x + 0.004) * L * MM, ROW.y - y * L * MM];
+const rowLine = L => SKIN.map(p => rowPt(p[0], p[1], L)).concat([rowPt(SKIN[0][0], SKIN[0][1], L)]);
+function uAtL(L, x, y) { // the activator at TL point (x, y) of the fish at length L, between saved states
+  const S = SOL.snaps; let r = S.length - 2; while (r > 0 && S[r].L > L) r--;
+  const a = S[r], b = S[r + 1], f = clamp((L - a.L) / (b.L - a.L || 1)), BW = SOL.BW;
+  const gx = clamp((x - BOX[0]) * TL_MM / SOL.hb - 0.5, 0, BW - 1.001), gy = clamp((BOX[1] - y) * TL_MM / SOL.hb - 0.5, 0, SOL.BH - 1.001), q = Math.floor(gy) * BW + Math.floor(gx), fx = gx % 1, fy = gy % 1;
+  const bil = F => F[q] * (1 - fx) * (1 - fy) + F[q + 1] * fx * (1 - fy) + F[q + BW] * (1 - fx) * fy + F[q + BW + 1] * fx * fy;
+  return lerp(bil(a.u), bil(b.u), f) - SOL.U0;
+}
+function bakeRowTone(L) { // the white stripes as soft graphite bands with crisp edges
+  const s = L * MM, x0 = Math.floor(RX[L]) - 2, y0 = Math.floor(ROW.y - 0.41 * s), w = Math.ceil(1.02 * s) + 4, h = Math.ceil(0.82 * s) + 4;
+  const c = mk(w, h), g = c.getContext('2d'), im = g.createImageData(w, h), D = im.data;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const X0 = x0 + i + 0.5, Y0 = y0 + j + 0.5, tx = (X0 - RX[L]) / s - 0.004, ty = (ROW.y - Y0) / s; if (!inPoly(RDOM, tx, ty)) continue;
+    const a = smooth(1.7, 2.0, uAtL(L, tx, ty)) * 0.5, t = cardTooth(X0, Y0), th = 0.9 - 0.55 * a, dep = a * (0.3 + 0.7 * smooth(th - 0.28, th + 0.28, t));
+    const col = litAt([56, 57, 64], X0, Y0), k = (j * w + i) * 4; D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = dep * 0.85 * 255;
+  }
+  g.putImageData(im, 0, 0); return { c, x: x0, y: y0 };
+}
+const heroLine = () => SKIN.map(p => toCard(p[0], p[1])).concat([toCard(SKIN[0][0], SKIN[0][1])]);
+function tAtLen(L) { let a = TA1, b = TG1; for (let q = 0; q < 40; q++) { const m = (a + b) / 2; if (fishState(m).s * TL_MM < L) a = m; else b = m; } return a; } // the moment the fish passes L
+// Where the white stripes of the 120 mm fish meet its outline, and the circle about the tail point
+// each one follows: crossings on the dorsal and ventral edges are paired by radius into one arc that
+// runs on round the tail; the rest are carried a short way past the edge.
+function stripeArcs() {
+  const S = SOL.snaps[SOL.snaps.length - 1], U0 = SOL.U0, BW = SOL.BW;
+  const uAt = (x, y) => { const gx = clamp((x - BOX[0]) * TL_MM / SOL.hb - 0.5, 0, BW - 1.001), gy = clamp((BOX[1] - y) * TL_MM / SOL.hb - 0.5, 0, SOL.BH - 1.001), q = Math.floor(gy) * BW + Math.floor(gx), fx = gx % 1, fy = gy % 1;
+    return S.u[q] * (1 - fx) * (1 - fy) + S.u[q + 1] * fx * (1 - fy) + S.u[q + BW] * (1 - fx) * fy + S.u[q + BW + 1] * fx * fy - U0; };
+  // walk the reaction's boundary 1.5 px inside it, in 0.5 px steps
+  const P = []; for (let i = 0; i < RDOM.length; i++) { const a = RDOM[i], b = RDOM[(i + 1) % RDOM.length], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * TLP * 2)); for (let s = 0; s < n; s++) P.push([lerp(a[0], b[0], s / n), lerp(a[1], b[1], s / n)]); }
+  const runs = []; let cur = null;
+  P.forEach(p => { const dx = GC[0] - p[0], dy = GC[1] - p[1], l = Math.hypot(dx, dy) || 1, q = [p[0] + dx / l * 1.5 / TLP, p[1] + dy / l * 1.5 / TLP], w = uAt(q[0], q[1]) > 1.7;
+    if (w) { if (!cur) { cur = []; runs.push(cur); } cur.push(p); } else cur = null; });
+  if (runs.length > 1 && P.length && runs[0][0] === P[0] && runs[runs.length - 1].includes(P[P.length - 1])) runs[0] = runs.pop().concat(runs[0]);
+  const X = runs.filter(r => r.length >= 2 && r.length * 0.5 < 0.04 * TLP).map(r => { const m = r[Math.floor(r.length / 2)]; return { x: m[0], y: m[1], r: Math.hypot(m[0] - TAIL[0], m[1] - TAIL[1]), th: Math.atan2(m[1] - TAIL[1], m[0] - TAIL[0]) }; })
+    .filter(c => c.x > 0.05 && c.r > 0.03 && Math.abs(c.y) > 0.03);
+  const up = X.filter(c => c.y > 0).sort((a, b) => a.r - b.r), dn = X.filter(c => c.y < 0).sort((a, b) => a.r - b.r), used = new Set(), full = [], ext = [];
+  for (const c of up) { if (c.r > 0.45) continue; if (c.r > 0.42) { ext.push({ ...c, dir: -1 }); continue; }
+    let best = null, bd = 0.035; for (const d of dn) { if (used.has(d)) continue; const e = Math.abs(d.r - c.r); if (e < bd) { bd = e; best = d; } }
+    if (best) { used.add(best); full.push({ a: c, b: best }); } else ext.push({ ...c, dir: -1 }); }
+  for (const d of dn) if (!used.has(d) && d.r <= 0.45) ext.push({ ...d, dir: 1 }); // the head's straighter bars are not carried on
+  return { full, ext };
+}
+const arcPts = (th0, th1, r0, r1) => { const n = Math.max(8, Math.ceil(Math.abs(th1 - th0) * Math.max(r0, r1) * TLP / 2)), out = [];
+  for (let i = 0; i <= n; i++) { const t = i / n, th = lerp(th0, th1, t), r = lerp(r0, r1, t); out.push(toCard(TAIL[0] + r * Math.cos(th), TAIL[1] + r * Math.sin(th))); } return out; };
+let ARCS = null;
+function buildConstruction(TR) {
+  // the hero's own outline, traced where it will lie
+  group('hero', 0.42, 0.86, (g, p) => pencil(g, heroLine(), { prog: p, seed: 'hero', tremor: 0.25 }));
+  // the row: each length drawn as the growing fish passes it, outline, eye, stripes, then lettered
+  const yl = ROW.y + 0.4 * 80 * MM + 28;
+  AGES.forEach(L => {
+    const ts = L === L0_MM ? TA0 + 0.05 : tAtLen(L), T = bakeRowTone(L), c = TR.counts.reduce((a, q) => Math.abs(q.L - L) < Math.abs(a.L - L) ? q : a), cx = RX[L] + 0.5 * L * MM;
+    group('r' + L, ts, ts + 0.3, (g, p) => { pencil(g, rowLine(L), { prog: p, w: 1.35, seed: 'r' + L, tremor: 0.25 });
+      if (p > 0.6) { const e = rowPt(EYE[0], EYE[1], L); pencilCircle(g, e[0], e[1], Math.max(1.6, EYE[2] * L * MM * 0.75), { w: 1.1, seed: 're' + L }); } });
+    group('rt' + L, ts + 0.12, ts + 0.42, (g, p) => { if (p >= 1) { g.drawImage(T.c, T.x, T.y); return; }
+      const s2 = mk(T.c.width, T.c.height), q = s2.getContext('2d'); q.drawImage(T.c, 0, 0); q.globalCompositeOperation = 'destination-in';
+      const e = p * (T.c.width + 20), gr = q.createLinearGradient(e - 20, 0, e, 0); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); q.fillStyle = gr; q.fillRect(0, 0, s2.width, s2.height); g.drawImage(s2, T.x, T.y); });
+    group('rl' + L, ts + 0.25, ts + 0.45, (g, p) => { letterText(g, L + ' mm', cx, yl, { size: 15, medium: 'pencil', align: 'center', prog: p, seed: 'rl' + L });
+      letterText(g, c.n + ' stripes', cx, yl + 23, { size: 15, medium: 'pencil', align: 'center', prog: p, seed: 'rc' + L, tone: 0.85 }); });
+  });
+  // the row's common midline
+  group('rax', 1.4, 1.7, (g, p) => { const a = rowPt(-0.05, 0, 20), b = rowPt(1.04, 0, 80); pencilLine(g, a[0], a[1], b[0], b[1], { prog: p, tone: 0.7, w: 1.1, dash: [6, 5], seed: 'rax' }); });
+  // the stripes carried on past the body: whole arcs round the tail, short runs past the head's edge
+  ARCS = stripeArcs();
+  group('arcs', 3.95, 4.3, (g, p) => {
+    ARCS.full.forEach((A, i) => pencil(g, arcPts(A.a.th, A.b.th, A.a.r, A.b.r), { prog: stag(p, i, ARCS.full.length, 0.06), w: 1.35, seed: 'arc' + i, tremor: 0.2 }));
+    ARCS.ext.forEach((c, i) => { const d = 0.075 / c.r * c.dir; pencil(g, arcPts(c.th, c.th + d, c.r, c.r), { prog: p, w: 1.3, tone: 0.9, seed: 'ext' + i, tremor: 0.2, taper: 1 }); });
+  });
+  // the mean stripe spacing on the midline at 120 mm, and one spacing dimensioned: the adjacent pair
+  // of whole arcs nearest that mean, where they cross the midline past the caudal fin
+  const XL = TR.tracks.filter(t => t.pts[t.pts.length - 1][1] > TL_MM - 0.5).map(t => t.pts[t.pts.length - 1][0]).sort((a, b) => a - b);
+  MEAN = (XL[XL.length - 1] - XL[0]) * TL_MM / (XL.length - 1);
+  const F2 = ARCS.full.map(A => ({ A, r: (A.a.r + A.b.r) / 2 })).sort((a, b) => b.r - a.r); let pr = null;
+  const rAt = (A, th) => lerp(A.a.r, A.b.r, (A.a.th - th) / (A.a.th - A.b.th)); // the drawn arc's radius at angle th
+  const open = (x, y) => { for (let q = 0; q < 12; q++) { const a = q / 12 * Math.PI * 2; if (inPoly(SKIN, x + Math.cos(a) * 7 / TLP, y + Math.sin(a) * 7 / TLP)) return false; } return !inPoly(SKIN, x, y); };
+  for (let i = 1; i < F2.length; i++) { const A1 = F2[i - 1].A, A2 = F2[i].A;
+    for (let d = -84; d <= 84; d += 2) { const th = d * Math.PI / 180, r1 = rAt(A1, th), r2 = rAt(A2, th);
+      if (!open(TAIL[0] + r2 * Math.cos(th), r2 * Math.sin(th)) || !open(TAIL[0] + r1 * Math.cos(th), r1 * Math.sin(th))) continue;
+      const mm = (r1 - r2) * TL_MM, sc = Math.abs(mm - MEAN) + (d < 0 ? 0.3 : 0); // the upper side is clear of the nest
+      if (!pr || sc < pr.sc) pr = { mm, th, r1, r2, sc }; } }
+  if (pr) {
+    const { th, r1, r2 } = pr, c = Math.cos(th), s = Math.sin(th), a = toCard(TAIL[0] + r2 * c, r2 * s), b = toCard(TAIL[0] + r1 * c, r1 * s), mm = pr.mm.toFixed(1);
+    const nx = s, ny = c; // the card-space normal to the ray (card y runs down)
+    DIM = { mm, th, r1, r2 };
+    group('dim', 4.26, 4.44, (g, p) => { pencilLine(g, a[0], a[1], b[0], b[1], { prog: p, w: 1.2, seed: 'dm' });
+      if (p > 0.4) { pencilLine(g, a[0] - nx * 6, a[1] - ny * 6, a[0] + nx * 6, a[1] + ny * 6, { w: 1.2, seed: 'dm0' }); pencilLine(g, b[0] - nx * 6, b[1] - ny * 6, b[0] + nx * 6, b[1] + ny * 6, { w: 1.2, seed: 'dm1' }); }
+      letterText(g, mm + ' mm', b[0] + (b[0] - a[0]) / Math.hypot(b[0] - a[0], b[1] - a[1]) * 10 + 4, b[1] + (b[1] - a[1]) / Math.hypot(b[0] - a[0], b[1] - a[1]) * 10 + 5, { size: 15, medium: 'pencil', prog: clamp(p * 2 - 1), seed: 'dmT' }); });
+  }
+  // a 10 mm scale bar under the nest's snout
+  group('bar', 1.7, 1.9, (g, p) => { const x0 = RX[20], y0 = ROW.y + 0.4 * 80 * MM + 72; pencilLine(g, x0, y0, x0 + 10 * MM, y0, { prog: p, seed: 'bar' });
+    if (p > 0.5) { pencilLine(g, x0, y0 - 4, x0, y0 + 4, { tone: 0.95, w: 1.3, seed: 'bar0' }); pencilLine(g, x0 + 10 * MM, y0 - 4, x0 + 10 * MM, y0 + 4, { tone: 0.95, w: 1.3, seed: 'bar1' }); }
+    letterText(g, '10 mm', x0 + 10 * MM + 10, y0 + 5, { size: 15, medium: 'pencil', prog: clamp(p * 2 - 1), seed: 'barT' }); });
+}
+let DIM = null, MEAN = 8;
+function buildNotes() {
+  const N = [['Turing (1952) on a growing skin', 16], ['D_{v}/D_{u} = 25,  α = 3 round the tail', 15], ['stripes stay ≈ ' + MEAN.toFixed(1) + ' mm apart; new ones insert', 15]];
+  group('notes', 1.36, 2.0, (g, p) => N.forEach(([s, z], i) => letterText(g, s, 120, 166 + i * 25 + (i ? 3 : 0), { size: z, medium: 'pencil', prog: stag(p, i, N.length, 0.12), seed: 'nt' + i })));
+}
+// The insertion at X 0.51, Y 0.34 of the 120 mm fish: a new stripe opening between two old ones,
+// ringed in white pencil on the fish, with a graphite leader out to its note on the card.
+const FORK = { at: [0.51, 0.339], r: 26, from: [640, 205], text: ['a new stripe inserts'] };
+function buildFork() {
+  const a = toCard(FORK.at[0], FORK.at[1]), c = FORK.from, dx = a[0] - c[0], dy = a[1] - c[1], l = Math.hypot(dx, dy), ux = dx / l, uy = dy / l;
+  let e = 0; for (let d = 0; d < l; d += 0.5) { const x = c[0] + ux * d, y = c[1] + uy * d, tx = GC[0] + (x - GX) / TLP, ty = GC[1] - (y - GY) / TLP; if (inPoly(SKIN, tx, ty)) { e = d; break; } }
+  const b = [c[0] + ux * (e - 2), c[1] + uy * (e - 2)], f = [a[0] - ux * FORK.r, a[1] - uy * FORK.r];
+  group('fork', 4.08, 4.24, (g, p) => pencil(g, [c, b], { prog: p, w: 1.3, seed: 'fk' }));
+  group('forkW', 4.22, 4.32, (g, p) => pencil(g, [b, f], { prog: p, w: 1.4, white: true, seed: 'fkw' }), true);
+  group('forkC', 4.3, 4.46, (g, p) => pencilCircle(g, a[0], a[1], FORK.r, { prog: p, w: 1.5, white: true, seed: 'fkc' }), true);
+  group('forkT', 4.12, 4.38, (g, p) => FORK.text.forEach((s, i) => letterText(g, s, c[0] + 4, c[1] - 8 + i * 24, { size: 18, medium: 'pencil', prog: stag(p, i, FORK.text.length, 0.3), seed: 'fkt' + i })));
+}
+// ---------- the trials along the foot ----------
+// Each is the same solver, the same outline and the same growth from 20 to 120 mm, drawn at 41 mm
+// in pencil: the outline, and graphite wherever the activator is in the lower half of its range.
+const TT = 146; // trial length in px
+let TRI = [], TRX = [], TRY = 1088;
+const tPt = (i, x, y) => [TRX[i] + (x - 0.5) * TT, TRY - y * TT];
+function bakeTrialTone(i, sol, thr = [0.38, 0.6]) {
+  const fin = sol.snaps[sol.snaps.length - 1].u, U0 = sol.U0, [x0, y0] = tPt(i, -0.01, 0.41), [x1, y1] = tPt(i, 1.01, -0.41);
+  const bx = Math.floor(x0), by = Math.floor(y0), bw = Math.ceil(x1) - bx + 1, bh = Math.ceil(y1) - by + 1, c = mk(bw, bh), g = c.getContext('2d'), im = g.createImageData(bw, bh), D = im.data;
+  const U = new Float32Array(bw * bh).fill(NaN), vals = [];
+  for (let j = 0; j < bh; j++) for (let ii = 0; ii < bw; ii++) {
+    const X0 = bx + ii + 0.5, Y0 = by + j + 0.5, x = (X0 - TRX[i]) / TT + 0.5, y = (TRY - Y0) / TT; if (!inPoly(RDOM, x, y)) continue;
+    const gx = clamp((x - BOX[0]) * TL_MM / sol.hb - 0.5, 0, sol.BW - 1.001), gy = clamp((BOX[1] - y) * TL_MM / sol.hb - 0.5, 0, sol.BH - 1.001), q = Math.floor(gy) * sol.BW + Math.floor(gx), fx = gx % 1, fy = gy % 1;
+    const u = fin[q] * (1 - fx) * (1 - fy) + fin[q + 1] * fx * (1 - fy) + fin[q + sol.BW] * (1 - fx) * fy + fin[q + sol.BW + 1] * fx * fy - U0;
+    U[j * bw + ii] = u; vals.push(u);
+  }
+  vals.sort((a, b) => a - b); const lo = vals[Math.floor(vals.length * 0.02)], hi = vals[Math.floor(vals.length * 0.98)];
+  for (let j = 0; j < bh; j++) for (let ii = 0; ii < bw; ii++) {
+    const u = U[j * bw + ii]; if (u !== u) continue; const X0 = bx + ii + 0.5, Y0 = by + j + 0.5, tn = (u - lo) / (hi - lo || 1);
+    const a = (1 - smooth(thr[0], thr[1], tn)) * 0.64, t = cardTooth(X0, Y0), th = 0.9 - 0.55 * a, dep = a * (0.3 + 0.7 * smooth(th - 0.28, th + 0.28, t));
+    const col = litAt([66, 67, 74], X0, Y0), k = (j * bw + ii) * 4; D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = dep * 0.8 * 255;
+  }
+  g.putImageData(im, 0, 0); return { c, x: bx, y: by };
+}
+function buildTrials() {
+  TRIALS.forEach((tr, i) => {
+    const t0 = 3.38 + i * 0.1;
+    group('tro' + i, t0, t0 + 0.34, (g, p) => pencil(g, SKIN.filter((q, k) => k % 3 === 0).map(q => tPt(i, q[0], q[1])).concat([tPt(i, SKIN[0][0], SKIN[0][1])]), { prog: p, w: 1.3, tone: 0.85, seed: 'tro' + i }));
+    group('trt' + i, t0 + 0.2, t0 + 0.62, (g, p) => { const L = TRI[i].tone; if (p >= 1) { g.drawImage(L.c, L.x, L.y); return; }
+      // the hand shades it in from the head back, a soft edge leading
+      const s = mk(L.c.width, L.c.height), q = s.getContext('2d'); q.drawImage(L.c, 0, 0); q.globalCompositeOperation = 'destination-in';
+      const e = p * (L.c.width + 30), gr = q.createLinearGradient(e - 30, 0, e, 0); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); q.fillStyle = gr; q.fillRect(0, 0, s.width, s.height);
+      g.drawImage(s, L.x, L.y); });
+    group('trv' + i, 3.95 + i * 0.07, 4.17 + i * 0.07, (g, p) => { letterText(g, tr.text, TRX[i], TRY + 0.4 * TT + 32, { size: 19.5, medium: 'pencil', align: 'center', prog: p, seed: 'tv' + i });
+      letterText(g, tr.name, TRX[i], TRY + 0.4 * TT + 60, { size: 17, medium: 'pencil', align: 'center', prog: p, seed: 'tn' + i, tone: 0.85 }); });
+    if (tr.real) group('tick', 4.3, 4.42, (g, p) => pencilTick(g, TRX[i], TRY + 0.4 * TT + 90, 19, { prog: p, seed: 'tick', w: 1.6 }));
+  });
+}
+// ---------- the label ----------
+const LABEL = [{ text: 'No. 10', size: 12.5 }, { text: '*{Pomacanthus semicirculatus}', size: 15 }, { text: '(Cuvier, 1831)', size: 12.5 },
+  { text: 'semicircle angelfish, juvenile, 120 mm', size: 12.5 }, { text: 'Turing pattern on a growing skin', size: 12.5 }];
+let LAB = null;
+function label(t) { labelCard(X, { x: LAB.x, y: LAB.y, w: LAB.w, lines: LABEL, prog: span(t, 3.86, 4.5), rot: -0.005, pad: 14, seed: 'label10' }); }
+
+// ---------- the build ----------
+// The pencil construction draws itself from 0.4 s: the hero's outline first; the row of earlier
+// lengths below is drawn as the growing fish passes each one. The 20 mm fish takes its skin by the snout at 1.55 s and the reaction spreads forward
+// from its tail; from 1.95 s to 4.05 s it grows in place to 120 mm, filling its outline, new
+// stripes inserting. The trials are drawn from 3.38 s, the label from 3.86 s; from 3.95 s the stripes
+// are carried on round the tail, one spacing is dimensioned and the fork is ringed.
+const TA0 = 1.55, TA1 = 1.95, TG1 = 4.05;
+let CARD, FRAME, SL, SA, BLANK, NA = 0, LASTPOS = null;
+function fishState(t) {
+  if (t <= TA0) return null;
+  const ga = ease(span(t, TA0, TA0 + 0.22)), nB = SOL.snaps.length - NA;
+  if (t < TA1) return { s: L0_MM / TL_MM, pos: span(t, TA0, TA1) * NA - 1, ga }; // -1: the bare skin before the first saved state
+  const L = L0_MM * Math.pow(TL_MM / L0_MM, ease5(span(t, TA1, TG1)));
+  return { s: L / TL_MM, pos: Math.min(SOL.snaps.length - 1, NA - 1 + Math.log(L / L0_MM) / Math.log(TL_MM / L0_MM) * nB), ga };
+}
+function fishShadow(st) {
+  const g = SA.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.filter = 'none'; g.globalAlpha = 1; g.clearRect(0, 0, W, H);
+  for (const sl of SL) {
+    const off = sl.z * MM * st.s * K, b = (sl.soft ? 1.2 : 0.5) + (sl.soft ? 0.5 : 0.3) * sl.z * MM * st.s; // the window is a broad source: the penumbra widens fast with height
+    const m = fishMat(st.s); g.filter = `blur(${b.toFixed(2)}px)`; g.setTransform(m[0], 0, 0, m[3], m[4] + SH.x * off, m[5] + SH.y * off); g.drawImage(sl.c, 0, 0);
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0); g.filter = 'none'; g.globalCompositeOperation = 'source-in'; g.fillStyle = SHC; g.fillRect(0, 0, W, H);
+  X.save(); X.setTransform(1, 0, 0, 1, 0, 0); X.globalCompositeOperation = 'multiply'; X.globalAlpha = 0.7 * st.ga; X.drawImage(SA, 0, 0); X.restore();
+}
+function fishDraw(st) {
+  if (st.pos !== LASTPOS) {
+    const S = SOL.snaps, i = Math.floor(st.pos), f = st.pos - i, ua = i < 0 ? BLANK : S[Math.min(i, S.length - 1)], ub = S[Math.min(i + 1, S.length - 1)];
+    composeFish(ua, ub, f); LASTPOS = st.pos;
+  }
+  X.save(); X.setTransform(...fishMat(st.s)); X.globalAlpha = st.ga; X.drawImage(FCAN, 0, 0); X.restore();
+}
+function seek(t) {
+  t = clamp(t, 0, DUR);
+  X.setTransform(1, 0, 0, 1, 0, 0); X.filter = 'none'; X.globalAlpha = 1; X.globalCompositeOperation = 'source-over';
+  X.drawImage(CARD, 0, 0);
+  drawGroups(X, t);
+  const st = fishState(t); if (st) { fishShadow(st); fishDraw(st); }
+  drawGroups(X, t, true);
+  if (t > 3.86) label(t);
+  X.setTransform(1, 0, 0, 1, 0, 0); X.filter = 'none'; X.globalAlpha = 1; X.globalCompositeOperation = 'source-over';
+  X.drawImage(FRAME, 0, 0); lightFalloff(X); glass(X, t);
+}
+const TIMES = {};
+async function init() {
+  let t0 = performance.now(); const tick = k => { const n = performance.now(); TIMES[k] = Math.round(n - t0); t0 = n; };
+  CARD = renderCard({ tone: 'white' }); FRAME = renderFrame(); tick('card');
+  SOL = rdModel({ ...REAL, h: 0.5, refine: 1.6, snapA: 10, snapB: 64 }); NA = SOL.snaps.filter(q => q.phase === 'A').length; tick('solve');
+  BLANK = { u: new Float32Array(SOL.BW * SOL.BH).fill(SOL.U0), bl: new Float32Array(SOL.BW * SOL.BH) }; blueLines(SOL);
+  const TR = stripeTracks(SOL); SOL.tracks = TR;
+  TRI = TRIALS.map(tr => ({ sol: rdModel({ ...REAL, ...tr.o, h: 0.8, refine: 1.3, snapA: 1, snapB: 1 }) })); tick('trials');
+  const B = bakeFish(SOL); F = { B, S: bakeScales(B), R: bakeRelief(B), M: bakeMembrane(B, SOL) };
+  OVER = bakeOverlayLayer(B, bakeOverlays()); SL = bakeSlices(B, F.M); FCAN = mk(FW, FH); FIMG = FCAN.getContext('2d').createImageData(FW, FH); SA = mk(W, H); tick('fish');
+  // the foot: the label at the right, the trials spaced evenly to its left
+  const lw = Math.round(Math.max(...LABEL.map(l => measureText(l.text, l.size))) + 34); LAB = { w: lw, x: 122, y: 1068 };
+  const xa = LAB.x + lw + 56 + TT / 2, xb = TX1 - 40 - TT / 2; TRX = TRIALS.map((q, i) => lerp(xa, xb, i / (TRIALS.length - 1)));
+  TRI.forEach((q, i) => { q.tone = bakeTrialTone(i, q.sol, TRIALS[i].th); });
+  buildConstruction(TR); buildNotes(); buildFork(); buildTrials(); for (const gp of GROUPS) bakeGroup(gp); tick('pencil');
+  window.__angelfish = { TIMES, counts: TR.counts, tracks: TR.tracks.length, births: TR.tracks.filter(t => t.start > 0).length };
+}
+kitStart(init, seek);
+</script>
+</body></html>
