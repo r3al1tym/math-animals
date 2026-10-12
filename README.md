@@ -1,6 +1,6 @@
 # Computed form: Claude making art from the rules that shape living things
 
-**[Watch the film](film/math-animals.mp4)** (48 s, silent, 4:5): the ten animals grown from their equations, in the order below.
+**[Watch the film](film/math-animals.mp4)** (64 s, silent, 4:5): the ten animals grown from their equations, in the order below.
 
 ![Contact sheet of the film, one frame a second](images/film-contact-sheet.jpg)
 
@@ -11,7 +11,7 @@
 | ![](out/06-camp-pitar.png) | ![](out/07-sea-fan.png) | ![](out/08-cone-shell.png) | ![](out/09-angelfish.png) | ![](out/10-tortoise.png) |
 | Fig. 6 Camp pitar | Fig. 7 Sea fan | Fig. 8 Cone shell | Fig. 9 Angelfish | Fig. 10 Tortoise |
 
-Claude (Opus 5.5) can take a published scientific model of how an animal's form arises, implement it, and render the result as finished artwork with no image files. It also directed, built and reviewed the work itself, running unattended for hours. The technique is general: the picture is the model's output, and the model's construction stays visible in it. The test set is the ten animals in a 48-second film, drawn by 15,227 lines of code. Each form is drawn by its cited rule. Reviewers still identify the surfaces as computed, and only the dragonfly passed review.
+Claude (Opus 5.5) can take a published scientific model of how an animal's form arises, implement it, and render the result as finished artwork with no image files. It also directed, built and reviewed the work itself, running unattended for hours. The technique is general: the picture is the model's output, and the model's construction stays visible in it. The test set is the ten animals in a 64-second film, drawn by 15,227 lines of code. Each form is drawn by its cited rule. Reviewers still identify the surfaces as computed, and only the dragonfly passed review.
 
 ## The technique
 
