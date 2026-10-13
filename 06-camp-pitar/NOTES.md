@@ -2,12 +2,12 @@
 
 ## The card
 
-- **Animal.** *Lioconcha castrensis* (Linnaeus, 1758), the camp pitar, a venus clam. One right valve, exterior up, at low tide on wet grey sand. The name means "of the camp": its pattern is rows of brown tents.
+- **Animal.** *Lioconcha castrensis* (Linnaeus, 1758), the camp pitar, a venus clam. One right valve, 38 mm, exterior up, laid in the series' oak drawer on the white card and drawn three times life size. The name means "of the camp": its pattern is rows of brown tents.
 - **Mathematics.** The shell is built the way the animal builds it, by accretion at the margin.
   - The outline is a Catmull-Rom curve converted into a 1440-entry polar table about the beak. Every growth line is an iso-line of r = d / R(φ), so each ring is the same outline scaled about the beak, as in isometric bivalve growth.
   - Age follows a von Bertalanffy growth curve, r = r0 + (1 − r0)(1 − e^(−ke)) / (1 − e^(−kE)), with e the age less any pauses, so the growth lines crowd toward the margin as the clam ages, and two growth checks leave ridges.
   - The tents are a Meinhardt activator–inhibitor reaction–diffusion system run along the mantle edge: one row of the simulation per growth increment, on a margin that lengthens as the shell grows: mantle cells divide and each daughter is inserted between its neighbours, so the pattern keeps its scale (one cell per pixel at full size). The inhibitor is long-lived and does not diffuse, so activation travels as waves: a cell that fires starts a pair of waves (a Λ, the tent's peak), waves that meet annihilate. Pigment is laid on the wave and, while the inhibitor stays high, in its wake, so each wave leaves a band; where the tissue has recovered the shell stays white. A slowly varying pigment readiness along the margin makes some tents fill solid. The shell is the space-time diagram of that system, with arc length along the margin as space and the radius as time.
-  - The valve's dome is a height field in r, blurred into a knob near the beak; its shadow on the sand is ray-marched toward the sun. Each stage of the build is a scaled replica of the finished valve, since bivalves grow nearly isometrically.
+  - The valve's dome is a height field in r, blurred into a knob near the beak, lit by the drawer's window; it casts two shadows onto the card through the kit's `castShadow`, a soft one at about half the dome's height and a tight one at the contact. Each stage of the build is a scaled replica of the finished valve, since bivalves grow nearly isometrically.
 - **The designed moment.** During the build the margin advances from the beak and the tents write themselves at the edge: wave pairs ignite, run apart, collide and vanish, and the fresh, thin margin carries the newest row before it hardens.
 - **Palette.** Three colours.
   - *Aragonite cream* `#ece2cf`: the shell, warm and slightly translucent.
@@ -135,3 +135,16 @@ Works: the warm grey sand, ripples and damp halo; the smooth glossy shell with n
 - White dominant: arms thinner (`PIGM.w` 4, `PIGM.fill` 3) and fewer triggers (`pt` 0.0008), so the brown gathers in the tents and the solid fields (the ink-spill blob was one) are gone. Seed 2 of four.
 - Small items: the final record blur across rows 1.7 -> 2.6 rows clears the sawtooth on shallow arms; growth lines fade on the umbo over r 0.05 to 0.2 (was 0.08 to 0.4) at 0.55 relief (was 0.45), so they show again in the highlight below the apex.
 - Outputs: `out/hero.png`, `out/build.png`. Timing: init 3.8 s, a frame 0.6 to 1.0 s, deterministic, no `Math.random`, no page errors.
+
+## Round 17: into the drawer (2026-10-13)
+
+The page moves from the wet sand into the series' drawer, so it reads as one of the ten. The science is unchanged: the polar outline, the von Bertalanffy schedule with its two checks, and the margin model and its record are the same code, with the px-sized textures (shell colour, erosion, undulation, the beak's blur) scaled by `PXS` to the smaller valve.
+
+- **Drawer.** The kit block is inlined (`node kit/sync.mjs`) and the page follows its contract and layering: card tray, pencil construction, the valve's shadows, the valve, the label, the frame, the window falloff and the glass. `?play` builds in real time.
+- **Scale and light.** The valve is 38 mm, drawn × 3 (L = 410 px). The low sun and the sky are replaced by the kit's window, about 42 degrees up from the upper left, and the room's fill; reflections below the horizon see the white card. The sand, its calibration, its distance field and the sun's shadow pass are gone.
+- **Construction.** The beak, the finished outline, 13 rays of the polar table run on past the margin, R(φ) lettered on the longest, and the growth lines at r = 0.25, 0.5 and 0.75 dashed, which the shell grows into and covers.
+- **The record, unrolled.** Below the valve, the reaction's space-time diagram as a pencilled wedge: across, the mantle edge from σ = 0 to σ = 1; down, one row per growth step, the beak at the apex. Each row is as wide as the margin was long, so the wedge widens as the clam grows and stands straight at the two checks, which are bracketed. Its width for its height matches the shell's margin length for its radius, so its tents keep the shell's proportions. It is written row by row in step with the margin, a pencil line riding its newest row.
+- **Trials.** At the upper right, the valve at life size with every fifth of its growth lines and the two checks drawn heavier, and the von Bertalanffy curve r against age, ticked where it stands flat at each check.
+- **Timing.** Construction 0.4 to 1.95 s, the larval cap at 1.5 s, the margin grows 1.55 to 4.15 s, the trials from 3.1 s, the label 3.9 to 4.5 s, hero at 5.2 s.
+- **Determinism.** The pencil's shared scratch canvas is sized to the frame at init, so no frame depends on the frames drawn before it.
+- **Render.** Init about 2.4 to 3.6 s in headless Chrome (software GL), a frame 0.15 to 0.7 s; deterministic, no `Math.random`.
