@@ -856,6 +856,99 @@ function kitStart(init, seek) {
 </script>
 <script>
 "use strict";
+// ===== math-animals workers v1 begin =====
+// Row bands for the heavy bakes. Each worker runs this same page script again, with a stub document
+// whose canvases are OffscreenCanvases, so it holds the same constants and functions and computes the
+// same floats; a job bakes one band of rows and the page copies the bands back into its own arrays.
+// Where a worker cannot start (no Worker, no OffscreenCanvas, a file:// origin that refuses blobs),
+// MW.bands() and MW.all() return null and the page bakes on its own thread exactly as before.
+const MW = (() => {
+  const inWorker = typeof self !== 'undefined' && self.__MW_WORKER === true;
+  // rows(h, band, halo): the rows [j0, j1) a band covers, widened by halo rows for a pass whose
+  // results a later pass reads across the band's edge. With no band, every row.
+  const rows = (h, band, halo = 0) => band ? [Math.max(0, Math.floor(band[0] * h) - halo), Math.min(h, Math.floor(band[1] * h) + halo)] : [0, h];
+  // cut(arr, h, band): the band's own rows of a full-size array, to send back
+  const cut = (arr, h, band) => { const st = arr.length / h, [j0, j1] = rows(h, band); return arr.slice(j0 * st, j1 * st); };
+  // merge(dst, parts, key, h): put each part's cut rows of key back in place in dst
+  function merge(dst, parts, key, h) {
+    const st = dst.length / h;
+    for (const p of parts) dst.set(p.r[key], rows(h, p.band)[0] * st);
+    return dst;
+  }
+  if (inWorker) return { inWorker, rows, cut, merge, all: async () => null, each: async () => null, bands: async () => null, bandsPer: async () => null, limit: () => {}, done: () => {}, size: 0 };
+  let pool = null, boot = null, seq = 0;
+  const pend = new Map();
+  let cap = Math.max(1, Math.min(8, (typeof navigator !== 'undefined' && navigator.hardwareConcurrency || 4) - 1));
+  try {
+    // the page's inline scripts up to this one, each its own blob so each keeps its own directives
+    const me = document.currentScript, all = [...document.scripts], src = me.textContent, at = src.lastIndexOf('\nkitStart(');
+    if (cap > 1 && at > 0 && typeof OffscreenCanvas === 'function' && typeof Worker === 'function') {
+      const blob = text => URL.createObjectURL(new Blob([text], { type: 'text/javascript' }));
+      const urls = all.slice(0, all.indexOf(me)).filter(e => !e.src).map(e => blob(e.textContent));
+      urls.push(blob(src.slice(0, at) + '\n__mwKitStart(' + src.slice(at + 10)));
+      boot = URL.createObjectURL(new Blob([`"use strict";
+self.__MW_WORKER = true; self.window = self;
+const _oc = (w, h) => new OffscreenCanvas(w || 300, h || 150);
+self.document = { getElementById: () => _oc(1080, 1350), querySelector: () => _oc(1080, 1350), createElement: () => _oc() };
+self.__mwKitStart = () => {};
+self.onmessage = async e => {
+  const { id, job, args } = e.data;
+  try {
+    const r = await MW_JOBS[job](...args), tr = [];
+    for (const v of Object.values(r)) if (ArrayBuffer.isView(v)) tr.push(v.buffer);
+    postMessage({ id, r }, tr);
+  } catch (err) { postMessage({ id, err: String(err && err.stack || err) }); }
+};
+importScripts(...${JSON.stringify(urls)});`], { type: 'text/javascript' }));
+    }
+  } catch (e) { boot = null; }
+  // workers(n): start up to n workers (they begin by running the page script, so start them early)
+  function workers(n) {
+    if (!boot) return null;
+    try {
+      pool = pool || [];
+      while (pool.length < Math.min(n, cap)) {
+        const w = new Worker(boot);
+        w.onmessage = e => { const p = pend.get(e.data.id); if (p) { pend.delete(e.data.id); e.data.err ? p.no(new Error(e.data.err)) : p.ok(e.data.r); } };
+        w.onerror = e => { e.preventDefault(); for (const p of pend.values()) p.no(new Error('worker failed')); pend.clear(); };
+        pool.push(w);
+      }
+      return pool;
+    } catch (e) { boot = null; pool = null; return null; }
+  }
+  const call = (w, job, args) => new Promise((ok, no) => { const id = ++seq; pend.set(id, { ok, no }); w.postMessage({ id, job, args }); });
+  // all(list): run each [job, ...args] of list as MW_JOBS[job](...args), a free worker taking the
+  // next; resolves to the results in list order, or null if the workers are unavailable or one fails.
+  async function all(list, n = list.length) {
+    const ws = workers(n); if (!ws) return null;
+    const out = new Array(list.length); let next = 0;
+    try {
+      await Promise.all(ws.map(async w => { while (next < list.length) { const i = next++, [job, ...args] = list[i]; out[i] = await call(w, job, args); } }));
+      return out;
+    } catch (e) { console.warn('workers: ' + e.message + '; baking on the page'); return null; }
+  }
+  // each(job, ...args): run MW_JOBS[job](...args) once on every worker (to hand them shared state)
+  async function each(job, ...args) {
+    const ws = workers(cap); if (!ws) return null;
+    try { return await Promise.all(ws.map(w => call(w, job, args))); } catch (e) { console.warn('workers: ' + e.message + '; baking on the page'); return null; }
+  }
+  // bands(job, ...args): eight row bands per worker, each run as MW_JOBS[job](band, ...args), so a
+  // slow band holds up only its own worker; resolves to [{band, r}] in row order, or null.
+  // bandsPer(k, job, ...args): the same with k bands per worker, for rows of even cost.
+  async function bandsPer(k, job, ...args) {
+    const nb = k * cap, list = [];
+    for (let i = 0; i < nb; i++) list.push([job, [i / nb, (i + 1) / nb], ...args]);
+    const rs = await all(list, cap);
+    return rs && rs.map((r, i) => ({ band: list[i][1], r }));
+  }
+  const bands = (job, ...args) => bandsPer(8, job, ...args);
+  // limit(n): use at most n workers (call before the first job)
+  const limit = n => { cap = Math.max(1, Math.min(cap, n)); };
+  // done(): the bakes are over; let the workers go
+  const done = () => { if (pool) for (const w of pool) w.terminate(); pool = null; };
+  return { inWorker, rows, cut, merge, all, each, bands, bandsPer, limit, done, get size() { return pool ? pool.length : 0; } };
+})();
+// ===== math-animals workers v1 end =====
 // Plate No. 1. Of all ways to cut the plane into cells of equal area, the regular hexagons use the
 // least wall (Hales, 1999). The curator rules the triangular lattice of cell centres, draws the
 // close-packed circles on it and then the hexagons; the comb grows on that drawing as round wax
@@ -1222,11 +1315,11 @@ let CBX0 = 0, CBY0 = 0, CBW = 0, CBH = 0;
 // height, for the long shadow. Given the final images, a pixel whose cells have all reached their final
 // state is copied from them, so a seek late in the build only renders the cells still changing.
 const cellIdx = (x, y) => { const dx = x - LO[0], dy = y - LO[1], [i, j] = cellOf(dx * CR + dy * SR, -dx * SR + dy * CR); return gridAt(i, j); };
-function renderComb(ss, img, tall, fin) {
+function renderComb(ss, img, tall, fin, band = null) {
   img = img || new ImageData(CBW, CBH); tall = tall || new ImageData(CBW, CBH);
-  const D = img.data, T = tall.data, FD = fin ? fin.img.data : null, FT = fin ? fin.tall.data : null, inv = 1 / ss, n = ss * ss;
+  const D = img.data, T = tall.data, FD = fin ? fin.img.data : null, FT = fin ? fin.tall.data : null, inv = 1 / ss, n = ss * ss, [j0, j1] = MW.rows(CBH, band);
   D.fill(0); T.fill(0);
-  for (let j = 0; j < CBH; j++) for (let i = 0; i < CBW; i++) {
+  for (let j = j0; j < j1; j++) for (let i = 0; i < CBW; i++) {
     const k = (j * CBW + i) * 4, ci = cellIdx(CBX0 + i + 0.5, CBY0 + j + 0.5);
     if (FD && ci >= 0 && DONEN[ci]) { D[k] = FD[k]; D[k + 1] = FD[k + 1]; D[k + 2] = FD[k + 2]; D[k + 3] = FD[k + 3]; T[k + 3] = FT[k + 3]; continue; }
     let r = 0, g = 0, b = 0, a = 0;
@@ -1238,6 +1331,7 @@ function renderComb(ss, img, tall, fin) {
     D[k] = r / a; D[k + 1] = g / a; D[k + 2] = b / a; D[k + 3] = a / n * 255;
     T[k + 3] = D[k + 3] * (ci >= 0 ? Math.min(1, ZT[ci] / Z_FULL) : 1);
   }
+  if (band) return { D: MW.cut(D, CBH, band), T: MW.cut(T, CBH, band) };
   return { img, tall };
 }
 let OUTM = null, CUTM = null, LOWF = null; // the torn outline's signed distance at each pixel of the comb's box; a slow swell of the comb's surface
@@ -1706,18 +1800,34 @@ function trialText(t) {
     if (q.n === 6) pencilTick(X, q.x + vw / 2 + 22, TRIAL_Y + TRIAL_R + 54, 24, { prog: span(t, 3.98, 4.12), seed: 'tick', w: 2.3 });
   });
 }
-async function seek(t) {
+// The comb is a per-pixel render, at load (the final comb, 3 x 3 samples) and on every frame of its
+// build (the cells still changing, 2 x 2), so the workers render it in row bands. Each lays out its
+// own comb once from the same rules and is handed the final images; the page keeps the bands.
+let COMB_MW = false, PREP = false;
+function prepComb() { if (PREP) return; PREP = true; bakeTex(); setState(DUR); keepFinal(); }
+const MW_JOBS = {
+  final(band) { prepComb(); setState(DUR); return renderComb(3, null, null, null, band); },
+  setFinal(D, T) { prepComb(); FIN = { img: { data: D }, tall: { data: T } }; return {}; },
+  live(band, t) { setState(t); return renderComb(2, null, null, FIN, band); },
+};
+function putBands(out, parts) { MW.merge(out.img.data, parts, 'D', CBH); MW.merge(out.tall.data, parts, 'T', CBH); return out; }
+// A seek renders the comb before it draws, so each frame is drawn in one go; seeks run in turn.
+let SEEKS = Promise.resolve();
+function seek(t) { const p = SEEKS.then(() => seekNow(t)); SEEKS = p.catch(() => {}); return p; }
+async function seekNow(t) {
   t = clamp(t, 0, DUR);
+  let comb = null, tall = null, zt = Z_FULL; OPAC = 1;
+  if (t >= COMB_DONE) { comb = COMB_FINAL; tall = COMB_FINAL_T; }
+  else if (t > Math.min(...RT)) {
+    zt = setState(t);
+    const parts = COMB_MW ? await MW.bandsPer(3, 'live', t) : null;
+    if (parts) putBands(LIVE, parts); else renderComb(2, LIVE.img, LIVE.tall, FIN); // cells still changing at 2 x 2 samples; those done copied from the final
+    COMB_LIVE.getContext('2d').putImageData(LIVE.img, 0, 0); COMB_LIVE_T.getContext('2d').putImageData(LIVE.tall, 0, 0); comb = COMB_LIVE; tall = COMB_LIVE_T;
+  }
   X.setTransform(1, 0, 0, 1, 0, 0); X.filter = 'none'; X.globalAlpha = 1; X.globalCompositeOperation = 'source-over';
   X.drawImage(CARD, 0, 0);
   drawConstruction(t);
   drawNotes(t); trialText(t);
-  let comb = null, tall = null, zt = Z_FULL; OPAC = 1;
-  if (t >= COMB_DONE) { comb = COMB_FINAL; tall = COMB_FINAL_T; }
-  else if (t > Math.min(...RT)) {
-    zt = setState(t); renderComb(2, LIVE.img, LIVE.tall, FIN); // cells still changing at 2 x 2 samples; those done copied from the final
-    COMB_LIVE.getContext('2d').putImageData(LIVE.img, 0, 0); COMB_LIVE_T.getContext('2d').putImageData(LIVE.tall, 0, 0); comb = COMB_LIVE; tall = COMB_LIVE_T;
-  }
   if (comb) {
     sweptShadow(X, tall, CBX0, CBY0, zt, 0.3 * Math.pow(OPAC, 1.5)); // the long shadow, each part as tall as its cells, light: wax and honey pass some light
     castShadow(X, comb, CBX0, CBY0, 2.5 * MM, { alpha: 0.2 * OPAC, blur: 3 }); // the near shade under the comb's edge
@@ -1730,16 +1840,19 @@ async function seek(t) {
   X.drawImage(FRAME, 0, 0); lightFalloff(X); glass(X, t);
 }
 kitStart(async () => {
+  const final = MW.bandsPer(3, 'final');
   CARD = renderCard({ tone: 'white' }); FRAME = renderFrame(); bakeTex();
   bakeConstruction(); bakeTrials(); bakeNotes();
   CONS_ID = CONS.getContext('2d').getImageData(0, 0, W, H);
   CB = [Math.max(0, CB[0]), Math.max(0, CB[1]), Math.min(W - 1, CB[2]), Math.min(H - 1, CB[3])];
-  setState(DUR); keepFinal(); FIN = renderComb(3);
+  setState(DUR); keepFinal(); const fp = await final;
+  FIN = fp ? putBands({ img: new ImageData(CBW, CBH), tall: new ImageData(CBW, CBH) }, fp) : renderComb(3);
   COMB_FINAL = mk(CBW, CBH); COMB_FINAL.getContext('2d').putImageData(FIN.img, 0, 0); COMB_FINAL_T = mk(CBW, CBH); COMB_FINAL_T.getContext('2d').putImageData(FIN.tall, 0, 0);
   COMB_LIVE = mk(CBW, CBH); COMB_LIVE_T = mk(CBW, CBH); LIVE = { img: new ImageData(CBW, CBH), tall: new ImageData(CBW, CBH) };
   const tb = performance.now();
   BEES = BEE_SPEC.map(b => ({ ...b, img: renderBee(b) }));
   console.log('bees ms', performance.now() - tb);
+  COMB_MW = !!(fp && await MW.each('setFinal', FIN.img.data, FIN.tall.data));
 }, seek);
 </script>
 </body></html>

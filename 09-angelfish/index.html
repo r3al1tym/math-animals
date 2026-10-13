@@ -854,6 +854,99 @@ function kitStart(init, seek) {
   })();
 }
 // ===== math-animals kit v1 end =====
+// ===== math-animals workers v1 begin =====
+// Row bands for the heavy bakes. Each worker runs this same page script again, with a stub document
+// whose canvases are OffscreenCanvases, so it holds the same constants and functions and computes the
+// same floats; a job bakes one band of rows and the page copies the bands back into its own arrays.
+// Where a worker cannot start (no Worker, no OffscreenCanvas, a file:// origin that refuses blobs),
+// MW.bands() and MW.all() return null and the page bakes on its own thread exactly as before.
+const MW = (() => {
+  const inWorker = typeof self !== 'undefined' && self.__MW_WORKER === true;
+  // rows(h, band, halo): the rows [j0, j1) a band covers, widened by halo rows for a pass whose
+  // results a later pass reads across the band's edge. With no band, every row.
+  const rows = (h, band, halo = 0) => band ? [Math.max(0, Math.floor(band[0] * h) - halo), Math.min(h, Math.floor(band[1] * h) + halo)] : [0, h];
+  // cut(arr, h, band): the band's own rows of a full-size array, to send back
+  const cut = (arr, h, band) => { const st = arr.length / h, [j0, j1] = rows(h, band); return arr.slice(j0 * st, j1 * st); };
+  // merge(dst, parts, key, h): put each part's cut rows of key back in place in dst
+  function merge(dst, parts, key, h) {
+    const st = dst.length / h;
+    for (const p of parts) dst.set(p.r[key], rows(h, p.band)[0] * st);
+    return dst;
+  }
+  if (inWorker) return { inWorker, rows, cut, merge, all: async () => null, each: async () => null, bands: async () => null, bandsPer: async () => null, limit: () => {}, done: () => {}, size: 0 };
+  let pool = null, boot = null, seq = 0;
+  const pend = new Map();
+  let cap = Math.max(1, Math.min(8, (typeof navigator !== 'undefined' && navigator.hardwareConcurrency || 4) - 1));
+  try {
+    // the page's inline scripts up to this one, each its own blob so each keeps its own directives
+    const me = document.currentScript, all = [...document.scripts], src = me.textContent, at = src.lastIndexOf('\nkitStart(');
+    if (cap > 1 && at > 0 && typeof OffscreenCanvas === 'function' && typeof Worker === 'function') {
+      const blob = text => URL.createObjectURL(new Blob([text], { type: 'text/javascript' }));
+      const urls = all.slice(0, all.indexOf(me)).filter(e => !e.src).map(e => blob(e.textContent));
+      urls.push(blob(src.slice(0, at) + '\n__mwKitStart(' + src.slice(at + 10)));
+      boot = URL.createObjectURL(new Blob([`"use strict";
+self.__MW_WORKER = true; self.window = self;
+const _oc = (w, h) => new OffscreenCanvas(w || 300, h || 150);
+self.document = { getElementById: () => _oc(1080, 1350), querySelector: () => _oc(1080, 1350), createElement: () => _oc() };
+self.__mwKitStart = () => {};
+self.onmessage = async e => {
+  const { id, job, args } = e.data;
+  try {
+    const r = await MW_JOBS[job](...args), tr = [];
+    for (const v of Object.values(r)) if (ArrayBuffer.isView(v)) tr.push(v.buffer);
+    postMessage({ id, r }, tr);
+  } catch (err) { postMessage({ id, err: String(err && err.stack || err) }); }
+};
+importScripts(...${JSON.stringify(urls)});`], { type: 'text/javascript' }));
+    }
+  } catch (e) { boot = null; }
+  // workers(n): start up to n workers (they begin by running the page script, so start them early)
+  function workers(n) {
+    if (!boot) return null;
+    try {
+      pool = pool || [];
+      while (pool.length < Math.min(n, cap)) {
+        const w = new Worker(boot);
+        w.onmessage = e => { const p = pend.get(e.data.id); if (p) { pend.delete(e.data.id); e.data.err ? p.no(new Error(e.data.err)) : p.ok(e.data.r); } };
+        w.onerror = e => { e.preventDefault(); for (const p of pend.values()) p.no(new Error('worker failed')); pend.clear(); };
+        pool.push(w);
+      }
+      return pool;
+    } catch (e) { boot = null; pool = null; return null; }
+  }
+  const call = (w, job, args) => new Promise((ok, no) => { const id = ++seq; pend.set(id, { ok, no }); w.postMessage({ id, job, args }); });
+  // all(list): run each [job, ...args] of list as MW_JOBS[job](...args), a free worker taking the
+  // next; resolves to the results in list order, or null if the workers are unavailable or one fails.
+  async function all(list, n = list.length) {
+    const ws = workers(n); if (!ws) return null;
+    const out = new Array(list.length); let next = 0;
+    try {
+      await Promise.all(ws.map(async w => { while (next < list.length) { const i = next++, [job, ...args] = list[i]; out[i] = await call(w, job, args); } }));
+      return out;
+    } catch (e) { console.warn('workers: ' + e.message + '; baking on the page'); return null; }
+  }
+  // each(job, ...args): run MW_JOBS[job](...args) once on every worker (to hand them shared state)
+  async function each(job, ...args) {
+    const ws = workers(cap); if (!ws) return null;
+    try { return await Promise.all(ws.map(w => call(w, job, args))); } catch (e) { console.warn('workers: ' + e.message + '; baking on the page'); return null; }
+  }
+  // bands(job, ...args): eight row bands per worker, each run as MW_JOBS[job](band, ...args), so a
+  // slow band holds up only its own worker; resolves to [{band, r}] in row order, or null.
+  // bandsPer(k, job, ...args): the same with k bands per worker, for rows of even cost.
+  async function bandsPer(k, job, ...args) {
+    const nb = k * cap, list = [];
+    for (let i = 0; i < nb; i++) list.push([job, [i / nb, (i + 1) / nb], ...args]);
+    const rs = await all(list, cap);
+    return rs && rs.map((r, i) => ({ band: list[i][1], r }));
+  }
+  const bands = (job, ...args) => bandsPer(8, job, ...args);
+  // limit(n): use at most n workers (call before the first job)
+  const limit = n => { cap = Math.max(1, Math.min(cap, n)); };
+  // done(): the bakes are over; let the workers go
+  const done = () => { if (pool) for (const w of pool) w.terminate(); pool = null; };
+  return { inWorker, rows, cut, merge, all, each, bands, bandsPer, limit, done, get size() { return pool ? pool.length : 0; } };
+})();
+// ===== math-animals workers v1 end =====
 
 // Plate No. 9. A juvenile semicircle angelfish, Pomacanthus semicirculatus, lies on the card over
 // its own growth drawing. Its stripes are a Turing reaction-diffusion pattern solved on its skin as
@@ -1643,13 +1736,20 @@ function seek(t) {
   X.drawImage(FRAME, 0, 0); lightFalloff(X); glass(X, t);
 }
 const TIMES = {};
+// The four solves (the fish and its three trials) are independent, so they run at once on the
+// workers while the page bakes its card. Each solve is one explicit time march and stays whole.
+const SOLVE = { real: { ...REAL, h: 0.5, refine: 1.6, snapA: 10, snapB: 64 } };
+TRIALS.forEach((tr, i) => { SOLVE[i] = { ...REAL, ...tr.o, h: 0.8, refine: 1.3, snapA: 1, snapB: 1 }; });
+const MW_JOBS = { rd: which => rdModel(SOLVE[which]) };
 async function init() {
   let t0 = performance.now(); const tick = k => { const n = performance.now(); TIMES[k] = Math.round(n - t0); t0 = n; };
+  const solves = MW.all([['rd', 'real'], ...TRIALS.map((tr, i) => ['rd', i])]);
   CARD = renderCard({ tone: 'white' }); FRAME = renderFrame(); tick('card');
-  SOL = rdModel({ ...REAL, h: 0.5, refine: 1.6, snapA: 10, snapB: 64 }); NA = SOL.snaps.filter(q => q.phase === 'A').length; tick('solve');
+  const rs = await solves; MW.done();
+  SOL = rs ? rs[0] : rdModel(SOLVE.real); NA = SOL.snaps.filter(q => q.phase === 'A').length; tick('solve');
   BLANK = { u: new Float32Array(SOL.BW * SOL.BH).fill(SOL.U0), bl: new Float32Array(SOL.BW * SOL.BH) }; blueLines(SOL);
   const TR = stripeTracks(SOL); SOL.tracks = TR;
-  TRI = TRIALS.map(tr => ({ sol: rdModel({ ...REAL, ...tr.o, h: 0.8, refine: 1.3, snapA: 1, snapB: 1 }) })); tick('trials');
+  TRI = TRIALS.map((tr, i) => ({ sol: rs ? rs[i + 1] : rdModel(SOLVE[i]) })); tick('trials');
   const B = bakeFish(SOL); F = { B, S: bakeScales(B), R: bakeRelief(B), M: bakeMembrane(B, SOL) };
   OVER = bakeOverlayLayer(B, bakeOverlays()); SL = bakeSlices(B, F.M); FCAN = mk(FW, FH); FIMG = FCAN.getContext('2d').createImageData(FW, FH); SA = mk(W, H); tick('fish');
   // the foot: the label at the right, the trials spaced evenly to its left
