@@ -1,8 +1,10 @@
-# Computed form: Claude making art from the rules that shape living things
+# Math-Animals
 
-**[Watch the film](film/math-animals.mp4)** (64 s, silent, 4:5): the ten animals grown from their equations, in the order below.
+Claude read the science of how ten animals get their shape, implemented each published model, and drew the animal from it. Each animal is one HTML page of Canvas 2D code with no image files: 15,227 lines in all, every line written by Claude Opus 5.5, every number cited.
 
-![Contact sheet of the film, one frame a second](images/film-contact-sheet.jpg)
+**[Open the cabinet](https://r3al1tym.github.io/math-animals/)** and click any animal to watch it grow from its rule in your browser, then drag through time. **[Watch the full film](https://r3al1tym.github.io/math-animals/film/)** (64 s, silent).
+
+https://github.com/user-attachments/assets/3ce3b5e5-801b-4282-9f4f-9ab6795153e8
 
 | | | | | |
 |---|---|---|---|---|
@@ -11,7 +13,35 @@
 | ![](out/06-camp-pitar.png) | ![](out/07-sea-fan.png) | ![](out/08-cone-shell.png) | ![](out/09-angelfish.png) | ![](out/10-tortoise.png) |
 | Fig. 6 Camp pitar | Fig. 7 Sea fan | Fig. 8 Cone shell | Fig. 9 Angelfish | Fig. 10 Tortoise |
 
-Claude (Opus 5.5) can take a published scientific model of how an animal's form arises, implement it, and render the result as finished artwork with no image files. It also directed, built and reviewed the work itself, running unattended for hours. The technique is general: the picture is the model's output, and the model's construction stays visible in it. The test set is the ten animals in a 64-second film, drawn by 15,227 lines of code. Each form is drawn by its cited rule. Reviewers still identify the surfaces as computed, and only the dragonfly passed review.
+## What Claude read
+
+Each builder session started from the research on its animal, implemented the model it describes, and drew the animal from the model's output. The construction stays on the page, so you can check the picture against the rule.
+
+| Animal | Model Claude implemented | Research it read |
+|---|---|---|
+| Emperor dragonfly | Inhibitory centres spaced evenly between the main veins; walls form where their signals are weakest (a Voronoi tiling, 2,611 cells) | Hoffmann, Donoughe, Li, Salcedo and Rycroft, *PNAS* (2018), wing cells measured in 232 odonate species |
+| Semicircle angelfish | Turing reaction–diffusion on a growing skin: stripes insert as the fish lengthens, 3 to 13 | Kondo and Asai, *Nature* 376 (1995); Painter, Maini and Othmer, *PNAS* (1999); Turing (1952) |
+| Textile cone | Activator–inhibitor with a global hormone, one row per growth step, so the shell is a space-time diagram | Meinhardt and Klingler, *J. Theor. Biol.* 126 (1987), run as Meinhardt's own program for *Conus textile* |
+| Camp pitar | Activator–inhibitor run along a lengthening mantle edge | Meinhardt, *The Algorithmic Beauty of Sea Shells* |
+| Common sea fan | Space colonisation: branch tips grow toward 4,526 points of free space, plus a fusion rule | Runions et al. (2005, 2007) |
+| Chambered nautilus | Logarithmic spiral r = a·e^(bθ), b = 0.175, so each whorl grows 3.00x: the nautilus is not golden | Moseley's whorl ratios; Bartlett (2018), 80 shells; Ward et al. (1981) |
+| Garden orb-weaver | Archimedean capture spiral; glue beads at the Rayleigh–Plateau wavelength, 9.01 thread radii, which the page solves for | Rayleigh's instability of a liquid cylinder; Zschokke (1993, 2011); Opell and Hendricks (2007) |
+| Honeybee comb | Hexagons use the least wall of any equal-area tiling; circles relax into hexagons | Hales, *Discrete & Computational Geometry* 25 (2001); Karihaloo, Zhang and Wang (2013) |
+| Edible sea urchin | Dihedral symmetry D5: one sector of plates and its four rotations | Descriptions of the Echinidae test |
+| Radiated tortoise | Growth by accretion: ring k = areola × (1 + 0.352k) | Keratin added only at the scute's edges |
+
+Each page's `NOTES.md` gives the mathematics, the sources for every number and the trials behind it. Fact-checker sessions verified every caption in the film against a primary source.
+
+## How Claude made it
+
+Claude Code (Opus 5.5) wrote every line. I directed and gave notes.
+
+- A lead session wrote the concept, one shared builder brief ([BUILDERS.md](BUILDERS.md)) and a card per animal: its rule, its sources, its moment.
+- Ten builder sessions worked in parallel, one per animal, each reading its research and implementing the model.
+- After every round, a new reviewer session that had never seen the work judged the rendered frame alone and returned PASS or REVISE with ranked changes.
+- Fact-checker sessions verified every caption against a primary source.
+
+154 Claude sessions in all (3 leads, 46 builders, 97 blind reviewers, 8 fact-checkers): about 92 agent-hours and 9,900 tool calls, with runs of up to 8.5 hours unattended on a remote desktop. The ten pages took about six and a half hours of wall-clock time, and the film went through 20 drafts on my notes.
 
 ## The technique
 
@@ -31,21 +61,6 @@ flowchart LR
   V -- REVISE + ranked changes --> M
   V -- PASS --> O[Stills, build strips, film]
 ```
-
-## The ten animals and their rules
-
-| Animal | Rule that draws it |
-|---|---|
-| Chambered nautilus | Logarithmic spiral, W = 3.00 a whorl |
-| Honeybee comb | Honeycomb theorem (Hales, 2001): circles relax into hexagons |
-| Garden orb-weaver | Archimedean spiral; glue beads at the Rayleigh–Plateau wavelength |
-| Edible sea urchin | Dihedral symmetry D5: one sector and its four rotations |
-| Emperor dragonfly | Voronoi tiling of the wing, n = 2,611 cells |
-| Sea fan | Space colonisation: branch tips grow toward free space |
-| Camp pitar | Meinhardt's shell-pattern model, row by row |
-| Textile cone | Activator–inhibitor pigment, recorded as a space-time diagram |
-| Semicircle angelfish | Turing reaction–diffusion, after Kondo and Asai (1995) |
-| Radiated tortoise | Accretion growth: ring k = areola × (1 + 0.352 k) |
 
 ## What Claude does in it
 
@@ -75,11 +90,12 @@ Any form with a published generative model: shells and horns, phyllotaxis, cryst
 
 ## This repository
 
-- `NN-name/index.html`: one page per animal, self-contained (open it in a browser). `NN-name/NOTES.md` gives the mathematics, its sources and the trials behind each page.
+- `NN-name/index.html`: one page per animal, self-contained. Open it in a browser with `?play` to watch it build, or `?t=2.5` for one moment. `NN-name/NOTES.md` gives the mathematics, its sources and the trials behind each page.
 - `out/`: each page's finished frame at 5.2 s, 1080 × 1350.
 - `kit/`: the shared light and material kit, inlined into every page by `node kit/sync.mjs <page.html>`.
 - `CONCEPT.md`: the concept card and the concept frames considered (`concept-frames/`). It describes the first series of ten, in which a glass sponge held the place the camp pitar holds in the film.
 - `BUILDERS.md`: the brief each builder worked from.
+- `index.html`: the cabinet, the gallery served at r3al1tym.github.io/math-animals.
 - `film/math-animals.mp4`: the film, 1080 × 1350, 30 fps, silent.
 - `tools/render.mjs`: renders a page at given times and checks it is deterministic.
 
