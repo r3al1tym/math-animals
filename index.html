@@ -3,192 +3,203 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Math-Animals: ten animals drawn by the mathematics that shapes them</title>
-<meta name="description" content="Ten animals, each drawn in Canvas 2D code by the published model of how its form arises. No image files. Written by Claude Opus 5.5.">
-<meta property="og:title" content="Math-Animals">
-<meta property="og:description" content="Ten animals drawn by the mathematics that shapes them. Open one and watch it grow from its rule in your browser.">
+<title>Math-Animals: Claude read the papers, then drew the animals</title>
+<meta name="description" content="Ten animals, each drawn in code by the model a published paper gives for its form. Written by Claude Opus 5.5. No image files.">
+<meta property="og:title" content="Math-Animals: Claude read the papers, then drew the animals">
+<meta property="og:description" content="Ten animals, each drawn in Canvas code from the research that models its form. Open a plate and watch it grow in your browser.">
 <meta property="og:image" content="https://r3al1tym.github.io/math-animals/images/og.jpg">
 <meta property="og:url" content="https://r3al1tym.github.io/math-animals/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://r3al1tym.github.io/math-animals/images/og.jpg">
+<link rel="preload" href="fonts/caslon-400.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  @font-face { font-family: "Caslon"; src: url(fonts/caslon-400.woff2) format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: "Caslon"; src: url(fonts/caslon-400i.woff2) format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+  @font-face { font-family: "Caslon"; src: url(fonts/caslon-700.woff2) format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
   :root {
-    --paper: #f3efec; --ink: #2b2a28; --ink-2: #5d5a55; --ink-3: #8b877f;
-    --red: #c4473a; --drawer: #1b1712; --rule: #d9d5cd;
+    --paper: #f3efec; --ink: #201f1d; --ink-2: #57534d; --ink-3: #8e897f; --hair: #dcd6cc;
+    --red: #b8402f; --drawer: #16130f;
+    --serif: "Caslon", "Iowan Old Style", Charter, Georgia, serif;
+    --math: "Caslon", "STIX Two Math", "Cambria Math", "Times New Roman", serif;
     --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  html { background: var(--paper); color: var(--ink); font: 17px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+  html { background: var(--paper); color: var(--ink); font: 17px/1.6 var(--sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; scroll-behavior: smooth; }
   body { margin: 0; }
   .ground { position: fixed; inset: 0; z-index: -1; background: var(--paper); isolation: isolate; }
   .ground::before, .ground::after { content: ""; position: absolute; inset: 0; pointer-events: none; background-size: var(--grain-tile, 512px); opacity: .6; }
   .ground::before { background-image: url(images/grain-lift.png); mix-blend-mode: plus-lighter; }
   .ground::after { background-image: url(images/grain-drop.png); mix-blend-mode: difference; }
-  a { color: inherit; text-decoration-color: var(--ink-3); text-underline-offset: 3px; }
+  a { color: inherit; text-decoration-color: var(--ink-3); text-decoration-thickness: 1px; text-underline-offset: 3px; }
   a:hover { text-decoration-color: var(--red); }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 40px; }
+  .eyebrow { font: 600 12px/1.2 var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3); }
+  .eyebrow b { color: var(--red); font-weight: 600; }
+  button { font: inherit; color: inherit; }
+  .btn { font: 600 14px var(--sans); letter-spacing: .02em; padding: 10px 16px; border-radius: 2px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+  .btn.ghost { background: transparent; color: var(--ink); border-color: #b9b2a6; }
+  .btn.ghost:hover { border-color: var(--ink); }
+  .btn[disabled] { opacity: .35; cursor: default; }
 
-  header.mast { display: grid; grid-template-columns: minmax(0, 470px) minmax(0, 1fr); gap: 56px; align-items: center; padding: 48px 0 0; }
-  header.mast img { width: 100%; height: auto; display: block; -webkit-mask-image: radial-gradient(ellipse 80% 66% at 50% 44%, #000 70%, transparent 100%); mask-image: radial-gradient(ellipse 80% 66% at 50% 44%, #000 70%, transparent 100%); }
-  h1 { font-size: 15px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 18px; }
-  .lede { font-size: 30px; line-height: 1.25; font-weight: 500; margin: 0 0 22px; letter-spacing: -.01em; }
-  .sub { color: var(--ink-2); margin: 0 0 26px; max-width: 34em; }
-  .facts { font-family: var(--mono); font-size: 13px; color: var(--red); display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0 0 30px; padding: 0; list-style: none; }
-  .actions { display: flex; gap: 14px; flex-wrap: wrap; }
-  .btn { font: 600 15px var(--sans); padding: 11px 18px; border-radius: 3px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); cursor: pointer; text-decoration: none; }
-  .btn.ghost { background: transparent; color: var(--ink); }
+  /* the hero: one plate at monumental scale, computing as you arrive */
+  .hero { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 64px; align-items: center; padding: 36px 0 44px; }
+  .hero .copy { align-self: end; padding-bottom: 7vh; max-width: 580px; }
+  .hero h1 { font: 400 clamp(44px, 5.4vw, 80px)/1.0 var(--serif); letter-spacing: -.015em; margin: 22px 0 28px; }
+  .hero h1 span { display: block; }
+  .hero h1 .soft { color: var(--ink-3); }
+  .hero p.lede { font-size: 18px; color: var(--ink-2); margin: 0 0 26px; max-width: 30em; }
+  .live-note { display: flex; align-items: center; gap: 10px; font: 13px var(--mono); color: var(--ink-2); margin-bottom: 26px; min-height: 20px; }
+  .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: pulse 1.6s ease-out infinite; }
+  .dot.done { animation: none; background: var(--ink-3); }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(184,64,47,.45); } 100% { box-shadow: 0 0 0 10px rgba(184,64,47,0); } }
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+  .hero figure { margin: 0; }
+  .hero-plate { height: min(84vh, 900px); aspect-ratio: 4 / 5; }
+  .hero figcaption { margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline; gap: 24px; font-size: 13.5px; color: var(--ink-2); }
+  .eq { font: italic 400 19px/1.4 var(--math); color: var(--ink); }
 
-  section { padding: 40px 0; }
-  h2 { font-size: 15px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 6px; }
-  .h2sub { color: var(--ink-3); margin: 0 0 26px; }
+  /* a live plate: the still, then the page computing in place */
+  .live { position: relative; overflow: hidden; background: var(--drawer); box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 34px 60px -34px rgba(40,24,8,.6); }
+  .live .inner { position: absolute; left: 0; top: 0; width: 720px; height: 900px; transform-origin: 0 0; }
+  .live img, .live iframe { position: absolute; inset: 0; width: 720px; height: 900px; border: 0; display: block; }
+  .live iframe { opacity: 0; transition: opacity .3s ease; }
+  .live.on iframe { opacity: 1; }
+  .live img { transition: opacity .5s ease; }
+  .live.on img { opacity: 0; }
+  .live .grow { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 2; opacity: 0; transition: opacity .25s; }
+  .live:hover .grow, .live:focus-within .grow { opacity: 1; }
+  .live.on .grow { display: none; }
 
-  .cabinet { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 28px 20px; }
-  .spec { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: inherit; font: inherit; }
-  .spec img { width: 100%; height: auto; aspect-ratio: 4 / 5; display: block; box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 10px 24px -14px rgba(0,0,0,.45); transition: transform .35s cubic-bezier(.2,.7,.2,1), box-shadow .35s; }
-  .spec:hover img, .spec:focus-visible img { transform: translateY(-4px); box-shadow: 0 2px 4px rgba(0,0,0,.18), 0 22px 34px -18px rgba(0,0,0,.5); }
-  .spec:focus-visible { outline: none; }
-  .spec .no { display: block; margin-top: 12px; font-size: 12px; color: var(--ink-3); letter-spacing: .06em; }
-  .spec .nm { display: block; font-weight: 600; font-size: 15px; }
-  .spec .rl { display: block; font-family: var(--mono); font-size: 12px; color: var(--red); margin-top: 2px; }
+  /* contents: the ten plates as a table of contents */
+  .contents { padding: 40px 0 24px; }
+  .contents ol { list-style: none; margin: 22px 0 0; padding: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 14px; }
+  .contents a { display: block; text-decoration: none; }
+  .contents img { width: 100%; height: auto; aspect-ratio: 4 / 5; display: block; box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 10px 20px -14px rgba(0,0,0,.45); transition: transform .4s cubic-bezier(.2,.7,.2,1); }
+  .contents a:hover img { transform: translateY(-4px); }
+  .contents .n { display: block; margin-top: 10px; font: 600 11px var(--sans); letter-spacing: .12em; color: var(--ink-3); }
+  .contents .nm { display: block; font: 400 15px/1.25 var(--serif); }
 
-  .film { display: grid; grid-template-columns: minmax(0, 432px) minmax(0, 1fr); gap: 56px; align-items: start; }
-  .film video { width: 100%; display: block; background: var(--drawer); aspect-ratio: 4 / 5; }
-  .how p { margin: 0 0 16px; max-width: 36em; }
-  .how ol { margin: 0 0 18px; padding-left: 1.2em; max-width: 36em; }
-  .how li { margin: 0 0 8px; }
-  .nums { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 4px 34px; margin: 6px 0 24px; }
-  .nums b { display: block; font-size: 28px; font-weight: 500; letter-spacing: -.01em; }
+  /* the spreads: the paper on the verso, the plate on the recto */
+  .spread { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 88px; padding: 120px 0; align-items: center; }
+  .verso { max-width: 560px; }
+  .verso .eyebrow { margin-bottom: 26px; }
+  .verso h2 { font: 400 46px/1.05 var(--serif); letter-spacing: -.01em; margin: 0 0 6px; }
+  .verso .bin { font: italic 400 19px var(--serif); color: var(--ink-2); margin: 0 0 34px; }
+  .paper { border-left: 2px solid var(--ink); padding: 2px 0 2px 22px; margin: 0 0 30px; }
+  .paper .who { font: 400 16px/1.45 var(--serif); }
+  .paper .ttl { font: italic 400 20px/1.35 var(--serif); margin: 4px 0; }
+  .paper .src { font: 400 15px var(--serif); color: var(--ink-2); }
+  .paper.anatomy { border-left-color: var(--ink-3); }
+  .finding { font: 400 19px/1.55 var(--serif); margin: 0 0 30px; }
+  .formula { font: italic 400 var(--fs, 30px)/1.3 var(--math); margin: 0 0 32px; padding: 6px 0 0; }
+  .formula small { display: block; font: 400 14px/1.5 var(--sans); font-style: normal; color: var(--ink-3); margin-top: 8px; letter-spacing: .01em; }
+  .formula sub, .formula sup { font-size: .62em; }
+  .built { font-size: 15.5px; color: var(--ink-2); margin: 0 0 18px; }
+  .built b { color: var(--ink); font-weight: 600; }
+  .verso .links { font-size: 14px; color: var(--ink-2); display: flex; gap: 22px; flex-wrap: wrap; }
+  .recto { width: 100%; }
+  .recto .live { width: 100%; aspect-ratio: 4 / 5; }
+  .scrub { display: flex; align-items: center; gap: 14px; margin-top: 14px; font: 12px var(--mono); color: var(--ink-3); visibility: hidden; }
+  .scrub.on { visibility: visible; }
+  .scrub input { flex: 1; accent-color: var(--red); }
+  .scrub button { all: unset; cursor: pointer; font: 600 12px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+  .scrub button:hover { color: var(--ink); }
+
+  /* the method */
+  .method { padding: 120px 0 80px; display: grid; grid-template-columns: minmax(0, 432px) minmax(0, 1fr); gap: 88px; }
+  .method video { width: 100%; display: block; aspect-ratio: 4 / 5; background: var(--drawer); }
+  .method h2 { font: 400 46px/1.05 var(--serif); letter-spacing: -.01em; margin: 18px 0 18px; }
+  .method p { margin: 0 0 18px; max-width: 34em; color: var(--ink-2); }
+  .method p strong { color: var(--ink); font-weight: 600; }
+  .nums { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 4px 40px; margin: 30px 0 34px; }
+  .nums b { display: block; font: 400 44px/1 var(--serif); }
   .nums span { font-size: 13px; color: var(--ink-3); }
-  .papers { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 56px; }
-  .papers li { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; padding: 13px 0; border-top: 1px solid var(--rule); font-size: 15.5px; }
-  .papers .an { font-weight: 600; font-size: 14px; }
-  .papers .an button { all: unset; cursor: pointer; text-decoration: underline; text-decoration-color: var(--ink-3); text-underline-offset: 3px; }
-  .papers .an button:hover { text-decoration-color: var(--red); }
-  .papers .ref { color: var(--ink-2); }
-  .papers .ref i { color: var(--ink); }
-  .side .paper { font-size: 14.5px; color: #c9c3b8; border-left: 2px solid #e7806f; padding-left: 12px; }
-  .side .paper b { display: block; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: #9d978b; font-weight: 600; margin-bottom: 3px; }
-  footer { color: var(--ink-3); font-size: 14px; padding: 36px 0 56px; }
+  .steps { list-style: none; margin: 0 0 30px; padding: 0; counter-reset: s; max-width: 36em; }
+  .steps li { counter-increment: s; position: relative; padding: 0 0 16px 40px; color: var(--ink-2); }
+  .steps li::before { content: counter(s, upper-roman) "."; position: absolute; left: 0; top: 0; font: 400 17px var(--serif); color: var(--red); }
+  .steps li b { color: var(--ink); font-weight: 600; }
+  footer { padding: 30px 0 70px; font-size: 14px; color: var(--ink-3); display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+
+  /* arrival: lines resolve from blur, one after another */
+  .rise { opacity: 0; filter: blur(8px); transform: translateY(6px); animation: rise .9s cubic-bezier(.2,.7,.2,1) forwards; }
+  @keyframes rise { to { opacity: 1; filter: blur(0); transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .rise { animation: none; opacity: 1; filter: none; transform: none; } html { scroll-behavior: auto; } }
+
+  @media (max-width: 1080px) {
+    .hero { grid-template-columns: 1fr; gap: 28px; min-height: 0; padding-top: 28px; }
+    .hero .copy { align-self: auto; padding-bottom: 0; }
+    .hero-plate { height: auto; width: 100%; max-width: 560px; }
+    .hero figcaption { flex-direction: column; gap: 4px; }
+    .contents ol { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .spread, .method { grid-template-columns: 1fr; gap: 40px; padding: 72px 0; }
+    .recto { max-width: 520px; }
+    .nums { grid-template-columns: repeat(2, auto); }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 0 22px; }
+    .verso h2, .method h2 { font-size: 36px; }
+    .formula { --fs: 21px !important; }
+    .hero figure { order: -1; }
+    .hero h1 { line-height: 1.06; }
+    .contents .nm { display: none; }
+    .contents ol { gap: 10px; }
+  }
 </style>
 </head>
 <body>
 <div class="ground" aria-hidden="true"></div>
-<style>
-  .viewer { position: fixed; inset: 0; background: #16130f; color: #e9e5dc; display: none; z-index: 10; }
-  .viewer.open { display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
-  .stage { position: relative; overflow: hidden; min-height: 0; }
-  .frame { position: absolute; left: 50%; top: 50%; width: 720px; height: 900px; transform-origin: center; }
-  .frame img, .frame iframe { position: absolute; inset: 0; width: 720px; height: 900px; border: 0; display: block; }
-  .frame img { transition: opacity .5s ease; }
-  .frame iframe { opacity: 0; transition: opacity .25s ease; background: var(--drawer); }
-  .frame.live iframe { opacity: 1; }
-  .frame.live img { opacity: 0; }
-  .frame.baking img { opacity: .38; }
-  .status { position: absolute; left: 0; right: 0; bottom: -34px; text-align: center; font: 13px var(--mono); color: #b9b2a5; }
-  .side { padding: 48px 36px 36px 8px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
-  .side .no { font-size: 12px; letter-spacing: .08em; color: #9d978b; text-transform: uppercase; }
-  .side h3 { font-size: 26px; font-weight: 500; margin: 0; line-height: 1.2; }
-  .side .lat { font-style: italic; color: #b9b2a5; margin-top: -8px; }
-  .side .rule { font: 14px var(--mono); color: #e7806f; }
-  .side p { margin: 0; color: #d9d4ca; font-size: 15.5px; }
-  .scrub { display: none; flex-direction: column; gap: 6px; margin-top: 6px; }
-  .scrub.on { display: flex; }
-  .scrub label { font-size: 12px; color: #9d978b; letter-spacing: .06em; text-transform: uppercase; }
-  .scrub input { width: 100%; accent-color: #e7806f; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; }
-  .vbtn { font: 600 14px var(--sans); color: #e9e5dc; background: none; border: 1px solid #6d675d; border-radius: 3px; padding: 8px 13px; cursor: pointer; text-decoration: none; }
-  .vbtn:hover { border-color: #e9e5dc; }
-  .vbtn[disabled] { opacity: .4; cursor: default; }
-  .links { font-size: 14px; color: #b9b2a5; display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 12px; }
-  .close { position: absolute; top: 18px; right: 22px; z-index: 2; }
-  @media (max-width: 1000px) {
-    header.mast, .film { grid-template-columns: 1fr; gap: 28px; }
-    header.mast img { max-width: 440px; }
-    .cabinet { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .viewer.open { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
-    .side { padding: 8px 22px 22px; max-height: 40vh; }
-    .nums { grid-template-columns: repeat(2, auto); }
-    .papers { grid-template-columns: 1fr; }
-    .papers li { grid-template-columns: 110px minmax(0, 1fr); }
-    .lede { font-size: 24px; }
-  }
-</style>
-
 <div class="wrap">
-  <header class="mast">
-    <img src="images/cover.jpg" width="900" height="1125" alt="The words MATH ANIMALS, each letter built around an animal drawn in code: an orb-weaver's web, an angelfish, a dragonfly, a tortoise, a sea urchin, a honeycomb, a cone shell, a clam, a sea fan and a nautilus.">
-    <div>
-      <h1>Math-Animals</h1>
-      <p class="lede">Claude read the science of how ten animals get their shape, then drew each animal from its model.</p>
-      <p class="sub">The dragonfly's wing is divided into 2,611 cells by the model Hoffmann and colleagues published in <i>PNAS</i> in 2018. The angelfish's stripes grow by the Turing pattern Kondo and Asai reported in <i>Nature</i> in 1995. The nautilus's chambers follow a logarithmic spiral fitted to measured shells. Every page is one HTML file of Canvas 2D code with no image files, written by Claude Opus 5.5, and every number on it is cited. Open a specimen and it grows from its rule in your browser.</p>
-      <ul class="facts"><li>10 published models</li><li>0 image files</li><li>15,227 lines of code</li><li>MIT licence</li></ul>
-      <div class="actions">
-        <button class="btn" data-open="4">Watch the nautilus grow</button>
-        <a class="btn ghost" href="#film">Watch the film</a>
-        <a class="btn ghost" href="https://github.com/r3al1tym/math-animals">Code on GitHub</a>
+  <header class="hero">
+    <div class="copy">
+      <div class="eyebrow rise" style="animation-delay:.05s">Math-Animals · <b>ten plates</b></div>
+      <h1><span class="rise" style="animation-delay:.15s">Claude read the papers.</span><span class="soft rise" style="animation-delay:.3s">Then it drew the animals.</span></h1>
+      <p class="lede rise" style="animation-delay:.45s">Ten animals, each drawn in code by the model that a published paper gives for its form. No image files: every plate is computed in your browser, and every number on it is cited.</p>
+      <div class="live-note rise" style="animation-delay:.6s"><span class="dot" id="hero-dot"></span><span id="hero-note">Computing the dragonfly’s wing in your browser…</span></div>
+      <div class="actions rise" style="animation-delay:.7s">
+        <a class="btn" href="#plates">The ten plates</a>
+        <button class="btn ghost" id="hero-replay" disabled>Replay</button>
+        <a class="btn ghost" href="https://github.com/r3al1tym/math-animals">Code</a>
       </div>
     </div>
+    <figure class="rise" style="animation-delay:.1s">
+      <div class="live hero-plate" id="hero-live"><div class="inner"><img src="images/plates/03-dragonfly-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div></div>
+      <figcaption><span>Plate 3. Emperor dragonfly, after Hoffmann et al., <i>PNAS</i> (2018)</span><span class="eq">p ∈ V<sub>s</sub> ⇔ |p − s| ≤ |p − o|</span></figcaption>
+    </figure>
   </header>
 
-  <section id="cabinet">
-    <h2>The cabinet</h2>
-    <p class="h2sub">Open a drawer to watch the animal grow from its rule, then drag through time.</p>
-    <div class="cabinet" id="grid"></div>
-  </section>
+  <nav class="contents" aria-label="The ten plates">
+    <div class="eyebrow">Contents</div>
+    <ol id="toc"></ol>
+  </nav>
 
-  <section id="papers">
-    <h2>The reading list</h2>
-    <p class="h2sub">The research Claude read and implemented, animal by animal. Each page’s notes cite every number it uses.</p>
-    <ol class="papers" id="papers-list"></ol>
-  </section>
+  <main id="plates"></main>
 
-  <section id="film">
-    <h2>The film</h2>
-    <p class="h2sub">64 seconds, silent. Each chapter runs notation, then code, then construction, then the animal.</p>
-    <div class="film">
-      <video src="film/math-animals.mp4" poster="images/cover.jpg" controls muted playsinline preload="none"></video>
-      <div class="how">
-        <h2>How Claude made it</h2>
-        <p class="h2sub">Claude Code (Opus 5.5) wrote every line. I directed and gave notes.</p>
-        <div class="nums">
-          <div><b>154</b><span>Claude sessions</span></div>
-          <div><b>92</b><span>agent-hours</span></div>
-          <div><b>9,900</b><span>tool calls</span></div>
-          <div><b>8.5 h</b><span>longest unattended run</span></div>
-        </div>
-        <ol>
-          <li>A lead session wrote the concept, one shared builder brief and a card per animal: its rule, its sources, its moment.</li>
-          <li>Builder sessions worked in parallel, one per animal. Each read the research on how its animal's form arises, implemented the published model, and drew the animal from the model's output.</li>
-          <li>After every round, a reviewer session that had never seen the work judged the rendered frame alone and returned PASS or REVISE with ranked changes. 97 reviewers in all.</li>
-          <li>Fact-checker sessions verified every number in the captions against a primary source.</li>
-        </ol>
-        <p>Because every image is code, the whole series shares one light, palette and line weight, and any single detail can change without disturbing the rest. That control is what made the film possible.</p>
-        <p>What didn't work: the forms hold up, but the surfaces still read as computed. Only the dragonfly passed its reviewer, and a round aimed at photographic realism returned REVISE on all 45 reviews.</p>
-        <p><a href="https://github.com/r3al1tym/math-animals#readme">The write-up</a> · <a href="https://github.com/r3al1tym/math-animals/blob/main/CONCEPT.md">The concept card</a> · <a href="https://github.com/r3al1tym/math-animals/blob/main/BUILDERS.md">The builder brief</a></p>
+  <section class="method" id="method">
+    <div><video src="film/math-animals.mp4" poster="images/cover.jpg" controls muted playsinline preload="none"></video></div>
+    <div>
+      <div class="eyebrow">How Claude made it</div>
+      <h2>Read, implement, draw, review.</h2>
+      <p>Claude Code, running Opus 5.5, wrote every line. I directed and gave notes.</p>
+      <div class="nums">
+        <div><b>154</b><span>Claude sessions</span></div>
+        <div><b>92</b><span>agent-hours</span></div>
+        <div><b>9,900</b><span>tool calls</span></div>
+        <div><b>8.5 h</b><span>longest unattended run</span></div>
       </div>
+      <ol class="steps">
+        <li><b>A lead session</b> wrote the concept, one builder brief and a card per animal: its rule, its sources, its moment.</li>
+        <li><b>Ten builder sessions</b> worked in parallel. Each read the research on its animal, implemented the model, and drew the animal from the model’s output.</li>
+        <li><b>97 reviewer sessions</b>, each new to the work, judged every round from the rendered frame alone and returned PASS or REVISE with ranked changes.</li>
+        <li><b>Fact-checker sessions</b> verified every number in the captions against a primary source.</li>
+      </ol>
+      <p>Because every image is code, the series shares one light, one palette and one line weight, and any detail can change without disturbing the rest. That control is what made the film possible.</p>
+      <p><strong>What didn’t work.</strong> The forms hold up, but the surfaces still read as computed. Only the dragonfly passed its reviewer, and a round aimed at photographic realism returned REVISE on all 45 reviews.</p>
+      <p><a href="https://github.com/r3al1tym/math-animals#readme">The write-up</a> · <a href="https://github.com/r3al1tym/math-animals/blob/main/CONCEPT.md">The concept card</a> · <a href="https://github.com/r3al1tym/math-animals/blob/main/BUILDERS.md">The builder brief</a></p>
     </div>
   </section>
 
-  <footer>Math-Animals extends <a href="https://github.com/r3al1tym/tenfold">tenfold</a>. Every page and every line of code was written by Claude Opus 5.5. MIT licence.</footer>
-</div>
-
-<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-labelledby="v-name">
-  <button class="vbtn close" id="v-close" aria-label="Close">Close ✕</button>
-  <div class="stage" id="stage">
-    <div class="frame" id="frame"><img id="v-still" alt=""><iframe id="v-live" title="Live page"></iframe><div class="status" id="v-status"></div></div>
-  </div>
-  <aside class="side">
-    <div class="no" id="v-no"></div>
-    <h3 id="v-name"></h3>
-    <div class="lat" id="v-lat"></div>
-    <div class="rule" id="v-rule"></div>
-    <p id="v-text"></p>
-    <div class="paper" id="v-paper"><b>From the research</b><span id="v-ref"></span></div>
-    <div class="scrub" id="v-scrub"><label for="v-t">Time <span id="v-tv">5.2 s</span></label><input type="range" id="v-t" min="0" max="6" step="0.01" value="5.2"></div>
-    <div class="row"><button class="vbtn" id="v-replay" disabled>Replay</button><button class="vbtn" id="v-prev" aria-label="Previous">←</button><button class="vbtn" id="v-next" aria-label="Next">→</button></div>
-    <div class="links"><a id="v-notes">The mathematics and its sources</a><a id="v-src">View the source</a><a id="v-page">Open the page on its own</a></div>
-  </aside>
+  <footer><span>Math-Animals extends <a href="https://github.com/r3al1tym/tenfold">tenfold</a>. Every page and every line of code was written by Claude Opus 5.5.</span><span>MIT licence · Type: Libre Caslon Text (OFL)</span></footer>
 </div>
 
 <script>
@@ -198,120 +209,143 @@ const grainTile = () => {
   matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener('change', grainTile, { once: true });
 };
 grainTile();
-const GH = 'https://github.com/r3al1tym/math-animals/blob/main/';
-const HERO = 5.2;
-const A = [
-  ['01-honeybee', 'Honeybee comb', 'Apis mellifera Linnaeus, 1758', 'Least wall: hexagons (Hales, 2001)',
-   'Of all ways to divide a plane into cells of equal area, regular hexagons use the least wall. Circles relax into hexagons, and each cell is ray-cast as a prism of wax.'],
-  ['02-sea-urchin', 'Edible sea urchin', 'Echinus esculentus Linnaeus, 1758', 'D5 symmetry: φ = θ − j·72°',
-   'The larva is bilateral and the adult is five-fold. One sector of plates is drawn, and its four rotations complete the test: twenty columns in ten double areas.'],
-  ['03-dragonfly', 'Emperor dragonfly', 'Anax imperator Leach, 1815', 'Voronoi tiling, n = 2,611 cells',
-   'Inhibitory centres spaced evenly inside each region bounded by the main veins divide the wing into cells, after Hoffmann et al. (PNAS, 2018).'],
-  ['04-orb-weaver', 'Garden orb-weaver', 'Araneus diadematus Clerck, 1757', 'Archimedean spiral r = a + bθ',
-   'Thirty-one rays and a capture spiral. The glue coat breaks into beads at the Rayleigh–Plateau wavelength, 9.01 thread radii, which the page finds numerically.'],
-  ['05-nautilus', 'Chambered nautilus', 'Nautilus pompilius Linnaeus, 1758', 'r = a·e^(bθ), b = 0.175',
-   'Each whorl grows by e^(2πb) = 3.00, and each septum is the last one scaled and turned 25°. The trials below the shell show why the nautilus is not golden.'],
-  ['06-camp-pitar', 'Camp pitar', 'Lioconcha castrensis (Linnaeus, 1758)', 'Activator–inhibitor, row by row',
-   'The shell grows by accretion at its margin, and Meinhardt’s shell-pattern model runs one row per growth step, laying down rows of brown tents.'],
-  ['07-sea-fan', 'Common sea fan', 'Gorgonia ventalina Linnaeus, 1758', 'Space colonisation: tips seek free space',
-   'Branch tips grow toward 4,526 attractor points in the fan’s free space and fuse where they meet, after Runions et al. (2005, 2007).'],
-  ['08-cone-shell', 'Textile cone', 'Conus textile Linnaeus, 1758', 'Activator–inhibitor with a global hormone',
-   'Meinhardt and Klingler’s model writes the pattern one row at a time along the growing lip, so the shell is the pattern’s space-time diagram.'],
-  ['09-angelfish', 'Semicircle angelfish', 'Pomacanthus semicirculatus (Cuvier, 1831)', 'Turing reaction–diffusion',
-   'On a skin that grows, a Turing pattern adds stripes as the fish lengthens, from 3 to 13, after Kondo and Asai (1995). The page solves it once in your browser.'],
-  ['10-tortoise', 'Radiated tortoise', 'Astrochelys radiata (Shaw, 1802)', 'Ring k = areola × (1 + 0.352k)',
-   'Keratin is added only at a scute’s edges, so every season’s outline stays on the shell as a ring around the hatchling’s own scute.'],
+const GH = 'https://github.com/r3al1tym/math-animals/blob/main/', HERO = 5.2;
+const P = [
+  { d: '01-honeybee', nm: 'Honeybee comb', bin: 'Apis mellifera Linnaeus, 1758', tx: 'Hymenoptera',
+    paper: ['T. C. Hales', 'The honeycomb conjecture', '<i>Discrete &amp; Computational Geometry</i> 25 (2001)'],
+    finding: 'Of all the ways to divide a plane into cells of equal area, the regular hexagon uses the least wall.',
+    f: 'P<sub>n</sub> = √(4n · tan(π/n))', f2: 'wall per unit cell: triangle 4.559, square 4.000, hexagon 3.722',
+    built: 'A band of 5.3 mm circles relaxes into hexagons, as warm wax is proposed to flow (Karihaloo, Zhang and Wang, 2013). Each cell is then ray-cast as a prism of wax under a 0.3 mm coping, on a base of three rhombi.' },
+  { d: '02-sea-urchin', nm: 'Edible sea urchin', bin: 'Echinus esculentus Linnaeus, 1758', tx: 'Echinoidea',
+    anatomy: 'From the anatomy of the Echinidae test',
+    finding: 'The test is twenty columns of plates in ten double areas: five narrow ambulacra, pierced for the tube feet, alternating with five broad interambulacra.',
+    f: 'φ<sub>j</sub> = θ − j · 72°', f2: 'five-fold symmetry: one sector, turned four times, j = 0 … 4',
+    built: 'One sector of plates is laid by arc length down a superellipse dome 140 mm across and 108 mm tall, then turned four times about the apex.' },
+  { d: '03-dragonfly', nm: 'Emperor dragonfly', bin: 'Anax imperator Leach, 1815', tx: 'Odonata',
+    paper: ['J. Hoffmann, S. Donoughe, K. Li, M. K. Salcedo and C. H. Rycroft', 'A simple developmental model recapitulates complex insect wing venation patterns', '<i>PNAS</i> 115 (2018)'],
+    finding: 'Measuring wing cells across 232 species of dragonflies and damselflies, they found that inhibitory centres spaced evenly between the main veins, with the small veins set where those signals are weakest, reproduce the wings.',
+    f: 'p ∈ V<sub>s</sub>  ⇔  |p − s| ≤ |p − o|', f2: 'a point belongs to the cell of its nearest centre s, against every other centre o',
+    built: 'The wing divides into <b>2,611 cells</b>, each wall midway between two centres. It was the one plate of the ten to pass its blind review.' },
+  { d: '04-orb-weaver', nm: 'Garden orb-weaver', bin: 'Araneus diadematus Clerck, 1757', tx: 'Araneae',
+    paper: ['Lord Rayleigh', 'On the instability of jets', '<i>Proc. London Math. Soc.</i> 10 (1878)'],
+    finding: 'A cylinder of liquid is unstable: it breaks into drops, and the fastest-growing disturbance has a wavelength of about nine radii.',
+    f: 'σ² ∝ x(1 − x²) I<sub>1</sub>(x) / I<sub>0</sub>(x)', f2: 'growth rate of a disturbance of wavenumber k on a thread of radius r, x = kr; fastest at x = 0.697',
+    built: 'The page solves Rayleigh’s growth rate itself and beads the glue every <b>9.01 radii</b>, 144 µm on a 16 µm coat, along an Archimedean spiral with 31 rays (web geometry from Zschokke, 1993 and 2011).' },
+  { d: '05-nautilus', nm: 'Chambered nautilus', bin: 'Nautilus pompilius Linnaeus, 1758', tx: 'Cephalopoda',
+    paper: ['H. Moseley', 'On the geometrical forms of turbinated and discoid shells', '<i>Phil. Trans. R. Soc.</i> 128 (1838)'],
+    finding: 'Measured shells widen by the same ratio every whorl, 2.83 to 3.02: the shell is a logarithmic spiral.',
+    f: 'r = a e<sup>bθ</sup>', f2: 'b = 0.175, so each whorl widens by W = e<sup>2πb</sup> = 3.00',
+    built: 'Thirty-five septa, each the last one scaled and turned 25°. The trials under the shell show why the nautilus is <b>not golden</b>: a golden spiral widens 6.85 times a whorl, and 80 measured shells average about 2.9 (Bartlett, 2018).' },
+  { d: '06-camp-pitar', nm: 'Camp pitar', bin: 'Lioconcha castrensis (Linnaeus, 1758)', tx: 'Bivalvia',
+    paper: ['H. Meinhardt', 'The Algorithmic Beauty of Sea Shells', 'Springer (1995)'],
+    finding: 'The pigment pattern on a shell is the record of a reaction–diffusion system running along the growing edge, one row for each step of growth.',
+    f: 'r = r<sub>0</sub> + (1 − r<sub>0</sub>) (1 − e<sup>−ke</sup>) / (1 − e<sup>−kE</sup>)', f2: 'von Bertalanffy growth: the margin r at age e, less any pauses',
+    built: 'The valve grows by accretion on that von Bertalanffy curve, fastest while young, with two growth checks. An activator–inhibitor reaction run along the lengthening mantle edge lays down its rows of <b>brown tents</b>.' },
+  { d: '07-sea-fan', nm: 'Common sea fan', bin: 'Gorgonia ventalina Linnaeus, 1758', tx: 'Octocorallia',
+    paper: ['A. Runions, B. Lane and P. Prusinkiewicz', 'Modeling trees with a space colonization algorithm', '<i>Eurographics Workshop on Natural Phenomena</i> (2007)'],
+    finding: 'A branching network grows when every tip advances toward the free space near it, and each point of space is used up once a branch reaches it.',
+    f: 'v′ = v + D n̂,   n̂ ∝ Σ (s − v) / |s − v|', f2: 'each tip v steps a distance D toward the attractors s nearest it',
+    built: '<b>4,526 attractor points</b> spaced 1.9 mm apart fill the fan’s outline. A fusion rule, the page’s own proposal, closes the mesh where branches meet.' },
+  { d: '08-cone-shell', nm: 'Textile cone', bin: 'Conus textile Linnaeus, 1758', tx: 'Gastropoda',
+    paper: ['H. Meinhardt and M. Klingler', 'A model for pattern formation on the shells of molluscs', '<i>J. Theor. Biol.</i> 126 (1987)'],
+    finding: 'An activator–inhibitor reaction along the shell’s lip, with a hormone that spreads through the whole animal, produces the cone’s cascades of triangles.',
+    f: '∂a/∂t = s a² / ((s<sub>b</sub> + b)(1 + s<sub>a</sub>a²)) − r<sub>a</sub> a + D<sub>a</sub> a″', f2: 'the activator a along the lip, held in check by the inhibitor b and a global hormone',
+    built: 'The page runs Meinhardt’s own program for <i>Conus textile</i>, one row per growth step, so the shell’s surface is the reaction’s <b>space-time diagram</b>.' },
+  { d: '09-angelfish', nm: 'Semicircle angelfish', bin: 'Pomacanthus semicirculatus (Cuvier, 1831)', tx: 'Pomacanthidae',
+    paper: ['S. Kondo and R. Asai', 'A reaction–diffusion wave on the skin of the marine angelfish <i>Pomacanthus</i>', '<i>Nature</i> 376 (1995)'],
+    finding: 'As the juvenile grows, new stripes open between the old ones, as a Turing pattern on a growing skin predicts.',
+    f: '∂u/∂t = f(u, v) + D<sub>u</sub> ∇²u', f2: 'two substances, u and v, react and diffuse on a skin that grows; with ∂v/∂t = g(u, v) + D<sub>v</sub> ∇²v',
+    built: 'The page solves the model once, in the fish’s own outline, and shows the same fish at 20, 40, 60 and 80 mm as its stripes rise from <b>3 to 13</b>.' },
+  { d: '10-tortoise', nm: 'Radiated tortoise', bin: 'Astrochelys radiata (Shaw, 1802)', tx: 'Testudines',
+    anatomy: 'From how a scute grows',
+    finding: 'Keratin is added only at a scute’s edges and never stretches, so every season’s outline stays on the shell as a ring around the hatchling’s own scute.',
+    f: 'r<sub>k</sub> = r<sub>0</sub> (1 + 0.352 k)', f2: 'ring k is the areola r<sub>0</sub> scaled about its growth centre',
+    built: 'Each ring is the areola scaled about its growth centre: <b>nine rings</b> on a 36 mm hatchling’s scutes, and the star of the radiated tortoise laid over them.' },
 ];
-const REFS = [
-  'T. C. Hales, “The honeycomb conjecture,” <i>Discrete &amp; Computational Geometry</i> 25 (2001). Karihaloo, Zhang and Wang, <i>J. R. Soc. Interface</i> (2013), on warm wax flowing into hexagons.',
-  'Descriptions of the Echinidae test: five narrow ambulacra alternating with five broad interambulacra, each ambulacrum half to two-thirds as wide at the ambitus.',
-  'Hoffmann, Donoughe, Li, Salcedo and Rycroft, “A simple developmental model recapitulates complex insect wing venation patterns,” <i>PNAS</i> (2018): wing cells measured in 232 odonate species.',
-  'Rayleigh’s instability of a liquid cylinder, solved by the page for the bead spacing. Web geometry from Zschokke (1993, 2011); droplet sizes from Opell and Hendricks (2007).',
-  'Moseley’s whorl ratios (mean 2.94) and Bartlett (2018), 80 measured shells; septal spacing and body chamber from Ward et al. (1981).',
-  'H. Meinhardt, <i>The Algorithmic Beauty of Sea Shells</i>: an activator–inhibitor system run along the growing mantle edge.',
-  'Runions et al., space colonisation for leaf venation (2005) and trees (2007), extended here with branch fusion.',
-  'Meinhardt and Klingler, activator–inhibitor model with a global hormone, <i>J. Theor. Biol.</i> 126 (1987), run as Meinhardt’s own program for <i>Conus textile</i>.',
-  'Kondo and Asai, “A reaction–diffusion wave on the skin of the marine angelfish <i>Pomacanthus</i>,” <i>Nature</i> 376 (1995); Painter, Maini and Othmer, <i>PNAS</i> (1999); Turing (1952).',
-  'Growth by accretion: keratin is laid only at a scute’s edges and never stretches, so each ring is the scute as it was that year.',
-];
-const PAPER = new Set([0, 2, 3, 4, 5, 6, 7, 8]);
-const slug = d => d.slice(3);
-const $ = id => document.getElementById(id);
+const $ = id => document.getElementById(id), slug = d => d.slice(3);
 
-$('grid').innerHTML = A.map(([d, nm, , rl], i) =>
-  `<button class="spec" data-open="${i}"><img src="images/plates/${d}.jpg" width="720" height="900" loading="lazy" alt="${nm}, drawn in code"><span class="no">No. ${i + 1}</span><span class="nm">${nm}</span><span class="rl">${rl}</span></button>`).join('');
+$('toc').innerHTML = P.map((p, i) => `<li><a href="#${slug(p.d)}"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt=""><span class="n">PLATE ${i + 1}</span><span class="nm">${p.nm}</span></a></li>`).join('');
+$('plates').innerHTML = P.map((p, i) => `
+  <article class="spread" id="${slug(p.d)}">
+    <div class="verso">
+      <div class="eyebrow">Plate ${i + 1} · <b>${p.tx}</b></div>
+      <h2>${p.nm}</h2>
+      <p class="bin">${p.bin}</p>
+      ${p.paper ? `<div class="paper"><div class="who">${p.paper[0]}</div><div class="ttl">${p.paper[1]}</div><div class="src">${p.paper[2]}</div></div>`
+                : `<div class="paper anatomy"><div class="ttl">${p.anatomy}</div></div>`}
+      <p class="finding">${p.finding}</p>
+      <div class="formula" style="--fs:${p.f.replace(/<[^>]+>/g, '').length > 44 ? 22 : p.f.replace(/<[^>]+>/g, '').length > 30 ? 26 : 32}px">${p.f}${p.f2 ? `<small>${p.f2}</small>` : ''}</div>
+      <p class="built">${p.built}</p>
+      <div class="links"><a href="${GH + p.d}/NOTES.md">The mathematics and every source</a><a href="${GH + p.d}/index.html">The code</a></div>
+    </div>
+    <div class="recto">
+      <div class="live" data-i="${i}"><div class="inner"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt="${p.nm}, drawn in code"><iframe title="${p.nm}, computing live" tabindex="-1"></iframe></div><button class="btn grow">Grow it from the rule</button></div>
+      <div class="scrub"><button class="again">Replay</button><input type="range" min="0" max="6" step="0.01" value="5.2" aria-label="Time"><span class="tv">5.2 s</span></div>
+    </div>
+  </article>`).join('');
 
-$('papers-list').innerHTML = A.map(([, nm], i) => PAPER.has(i) ?
-  `<li><span class="an"><button data-open="${i}">${nm}</button></span><span class="ref">${REFS[i]}</span></li>` : '').join('');
-
-let cur = -1, poll = 0, built = 0, driving = 0, pending = null;
-const live = $('v-live'), frame = $('frame');
-const R = () => { try { return live.contentWindow && live.contentWindow.__riso; } catch (e) { return null; } };
-
-function fit() {
-  const s = $('stage').getBoundingClientRect();
-  const k = Math.min((s.width - 48) / 720, (s.height - 90) / 900, 1.1);
-  frame.style.transform = `translate(-50%, -50%) scale(${Math.max(k, 0.2)})`;
+// one live plate at a time: the still, then the page computing and building in place
+const fit = el => { const k = el.clientWidth / 720; el.querySelector('.inner').style.transform = `scale(${k})`; };
+const lives = [...document.querySelectorAll('.live')];
+addEventListener('resize', () => lives.forEach(fit)); lives.forEach(fit);
+let active = null;
+function stop(L) {
+  if (!L) return; clearInterval(L.poll); cancelAnimationFrame(L.raf);
+  L.el.classList.remove('on'); L.fr.src = 'about:blank'; if (L.scrub) L.scrub.classList.remove('on');
 }
-function setT(t) { $('v-t').value = t; $('v-tv').textContent = t.toFixed(1) + ' s'; }
-function open(i, push = true) {
-  i = (i + A.length) % A.length; cur = i;
-  const [d, nm, lat, rl, tx] = A[i];
-  clearInterval(poll); clearTimeout(built); cancelAnimationFrame(driving);
-  $('v-no').textContent = `No. ${i + 1} of 10`; $('v-name').textContent = nm; $('v-lat').textContent = lat;
-  $('v-rule').textContent = rl; $('v-text').textContent = tx; $('v-ref').innerHTML = REFS[i];
-  $('v-notes').href = GH + d + '/NOTES.md'; $('v-src').href = GH + d + '/index.html'; $('v-page').href = d + '/index.html?play';
-  $('v-still').src = `images/plates/${d}.jpg`; $('v-still').alt = nm;
-  $('v-scrub').classList.remove('on'); $('v-replay').disabled = true; setT(0);
-  frame.className = 'frame baking'; $('v-status').textContent = 'Computing the model in your browser…';
-  live.src = d + '/index.html?play';
-  $('viewer').classList.add('open'); document.body.style.overflow = 'hidden'; fit();
-  if (push) history.replaceState(null, '', '#' + slug(d));
+function grow(el, dir, o = {}) {
+  if (active && active.el !== el) stop(active);
+  const L = active = { el, fr: el.querySelector('iframe'), scrub: o.scrub || null, poll: 0, raf: 0 };
+  const R = () => { try { return L.fr.contentWindow && L.fr.contentWindow.__riso; } catch (e) { return null; } };
+  L.fr.src = dir + '/index.html?play'; o.onStart && o.onStart();
   const t0 = performance.now();
-  poll = setInterval(() => {
+  L.poll = setInterval(() => {
     const r = R();
     if (r && r.ready) {
-      clearInterval(poll); frame.className = 'frame live'; $('v-status').textContent = '';
-      const s0 = performance.now();
-      const tick = () => { const t = Math.min(HERO, (performance.now() - s0) / 1000); setT(t); if (t < HERO) driving = requestAnimationFrame(tick); };
-      tick();
-      built = setTimeout(() => { $('v-scrub').classList.add('on'); $('v-replay').disabled = false; }, HERO * 1000 + 150);
-    } else if (performance.now() - t0 > 4000) {
-      $('v-status').textContent = 'Still computing: this one solves its model before it draws…';
-    }
-  }, 80);
+      clearInterval(L.poll); el.classList.add('on'); o.onLive && o.onLive();
+      setTimeout(() => {
+        if (active !== L) return;
+        if (L.scrub) { L.scrub.classList.add('on'); bindScrub(L, R); }
+        o.onDone && o.onDone(L, R);
+      }, HERO * 1000 + 200);
+    } else if (performance.now() - t0 > 3500) o.onSlow && o.onSlow();
+  }, 60);
+  return L;
 }
-function close() {
-  clearInterval(poll); clearTimeout(built); cancelAnimationFrame(driving);
-  live.src = 'about:blank'; $('viewer').classList.remove('open'); document.body.style.overflow = '';
-  history.replaceState(null, '', location.pathname); cur = -1;
-}
-function replay() {
-  const r = R(); if (!r) return;
-  $('v-replay').disabled = true; $('v-scrub').classList.remove('on');
-  const s0 = performance.now();
-  const tick = async () => {
-    const t = Math.min(HERO, (performance.now() - s0) / 1000);
-    await r.seek(t); setT(t);
-    if (t < HERO) driving = requestAnimationFrame(tick); else { $('v-replay').disabled = false; $('v-scrub').classList.add('on'); }
-  };
+function replay(L, R, done) {
+  const r = R(); if (!r) return; const s0 = performance.now();
+  const tick = async () => { const t = Math.min(HERO, (performance.now() - s0) / 1000); await r.seek(t); setT(L, t); if (t < HERO) L.raf = requestAnimationFrame(tick); else done && done(); };
   tick();
 }
-$('v-t').addEventListener('input', e => {
-  const r = R(); if (!r) return;
-  const first = pending === null; pending = Number(e.target.value); $('v-tv').textContent = pending.toFixed(1) + ' s';
-  if (first) requestAnimationFrame(async () => { const t = pending; pending = null; await r.seek(t); });
+function setT(L, t) { if (!L.scrub) return; L.scrub.querySelector('input').value = t; L.scrub.querySelector('.tv').textContent = t.toFixed(1) + ' s'; }
+function bindScrub(L, R) {
+  const inp = L.scrub.querySelector('input'); let pend = null;
+  inp.oninput = () => { const first = pend === null; pend = +inp.value; L.scrub.querySelector('.tv').textContent = pend.toFixed(1) + ' s';
+    if (first) requestAnimationFrame(async () => { const t = pend; pend = null; const r = R(); r && await r.seek(t); }); };
+  L.scrub.querySelector('.again').onclick = () => { cancelAnimationFrame(L.raf); replay(L, R); };
+}
+document.querySelectorAll('.recto .live').forEach(el => {
+  const i = +el.dataset.i, sc = el.parentElement.querySelector('.scrub');
+  const go = () => { if (!el.classList.contains('on')) grow(el, P[i].d, { scrub: sc }); };
+  el.addEventListener('click', go);
 });
-document.addEventListener('click', e => { const b = e.target.closest('[data-open]'); if (b) open(Number(b.dataset.open)); });
-$('v-close').onclick = close; $('v-replay').onclick = replay;
-$('v-prev').onclick = () => open(cur - 1); $('v-next').onclick = () => open(cur + 1);
-document.addEventListener('keydown', e => {
-  if (cur < 0) return;
-  if (e.key === 'Escape') close(); else if (e.key === 'ArrowLeft') open(cur - 1); else if (e.key === 'ArrowRight') open(cur + 1);
+
+// the hero computes on arrival
+const hero = $('hero-live'), note = $('hero-note'), dot = $('hero-dot'), rb = $('hero-replay');
+fit(hero);
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (still) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; note.textContent = 'Plate 3, as computed.'; dot.classList.add('done'); rb.disabled = false; }
+const heroGo = () => grow(hero, '03-dragonfly', {
+  onSlow: () => { note.textContent = 'Still computing: laying out 2,611 wing cells…'; },
+  onLive: () => { note.textContent = 'Growing from the rule, live in your browser.'; hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; },
+  onDone: (L, R) => { note.textContent = 'Computed in your browser just now. Plate 3 of 10.'; dot.classList.add('done'); rb.disabled = false;
+    rb.onclick = () => { if (active !== L) return heroGo(); rb.disabled = true; dot.classList.remove('done'); replay(L, R, () => { rb.disabled = false; dot.classList.add('done'); }); }; },
 });
-addEventListener('resize', () => { if (cur >= 0) fit(); });
-const h = location.hash.slice(1), hi = A.findIndex(a => slug(a[0]) === h);
-if (hi >= 0) open(hi, false);
+if (!still) setTimeout(heroGo, 900); else rb.onclick = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly-t0.jpg'; dot.classList.remove('done'); rb.disabled = true; heroGo(); };
+
+// a plate named in the address bar grows when you arrive at it
+const h = location.hash.slice(1), hi = P.findIndex(p => slug(p.d) === h);
+if (hi >= 0) setTimeout(() => document.querySelector(`.live[data-i="${hi}"]`).click(), 1200);
 </script>
 </body>
 </html>
