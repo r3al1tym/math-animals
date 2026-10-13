@@ -1,8 +1,8 @@
 # Math-Animals
 
-Claude read the science of how ten animals get their shape, implemented each published model, and drew the animal from it. Each animal is one HTML page of Canvas 2D code with no image files: 15,227 lines in all, every line written by Claude Opus 5.5, every number cited.
+Claude Code (Opus 5.5) implemented ten published models of how animal forms arise and rendered each animal from its model's output. Each animal is one HTML page of Canvas 2D code with no image files, 15,227 lines in all. Each page draws its construction next to the form, and its `NOTES.md` cites every parameter.
 
-**[Open the site](https://r3al1tym.github.io/math-animals/)**: the dragonfly computes in your browser as you arrive, each plate faces the paper it was drawn from, and any plate grows from its rule when you click it. **[Watch the full film](https://r3al1tym.github.io/math-animals/film/)** (64 s, silent).
+**[Site](https://r3al1tym.github.io/math-animals/)**: each plate next to its source, finding, model and implementation notes. Plates compute in the browser; click one to run its model, then scrub time. **[Watch the full film](https://r3al1tym.github.io/math-animals/film/)** (64 s, silent).
 
 https://github.com/user-attachments/assets/3ce3b5e5-801b-4282-9f4f-9ab6795153e8
 
@@ -13,18 +13,18 @@ https://github.com/user-attachments/assets/3ce3b5e5-801b-4282-9f4f-9ab6795153e8
 | ![](out/06-camp-pitar.png) | ![](out/07-sea-fan.png) | ![](out/08-cone-shell.png) | ![](out/09-angelfish.png) | ![](out/10-tortoise.png) |
 | Fig. 6 Camp pitar | Fig. 7 Sea fan | Fig. 8 Cone shell | Fig. 9 Angelfish | Fig. 10 Tortoise |
 
-## What Claude read
+## Sources and models
 
-Each builder session started from the research on its animal, implemented the model it describes, and drew the animal from the model's output. The construction stays on the page, so you can check the picture against the rule.
+Each builder session started from the source on its animal, implemented the model it describes, and rendered the animal from the model's output. The construction is drawn on the plate, so the picture can be checked against the model.
 
-| Animal | Model Claude implemented | Research it read |
+| Animal | Model implemented | Source |
 |---|---|---|
 | Emperor dragonfly | Inhibitory centres spaced evenly between the main veins; walls form where their signals are weakest (a Voronoi tiling, 2,611 cells) | Hoffmann, Donoughe, Li, Salcedo and Rycroft, *PNAS* (2018), wing cells measured in 232 odonate species |
 | Semicircle angelfish | Turing reaction–diffusion on a growing skin: stripes insert as the fish lengthens, 3 to 13 | Kondo and Asai, *Nature* 376 (1995); Painter, Maini and Othmer, *PNAS* (1999); Turing (1952) |
 | Textile cone | Activator–inhibitor with a global hormone, one row per growth step, so the shell is a space-time diagram | Meinhardt and Klingler, *J. Theor. Biol.* 126 (1987), run as Meinhardt's own program for *Conus textile* |
 | Camp pitar | Activator–inhibitor run along a lengthening mantle edge | Meinhardt, *The Algorithmic Beauty of Sea Shells* |
 | Common sea fan | Space colonisation: branch tips grow toward 4,526 points of free space, plus a fusion rule | Runions et al. (2005, 2007) |
-| Chambered nautilus | Logarithmic spiral r = a·e^(bθ), b = 0.175, so each whorl grows 3.00x: the nautilus is not golden | Moseley's whorl ratios; Bartlett (2018), 80 shells; Ward et al. (1981) |
+| Chambered nautilus | Logarithmic spiral r = a·e^(bθ), b = 0.175, so each whorl widens 3.00x (a golden spiral would widen 6.85x) | Moseley's whorl ratios; Bartlett (2018), 80 shells; Ward et al. (1981) |
 | Garden orb-weaver | Archimedean capture spiral; glue beads at the Rayleigh–Plateau wavelength, 9.01 thread radii, which the page solves for | Rayleigh's instability of a liquid cylinder; Zschokke (1993, 2011); Opell and Hendricks (2007) |
 | Honeybee comb | Hexagons use the least wall of any equal-area tiling; circles relax into hexagons | Hales, *Discrete & Computational Geometry* 25 (2001); Karihaloo, Zhang and Wang (2013) |
 | Edible sea urchin | Dihedral symmetry D5: one sector of plates and its four rotations | Descriptions of the Echinidae test |
@@ -32,7 +32,7 @@ Each builder session started from the research on its animal, implemented the mo
 
 Each page's `NOTES.md` gives the mathematics, the sources for every number and the trials behind it. Fact-checker sessions verified every caption in the film against a primary source.
 
-## How Claude made it
+## Method
 
 Claude Code (Opus 5.5) wrote every line. I directed and gave notes.
 
