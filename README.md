@@ -104,4 +104,4 @@ cd tools && npm install
 node render.mjs ../05-nautilus/index.html /tmp/nautilus 0,1.5,3,4.5,5.2
 ```
 
-Math-Animals extends [tenfold](https://github.com/r3al1tym/tenfold), and its bar for craft is tenfold's `16-specimen` page. Every page and every line of code was written by Claude Opus 5.5. MIT licence.
+Made by Sanju Sunny ([@sanjusunnytwt](https://x.com/sanjusunnytwt)) with Claude Opus 5.5. Math-Animals extends [tenfold](https://github.com/r3al1tym/tenfold), and its bar for craft is tenfold's `16-specimen` page. Every page and every line of code was written by Claude Opus 5.5. MIT licence.
