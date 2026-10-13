@@ -2,7 +2,7 @@
 
 Claude read the science of how ten animals get their shape, implemented each published model, and drew the animal from it. Each animal is one HTML page of Canvas 2D code with no image files: 15,227 lines in all, every line written by Claude Opus 5.5, every number cited.
 
-**[Open the cabinet](https://r3al1tym.github.io/math-animals/)** and click any animal to watch it grow from its rule in your browser, then drag through time. **[Watch the full film](https://r3al1tym.github.io/math-animals/film/)** (64 s, silent).
+**[Open the site](https://r3al1tym.github.io/math-animals/)**: the dragonfly computes in your browser as you arrive, each plate faces the paper it was drawn from, and any plate grows from its rule when you click it. **[Watch the full film](https://r3al1tym.github.io/math-animals/film/)** (64 s, silent).
 
 https://github.com/user-attachments/assets/3ce3b5e5-801b-4282-9f4f-9ab6795153e8
 
@@ -95,7 +95,7 @@ Any form with a published generative model: shells and horns, phyllotaxis, cryst
 - `kit/`: the shared light and material kit, inlined into every page by `node kit/sync.mjs <page.html>`.
 - `CONCEPT.md`: the concept card and the concept frames considered (`concept-frames/`). It describes the first series of ten, in which a glass sponge held the place the camp pitar holds in the film.
 - `BUILDERS.md`: the brief each builder worked from.
-- `index.html`: the cabinet, the gallery served at r3al1tym.github.io/math-animals.
+- `index.html`: the site served at r3al1tym.github.io/math-animals, set in Libre Caslon Text (`fonts/`, OFL).
 - `film/math-animals.mp4`: the film, 1080 × 1350, 30 fps, silent.
 - `tools/render.mjs`: renders a page at given times and checks it is deterministic.
 
