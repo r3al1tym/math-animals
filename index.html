@@ -56,7 +56,7 @@
   .actions { display: flex; gap: 12px; flex-wrap: wrap; }
   .hero figure { margin: 0; }
   /* the plate leaves room under it for the contents row, so the first screen shows all ten */
-  .hero-plate { height: clamp(420px, calc(100vh - 262px), 860px); aspect-ratio: 4 / 5; }
+  .hero-plate { height: clamp(380px, calc(100vh - 300px), 860px); aspect-ratio: 4 / 5; }
   .hero figcaption { margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline; gap: 24px; font-size: 13.5px; color: var(--ink-2); }
   .eq { font: italic 400 19px/1.4 var(--math); color: var(--ink); }
 
@@ -193,17 +193,29 @@
   @keyframes rise { to { opacity: 1; filter: blur(0); transform: none; } }
   @media (prefers-reduced-motion: reduce) { .rise { animation: none; opacity: 1; filter: none; transform: none; } html { scroll-behavior: auto; } }
 
+  /* short screens: a tighter hero so the row of ten still shows */
+  @media (max-height: 820px) and (min-width: 901px) {
+    .hero { padding: 22px 0 18px; }
+    .hero h1 { font-size: clamp(30px, 3.1vw, 44px); margin: 14px 0 16px; }
+    .hero p.lede { font-size: 16px; margin-bottom: 16px; }
+    .live-note { margin-bottom: 14px; }
+    .hero .copy { padding-bottom: 2vh; }
+  }
   @media (max-width: 1080px) {
     .bar ol .nm, .bar ol a[aria-current] .nm { display: none; }
     .bar ol a { padding: 6px 7px; }
-    .hero { grid-template-columns: 1fr; gap: 28px; min-height: 0; padding-top: 28px; }
-    .hero .copy { align-self: auto; padding-bottom: 0; }
-    .hero-plate { height: auto; width: 100%; max-width: 560px; }
+    .hero { gap: 40px; }
     .hero figcaption { flex-direction: column; gap: 4px; }
     .contents ol { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .spread, .method { grid-template-columns: 1fr; gap: 40px; padding: 72px 0; }
     .recto { max-width: 520px; position: static; order: -1; }
     .nums { grid-template-columns: repeat(2, auto); }
+  }
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; gap: 28px; padding-top: 28px; }
+    .hero .copy { align-self: auto; padding-bottom: 0; }
+    .hero figure { order: -1; }
+    .hero-plate { height: min(60svh, calc((100vw - 80px) * 1.25)); width: auto; max-width: 100%; margin: 0 auto; }
   }
   @media (max-width: 560px) {
     .bar .side { display: none; }
@@ -469,7 +481,7 @@ function stop(L, keep = false) {
 // The clock counts down from an estimate: each plate's compute time on a reference laptop (P[i].ms)
 // times this browser's own speed, learned from every plate it computes (K, kept across visits).
 let K = +localStorage.getItem('ma-speed') || 1;
-const left = s => s >= 1 ? `about ${Math.ceil(s)} s left` : s > 0 ? 'under a second left' : 'almost done';
+const left = s => s >= 1 ? `${Math.ceil(s)} s left` : s > 0 ? 'a moment left' : 'almost done';
 // grow(el, dir, o): compute the plate, its chip counting down meanwhile (o.onTick(text) every 0.1 s),
 // then play its build from the empty drawer, which stays under the canvas so nothing flashes
 function grow(el, dir, o = {}) {
