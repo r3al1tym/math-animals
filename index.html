@@ -68,9 +68,11 @@
   .live img { transition: opacity .5s ease; }
   .live:not(.on) { cursor: pointer; }
   .live.on img { opacity: 0; }
-  .live .grow { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 2; opacity: 0; transition: opacity .25s; }
-  .live:hover .grow, .live:focus-within .grow, .live.busy .grow { opacity: 1; }
-  @media (hover: none) { .live .grow { opacity: 1; } }
+  /* the button sits on every plate that has not run yet, a quiet chip over the drawer's floor */
+  .live .grow { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 2; background: rgba(22,19,15,.78); border-color: rgba(243,239,236,.28); backdrop-filter: blur(6px); transition: background .2s, border-color .2s; }
+  .live:hover .grow, .live .grow:focus-visible { background: var(--ink); border-color: rgba(243,239,236,.6); }
+  .live .grow .play { flex: none; width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent currentColor; }
+  .live.busy .grow .play { display: none; }
   .live.on .grow { display: none; }
   /* while the model computes, the button becomes its clock */
   .live.busy .grow { cursor: progress; background: rgba(22,19,15,.82); border-color: rgba(243,239,236,.22); font: 12.5px var(--mono); letter-spacing: 0; gap: 10px; white-space: nowrap; }
@@ -79,6 +81,10 @@
   .live .grow .clk { flex: none; font-variant-numeric: tabular-nums; }
   .live .grow .dot { display: none; }
   .live.busy .grow .dot { display: block; }
+  /* the hero computes on its own, so its cue shows only while it computes */
+  .live .cue { display: none; pointer-events: none; }
+  .live.busy .cue { display: inline-flex; }
+  .live-note.wait { visibility: hidden; }
 
   /* contents: the ten plates as a table of contents */
   .contents { padding: 40px 0 24px; }
@@ -116,6 +122,19 @@
   .scrub .tv { min-width: 5.5ch; text-align: right; font-variant-numeric: tabular-nums; }
   .scrub button { all: unset; cursor: pointer; font: 600 12px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
   .scrub button:hover { color: var(--ink); }
+
+  /* the model input: a slider over one of the model's own parameters, and the model's output */
+  .vary { margin-top: 30px; }
+  .vary .row { margin-bottom: 14px; }
+  .vary .eq { display: block; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+  .vary input { width: 100%; margin: 4px 0 0; accent-color: var(--red); }
+  .vary .marks { position: relative; height: 20px; margin: 4px 8px 0; font-size: 12.5px; }
+  .vary .marks button { all: unset; position: absolute; top: 0; transform: translateX(-50%); text-align: center; line-height: 1.25; color: var(--ink-3); cursor: pointer; white-space: nowrap; }
+  .vary .marks button:last-child { transform: translateX(calc(-100% + 8px)); }
+  .vary .marks button:hover, .vary .marks .real { color: var(--ink); }
+  .vary canvas { display: block; width: 100%; aspect-ratio: 2; image-rendering: auto; background: #f6eedc; box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 14px 24px -18px rgba(40,24,8,.5); transition: opacity .2s; }
+  .vary.wait canvas { opacity: .4; }
+  .vary .cap { margin: 10px 0 0; font-size: 13px; color: var(--ink-3); }
 
   /* the method */
   .method { padding: 120px 0 80px; display: grid; grid-template-columns: minmax(0, 432px) minmax(0, 1fr); gap: 88px; }
@@ -156,6 +175,8 @@
     .hero h1 { line-height: 1.06; }
     .contents .nm { display: none; }
     .contents ol { gap: 10px; }
+    .vary .marks { height: 36px; }
+    .vary .marks button:nth-child(even) { top: 17px; }
   }
 </style>
 </head>
@@ -167,7 +188,7 @@
       <div class="eyebrow rise" style="animation-delay:.05s">Math-Animals</div>
       <h1 class="rise" style="animation-delay:.15s">Ten animals rendered from published models of their form</h1>
       <p class="lede rise" style="animation-delay:.45s">Claude Code (Opus 5.5) read the source papers, implemented each model in Canvas 2D, and rendered the animal from the model’s output. The pages use no image files. Each plate draws its construction next to the form, and its notes cite every parameter.</p>
-      <div class="live-note rise" style="animation-delay:.6s"><span class="dot" id="hero-dot"></span><span id="hero-note">Computing plate 3 in this browser…</span></div>
+      <div class="live-note rise wait" id="hero-line" style="animation-delay:.6s"><span class="dot done" id="hero-dot"></span><span id="hero-note"></span></div>
       <div class="actions rise" style="animation-delay:.7s">
         <a class="btn" href="#plates">Plates</a>
         <button class="btn ghost" id="hero-replay" disabled>Replay</button>
@@ -175,7 +196,7 @@
       </div>
     </div>
     <figure class="rise" style="animation-delay:.1s">
-      <div class="live hero-plate" id="hero-live"><div class="inner"><img src="images/plates/03-dragonfly-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div></div>
+      <div class="live hero-plate" id="hero-live"><div class="inner"><img src="images/plates/03-dragonfly-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div><div class="btn grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span></div></div>
       <figcaption><span>Plate 3. Emperor dragonfly, after Hoffmann et al., <i>PNAS</i> (2018)</span><span class="eq">p ∈ V<sub>s</sub> ⇔ |p − s| ≤ |p − o|</span></figcaption>
     </figure>
   </header>
@@ -295,8 +316,9 @@ $('plates').innerHTML = P.map((p, i) => `
       <div class="links"><a href="${GH + p.d}/NOTES.md">Notes and sources</a><a href="${GH + p.d}/index.html">Source code</a><a href="${p.d}/index.html?play">Page</a></div>
     </div>
     <div class="recto">
-      <div class="live" data-i="${i}"><div class="inner"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt="${p.nm}, rendered in code"><iframe title="${p.nm}, computing live" tabindex="-1"></iframe></div><button class="btn grow"><span class="dot"></span><span class="lbl">Run the model</span><span class="clk"></span></button></div>
+      <div class="live" data-i="${i}"><div class="inner"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt="${p.nm}, rendered in code"><iframe title="${p.nm}, computing live" tabindex="-1"></iframe></div><button class="btn grow"><span class="play" aria-hidden="true"></span><span class="dot"></span><span class="lbl">Run the model</span><span class="clk"></span></button></div>
       <div class="scrub"><button class="again">Replay</button><input type="range" min="0" max="6" step="0.01" value="5.2" aria-label="Time"><span class="tv">5.2 s</span></div>
+      <div class="vary" hidden><div class="fl">Model input</div><div class="row"><span class="eq"><span class="sym"></span> = <span class="val"></span></span><div class="track"><input type="range" min="0" max="1" step="0.001" aria-label="Model input"><div class="marks"></div></div></div><canvas></canvas><p class="cap"></p></div>
     </div>
   </article>`).join('');
 
@@ -314,10 +336,14 @@ self.window = self;
 let __c = null;
 self.document = { scripts: [], currentScript: null, getElementById: () => __c, querySelector: () => __c, createElement: () => new OffscreenCanvas(300, 150) };
 self.__siteKitStart = (init, seek) => {
-  let busy = false, want = null;
-  const run = async () => { busy = true; while (want !== null) { const t = want; want = null; await seek(t); postMessage({ at: t }); } busy = false; };
-  self.onmessage = e => { want = e.data.seek; if (!busy) run(); };
-  (async () => { await init(); await seek(0); postMessage({ ready: true }); })().catch(e => postMessage({ err: String(e && e.stack || e) }));
+  let busy = false, want = null, wantV = null;
+  const run = async () => { busy = true;
+    while (want !== null || wantV !== null) {
+      if (want !== null) { const t = want; want = null; await seek(t); postMessage({ at: t }); }
+      else { const v = wantV; wantV = null; const s = self.__vary.draw(v); postMessage({ strip: s, v }, [s.data.buffer]); }
+    } busy = false; };
+  self.onmessage = e => { if ('seek' in e.data) want = e.data.seek; else wantV = e.data.vary; if (!busy) run(); };
+  (async () => { await init(); await seek(0); const V = self.__vary; postMessage({ ready: true, vary: V ? { ...V, draw: undefined } : null }); })().catch(e => postMessage({ err: String(e && e.stack || e) }));
 };
 self.onmessage = e => {
   __c = e.data.canvas; document.scripts = e.data.texts.map(t => ({ src: '', textContent: t }));
@@ -339,20 +365,23 @@ async function source(dir) {
 async function workerPlate(dir, el) {
   const s = await source(dir), cv = document.createElement('canvas');
   cv.width = s.w; cv.height = s.h; el.querySelector('.inner').append(cv);
-  const w = new Worker(BOOT_URL), waits = [];
+  const w = new Worker(BOOT_URL), waits = [], strips = [], h = {};
   const ready = new Promise((ok, no) => {
-    w.onmessage = e => { const m = e.data; if (m.ready) ok(); else if (m.err) no(new Error(m.err)); else if ('at' in m) waits.splice(0).forEach(f => f()); };
+    w.onmessage = e => { const m = e.data; if (m.ready) { h.control = m.vary; ok(); } else if (m.err) no(new Error(m.err)); else if ('at' in m) waits.splice(0).forEach(f => f()); else if (m.strip) strips.splice(0).forEach(f => f(m.strip)); };
     w.onerror = e => { e.preventDefault(); no(new Error(e.message || 'worker failed')); };
   });
   const off = cv.transferControlToOffscreen();
   w.postMessage({ canvas: off, texts: s.texts, urls: s.urls }, [off]);
-  return { ready, seek: t => new Promise(f => { waits.push(f); w.postMessage({ seek: t }); }), stop: () => { w.terminate(); cv.remove(); waits.splice(0).forEach(f => f()); } };
+  return Object.assign(h, { ready, seek: t => new Promise(f => { waits.push(f); w.postMessage({ seek: t }); }),
+    vary: v => new Promise(f => { strips.push(f); w.postMessage({ vary: v }); }),
+    stop: () => { w.terminate(); cv.remove(); waits.splice(0).forEach(f => f()); strips.splice(0).forEach(f => f(null)); } });
 }
 function framePlate(dir, el) {
   const fr = el.querySelector('iframe'), R = () => { try { return fr.contentWindow && fr.contentWindow.__riso; } catch (e) { return null; } };
   let poll = 0; fr.src = dir + '/index.html?t=0';
-  const ready = new Promise(ok => { poll = setInterval(() => { const r = R(); if (r && r.ready) { clearInterval(poll); ok(); } }, 60); });
-  return { ready, seek: async t => { const r = R(); r && await r.seek(t); }, stop: () => { clearInterval(poll); fr.src = 'about:blank'; } };
+  const V = () => { try { return fr.contentWindow.__vary || null; } catch (e) { return null; } }, h = {};
+  const ready = new Promise(ok => { poll = setInterval(() => { const r = R(); if (r && r.ready) { clearInterval(poll); const v = V(); h.control = v && { ...v, draw: undefined }; ok(); } }, 60); });
+  return Object.assign(h, { ready, seek: async t => { const r = R(); r && await r.seek(t); }, vary: async v => { const c = V(); return c ? c.draw(v) : null; }, stop: () => { clearInterval(poll); fr.src = 'about:blank'; } });
 }
 const BOOT_URL = OFF ? blob(BOOT) : null;
 async function open(dir, el) {
@@ -366,14 +395,14 @@ async function open(dir, el) {
 let active = null;
 function stop(L) {
   if (!L) return; L.dead = true; clearInterval(L.clock); cancelAnimationFrame(L.raf);
-  L.el.classList.remove('on', 'busy'); L.h && L.h.stop(); if (L.scrub) L.scrub.classList.remove('on');
+  L.el.classList.remove('on', 'busy'); L.h && L.h.stop(); if (L.scrub) L.scrub.classList.remove('on'); if (L.vary) L.vary.hidden = true;
   const lbl = L.el.querySelector('.lbl'); if (lbl) { lbl.textContent = 'Run the model'; L.el.querySelector('.clk').textContent = ''; }
   L.onStop && L.onStop();
 }
 // grow(el, dir, o): compute the plate (o.onTick(s) every 0.1 s meanwhile), then play its build
 function grow(el, dir, o = {}) {
   if (active && active.el !== el) stop(active);
-  const L = active = { el, scrub: o.scrub || null, raf: 0, gen: 0, h: null, dead: false, clock: 0, onStop: o.onStop }, t0 = performance.now();
+  const L = active = { el, scrub: o.scrub || null, vary: o.vary || null, raf: 0, gen: 0, h: null, dead: false, clock: 0, onStop: o.onStop }, t0 = performance.now();
   el.classList.add('busy'); o.onTick && o.onTick(0);
   L.clock = setInterval(() => o.onTick && o.onTick((performance.now() - t0) / 1000), 100);
   open(dir, el).then(h => {
@@ -381,6 +410,7 @@ function grow(el, dir, o = {}) {
     L.h = h; clearInterval(L.clock); el.classList.remove('busy'); el.classList.add('on');
     o.onLive && o.onLive((performance.now() - t0) / 1000);
     if (L.scrub) { L.scrub.classList.add('on'); bindScrub(L); }
+    if (h.control && L.vary) bindVary(L, h.control);
     replay(L, () => o.onDone && o.onDone(L));
   });
   return L;
@@ -398,26 +428,54 @@ function bindScrub(L) {
     if (first) requestAnimationFrame(async () => { const t = pend; pend = null; await L.h.seek(t); }); };
   L.scrub.querySelector('.again').onclick = () => replay(L);
 }
+// bindVary(L, c): the plate's model input, when its page offers one (window.__vary): a slider over
+// c.min to c.max, the trial values marked, and the model's output redrawn as you drag
+function bindVary(L, c) {
+  const box = L.vary, inp = box.querySelector('input'), cv = box.querySelector('canvas'), out = box.querySelector('.val'), cap = box.querySelector('.cap');
+  const log = c.scale === 'log', lo = log ? Math.log(c.min) : c.min, hi = log ? Math.log(c.max) : c.max;
+  const toV = u => { const x = lo + (hi - lo) * u; return Math.round((log ? Math.exp(x) : x) / c.step) * c.step; };
+  const toU = v => ((log ? Math.log(v) : v) - lo) / (hi - lo);
+  const fmt = v => v.toFixed(c.digits ?? 2);
+  box.querySelector('.sym').innerHTML = c.name.replace(/_(\w+)/, '<sub>$1</sub>');
+  box.querySelector('.marks').innerHTML = c.marks.map(([v, w, real]) => `<button type="button" style="left:${(toU(v) * 100).toFixed(2)}%" data-v="${v}" title="${c.name} = ${fmt(v)}"${real ? ' class="real"' : ''}>${w}${real ? ' ✓' : ''}</button>`).join('');
+  let busy = false, want = null;
+  const draw = async () => {
+    busy = true;
+    while (want !== null) {
+      const v = want; want = null; const s = await L.h.vary(v); if (!s || L.dead) break;
+      cv.width = s.w; cv.height = s.h; cv.getContext('2d').putImageData(new ImageData(s.data, s.w, s.h), 0, 0);
+      cap.innerHTML = c.note.replace('{v}', fmt(v)) + (Math.abs(v - c.value) < 1e-9 ? ', the shell’s own value' : '');
+      box.classList.remove('wait');
+    }
+    busy = false;
+  };
+  const set = v => { inp.value = toU(v); out.textContent = fmt(v); want = v; if (!busy) draw(); };
+  inp.oninput = () => set(toV(+inp.value));
+  box.querySelectorAll('.marks button').forEach(b => b.onclick = () => set(+b.dataset.v));
+  box.hidden = false; box.classList.add('wait'); set(c.value);
+}
 document.querySelectorAll('.recto .live').forEach(el => {
-  const i = +el.dataset.i, sc = el.parentElement.querySelector('.scrub'), lbl = el.querySelector('.lbl'), clk = el.querySelector('.clk');
-  const go = () => { if (!el.classList.contains('on') && !el.classList.contains('busy')) grow(el, P[i].d, { scrub: sc, onTick: s => { lbl.textContent = P[i].run; clk.textContent = `· ${s.toFixed(1)} s`; } }); };
+  const i = +el.dataset.i, sc = el.parentElement.querySelector('.scrub'), va = el.parentElement.querySelector('.vary'), lbl = el.querySelector('.lbl'), clk = el.querySelector('.clk');
+  const go = () => { if (!el.classList.contains('on') && !el.classList.contains('busy')) grow(el, P[i].d, { scrub: sc, vary: va, onTick: s => { lbl.textContent = P[i].run; clk.textContent = `· ${s.toFixed(1)} s`; } }); };
   el.addEventListener('click', go);
 });
 
 // the hero computes on arrival
-const hero = $('hero-live'), note = $('hero-note'), dot = $('hero-dot'), rb = $('hero-replay');
+const hero = $('hero-live'), line = $('hero-line'), note = $('hero-note'), dot = $('hero-dot'), rb = $('hero-replay');
+const cueL = hero.querySelector('.cue .lbl'), cueC = hero.querySelector('.cue .clk');
+const said = text => { note.textContent = text; line.classList.remove('wait'); };
 fit(hero);
 const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-if (still) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; note.textContent = 'Plate 3, final frame.'; dot.classList.add('done'); rb.disabled = false; }
+if (still) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; said('Plate 3, final frame.'); rb.disabled = false; }
 let heroS = 0;
 const heroGo = () => grow(hero, '03-dragonfly', {
-  onTick: s => { note.textContent = `Computing 2,611 wing cells · ${s.toFixed(1)} s`; },
-  onLive: s => { heroS = s; note.textContent = `Model computed in ${s.toFixed(1)} s. Drawing the build.`; hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; },
-  onStop: () => { if (rb.disabled) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; note.textContent = 'Plate 3, final frame.'; dot.classList.add('done'); rb.disabled = false; rb.onclick = heroGo; } },
-  onDone: L => { note.textContent = `Plate 3 computed in this browser in ${heroS.toFixed(1)} s.`; dot.classList.add('done'); rb.disabled = false;
+  onTick: s => { cueL.textContent = 'Computing 2,611 wing cells'; cueC.textContent = `· ${s.toFixed(1)} s`; },
+  onLive: s => { heroS = s; hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; },
+  onStop: () => { if (rb.disabled) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; said('Plate 3, final frame.'); rb.disabled = false; rb.onclick = heroGo; } },
+  onDone: L => { said(`Plate 3 computed in this browser in ${heroS.toFixed(1)} s.`); rb.disabled = false;
     rb.onclick = () => { if (active !== L) return heroGo(); rb.disabled = true; dot.classList.remove('done'); replay(L, () => { rb.disabled = false; dot.classList.add('done'); }); }; },
 });
-if (!still) setTimeout(heroGo, 900); else rb.onclick = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly-t0.jpg'; dot.classList.remove('done'); rb.disabled = true; heroGo(); };
+if (!still) setTimeout(heroGo, 900); else rb.onclick = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly-t0.jpg'; rb.disabled = true; heroGo(); };
 
 // a plate named in the address bar grows when you arrive at it
 const h = location.hash.slice(1), hi = P.findIndex(p => slug(p.d) === h);
