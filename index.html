@@ -72,7 +72,8 @@
   .board .s1 { left: 7.546%; top: 66.616%; width: 22.222%; } .board .s2 { left: 27.833%; top: 66.616%; width: 15.231%; } .board .s3 { left: 41.13%; top: 66.616%; width: 12.917%; }
   .cell { list-style: none; min-width: 0; position: relative; container-type: inline-size; }
   /* a narrow drawer keeps only the input and the clock */
-  @container (max-width: 230px) { .cell .in .go, .cell .grow .lbl { display: none; } .cell .grow .clk::before { content: none !important; } .cell .in { overflow: hidden; } }
+  @container (max-width: 300px) { .cell .in .go { display: none; } }
+  @container (max-width: 230px) { .cell .grow .lbl { display: none; } .cell .grow .clk::before { content: none !important; } .cell .in { overflow: hidden; } }
   .cell > a { display: block; position: relative; text-decoration: none; color: var(--ink); }
   .cell .thumb { position: relative; aspect-ratio: 4 / 5; overflow: hidden; }
   .cell .thumb > img { display: block; width: 100%; height: 100%; transition: transform .6s cubic-bezier(.2,.7,.2,1), filter .6s; }
@@ -408,7 +409,7 @@ const $ = id => document.getElementById(id), slug = d => d.slice(3);
 // the wall's drawers: each plate's still (the dragonfly's drawer computes live) and the input its
 // model takes at the value the plate was grown at
 $('toc').innerHTML = P.map((p, i) => {
-  const c = p.vary, inp = c ? `<span class="in">${c.sym} = ${fmtV(c.value, c.step)}${c.unit || ''}<span class="knob" aria-hidden="true"></span><span class="go">Change it</span></span>` : '';
+  const c = p.vary, inp = c ? `<span class="in">${c.sym} = ${fmtV(c.value, c.step)}${c.unit || ''}<span class="knob" aria-hidden="true"></span><span class="go">Tweak parameters</span></span>` : '';
   const thumb = i === 2
     ? `<div class="live" id="hero-live"><div class="inner"><img src="images/plates/${p.d}-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div><div class="grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span><span class="bar"></span></div></div>`
     : `<img src="images/plates/${p.d}${i === 4 ? '@2x' : ''}.jpg" width="720" height="900" alt="${p.nm}, rendered in code">`; // the large drawer gets the full 1080 px still
