@@ -568,7 +568,8 @@ function bindVary(i, el, box, run) {
     if (!busy) draw();
   };
   inp.oninput = () => set(toV(+inp.value));
-  ap.onclick = () => { grown = cur; box.classList.add('held'); sync(); run(Math.abs(cur - c.value) < c.step / 2 ? '' : '?' + new URLSearchParams({ [c.key]: fmt(cur) })); };
+  // one column: the plate sits above its text, so bring it into view to watch it regrow
+  ap.onclick = () => { grown = cur; box.classList.add('held'); sync(); if (matchMedia('(max-width: 1080px)').matches) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); run(Math.abs(cur - c.value) < c.step / 2 ? '' : '?' + new URLSearchParams({ [c.key]: fmt(cur) })); };
   inp.value = toU(c.value); sync();
   // the plate calls these as it computes and comes live
   return { live: () => { box.classList.remove('held'); sync(); want = cur; if (!busy) draw(); }, stop: () => { if (!box.classList.contains('held')) { grown = c.value; sync(); } } };
