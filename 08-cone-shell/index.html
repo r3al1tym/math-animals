@@ -966,7 +966,10 @@ const span = (t, a, b) => clamp((t - a) / (b - a));
 //   dc/dt = r_c·(mean a − c)        a hormone shared by the whole lip
 // s is the source density, r_a with ±4 % cell-to-cell scatter. When few cells are active the
 // hormone falls, the inhibitor dies faster, and new waves are triggered. Every value is Meinhardt's.
-const MODEL = { ra: 0.1, da: 0.015, sa: 0.25, rb: 0.016, sb: 0.1, rc: 0.1, fl: 0.04, kp: 12 };
+const SB_TEXTILE = 0.1; // Meinhardt's s_b for C. textile
+const MODEL = { ra: 0.1, da: 0.015, sa: 0.25, rb: 0.016, sb: SB_TEXTILE, rc: 0.1, fl: 0.04, kp: 12 };
+// ?sb=0.22 grows the whole plate at another s_b (the site's Apply button does this through self.__query)
+{ const v = Number(new URLSearchParams(self.__query ?? location.search).get('sb')); if (v >= 0.01 && v <= 1) MODEL.sb = +v.toFixed(3); }
 // simulate(p, N, rows, key, keep(row, a)): N cells, impermeable ends; keep is called with each
 // growth line (row 0 first) after kp iterations.
 function simulate(p, N, rows, key, keep) {
@@ -1304,7 +1307,7 @@ function bakeShell(band = null) {
 // halo, and the page keeps the band rows of each.
 const SHELL_KEYS = ['cov', 'top', 'ageT', 'inn', 'ageI', 'hT', 'hB', 'prv', 'ageP', 'covP', 'cell', 'zone'];
 const MW_JOBS = {
-  shell(band) { if (!FB) runMain(); bakeShell(band); const o = {}; for (const k of SHELL_KEYS) o[k] = MW.cut(SHELL[k], SHELL.h, band); return o; },
+  shell(band, sb) { MODEL.sb = sb; if (!FB) runMain(); bakeShell(band); const o = {}; for (const k of SHELL_KEYS) o[k] = MW.cut(SHELL[k], SHELL.h, band); return o; },
 };
 async function bakeShellBands(job) {
   const parts = await job; MW.done();
@@ -1452,6 +1455,7 @@ function findLoupe() {
     const sc = K - Math.abs(K - 32) * 1.2 - bad / K * 6;
     if (K <= 50 && (!best || sc > best.sc)) best = { j, i, K, sc, fr };
   }
+  LOUPE.none = !best; // at some s_b no two waves meet in view: then there is no loupe, leader or ringed tent
   if (!best) best = { j: 320, i: 200, K: 20, fr: [] };
   // centre the loupe on the closing triangle: half way up its fronts
   LOUPE.age = best.j + best.K * 0.5; LOUPE.cell = best.i; LOUPE.apex = [best.j, best.i]; LOUPE.K = best.K; LOUPE.fronts = best.fr;
@@ -1496,6 +1500,7 @@ function bakeLoupe() {
   LOUPE_C = c;
 }
 function loupe(t, gc) {
+  if (LOUPE.none) return;
   const L = LOUPE, [sx, sy] = L.src, [lx, ly] = L.at;
   pencilCircle(X, sx, sy, L.rs, { prog: span(t, 1.15, 1.5), seed: 'lsrc' });
   pencilCircle(X, lx, ly, L.R, { prog: span(t, 1.25, 1.75), seed: 'lbig' });
@@ -1539,6 +1544,7 @@ function onShellAt(age, cell) { // the pixel of the shell's outer face that show
 // the two largest white tents on the shell's face, other than the loupe's
 let PAIRS = [];
 function findPairs() {
+  if (LOUPE.none) { PAIRS = []; return; }
   const A0 = 200, A1 = 440, C0 = 40, C1 = 470, Wd = C1 - C0 + 1, Hd = A1 - A0 + 1, lab = new Int32Array(Wd * Hd).fill(-1), comps = [];
   const white = (age, c) => fieldAt(age, c) < 0.2 && (fieldP(age, c, true), FP < 0.25);
   const L = LOUPE, la = L.apex[0] + L.K / 2, lc = L.apex[1];
@@ -1730,7 +1736,7 @@ function trials(t) {
     const vy = TR_Y + 31;
     letterText(X, 's_{b} = ' + q.sb.toFixed(2), q.cx, vy, { size: 17, medium: 'pencil', align: 'center', prog: span(t, t0 + 0.3, t0 + 0.5), seed: 'trv' + i });
     letterText(X, q.word, q.cx, vy + 26, { size: 16, medium: 'pencil', align: 'center', prog: span(t, t0 + 0.38, t0 + 0.56), seed: 'trw' + i });
-    if (q.real) pencilTick(X, q.cx, vy + 58, 22, { w: 1.9, prog: span(t, 4.0, 4.16), seed: 'tick' });
+    if (q.sb === SB_TEXTILE) pencilTick(X, q.cx, vy + 58, 22, { w: 1.9, prog: span(t, 4.0, 4.16), seed: 'tick' });
   });
 }
 
@@ -1746,6 +1752,8 @@ const LABEL = [
   { text: 'each growth line is one step', size: 12.5 },
   { text: 'of the waves along the lip', size: 12.5 },
 ];
+// grown at another s_b, the label says so
+if (MODEL.sb !== SB_TEXTILE) LABEL.push({ text: 'grown here at s_{b} = ' + String(+MODEL.sb.toFixed(3)) + ', not 0.10', size: 12.5 });
 function label(t) {
   const w = Math.round(Math.max(...LABEL.map(l => measureText(l.text, l.size, l))) + 30);
   labelCard(X, { x: TX1 - 28 - w, y: 158, w, lines: LABEL, prog: span(t, 3.85, 4.5), rot: -0.005, pad: 14, seed: 'label-09' });
@@ -1775,10 +1783,10 @@ function seek(t) {
 // ---------- the site's control: the same lip at any s_b ----------
 // The site's slider calls draw(v): the model on a 260-cell lip with s_b = v and every other value
 // as on the shell, one seed at every v so only s_b changes, coloured by the shell's own pigment
-// rule. Growth runs down the strip, the newest line at the bottom. The plate itself is unchanged.
+// rule. Growth runs down the strip, the newest line at the bottom. value is the s_b the plate grew at.
 window.__vary = {
-  name: 's_b', min: 0.03, max: 0.6, step: 0.005, scale: 'log', value: MODEL.sb, digits: 3,
-  marks: TRIAL.vals.map((v, i) => [v, TRIAL.words[i], v === MODEL.sb]),
+  name: 's_b', key: 'sb', min: 0.03, max: 0.6, step: 0.005, scale: 'log', value: MODEL.sb, digits: 3,
+  textile: SB_TEXTILE, marks: TRIAL.vals.map((v, i) => [v, TRIAL.words[i], v === SB_TEXTILE]),
   note: 'the lip at s<sub>b</sub> = {v}: each row is one growth line, the newest at the bottom',
   draw(v) {
     const N = 260, KEEP = 130, ROWS = 900, img = new Uint8ClampedArray(N * KEEP * 4), P = new Float32Array(N);
@@ -1791,7 +1799,7 @@ window.__vary = {
   },
 };
 kitStart(async () => {
-  const t0 = performance.now(), shellJob = MW.bands('shell');
+  const t0 = performance.now(), shellJob = MW.bands('shell', MODEL.sb);
   CARD = renderCard({ tone: 'white' }); FRAME = renderFrame();
   runMain(); const t1 = performance.now();
   await bakeShellBands(shellJob); const t2 = performance.now();

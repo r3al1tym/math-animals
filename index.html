@@ -135,6 +135,10 @@
   .vary canvas { display: block; width: 100%; aspect-ratio: 2; image-rendering: auto; background: #f6eedc; box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 14px 24px -18px rgba(40,24,8,.5); transition: opacity .2s; }
   .vary.wait canvas { opacity: .4; }
   .vary .cap { margin: 10px 0 0; font-size: 13px; color: var(--ink-3); }
+  .vary .apply { margin-top: 16px; }
+  .vary .apply[hidden] { display: none; }
+  .vary .apply sub { font-size: .7em; }
+  .vary input:disabled, .vary button:disabled { opacity: .45; cursor: progress; }
 
   /* the method */
   .method { padding: 120px 0 80px; display: grid; grid-template-columns: minmax(0, 432px) minmax(0, 1fr); gap: 88px; }
@@ -318,7 +322,7 @@ $('plates').innerHTML = P.map((p, i) => `
     <div class="recto">
       <div class="live" data-i="${i}"><div class="inner"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt="${p.nm}, rendered in code"><iframe title="${p.nm}, computing live" tabindex="-1"></iframe></div><button class="btn grow"><span class="play" aria-hidden="true"></span><span class="dot"></span><span class="lbl">Run the model</span><span class="clk"></span></button></div>
       <div class="scrub"><button class="again">Replay</button><input type="range" min="0" max="6" step="0.01" value="5.2" aria-label="Time"><span class="tv">5.2 s</span></div>
-      <div class="vary" hidden><div class="fl">Model input</div><div class="row"><span class="eq"><span class="sym"></span> = <span class="val"></span></span><div class="track"><input type="range" min="0" max="1" step="0.001" aria-label="Model input"><div class="marks"></div></div></div><canvas></canvas><p class="cap"></p></div>
+      <div class="vary" hidden><div class="fl">Model input</div><div class="row"><span class="eq"><span class="sym"></span> = <span class="val"></span></span><div class="track"><input type="range" min="0" max="1" step="0.001" aria-label="Model input"><div class="marks"></div></div></div><canvas></canvas><p class="cap"></p><button type="button" class="btn apply" hidden></button></div>
     </div>
   </article>`).join('');
 
@@ -346,7 +350,7 @@ self.__siteKitStart = (init, seek) => {
   (async () => { await init(); await seek(0); const V = self.__vary; postMessage({ ready: true, vary: V ? { ...V, draw: undefined } : null }); })().catch(e => postMessage({ err: String(e && e.stack || e) }));
 };
 self.onmessage = e => {
-  __c = e.data.canvas; document.scripts = e.data.texts.map(t => ({ src: '', textContent: t }));
+  __c = e.data.canvas; self.__query = e.data.query || ''; document.scripts = e.data.texts.map(t => ({ src: '', textContent: t }));
   try { e.data.urls.forEach((u, i) => { document.currentScript = document.scripts[i]; importScripts(u); }); }
   catch (err) { postMessage({ err: String(err && err.stack || err) }); }
 };`;
@@ -362,7 +366,7 @@ async function source(dir) {
   return SRC[dir] = { texts, urls: run.map(t => blob(t)), w: +c.getAttribute('width'), h: +c.getAttribute('height') };
 }
 // a plate: { ready, seek(t), stop() }; seek resolves once frame t (or a later one asked for) is drawn
-async function workerPlate(dir, el) {
+async function workerPlate(dir, el, query = '') {
   const s = await source(dir), cv = document.createElement('canvas');
   cv.width = s.w; cv.height = s.h; el.querySelector('.inner').append(cv);
   const w = new Worker(BOOT_URL), waits = [], strips = [], h = {};
@@ -371,46 +375,46 @@ async function workerPlate(dir, el) {
     w.onerror = e => { e.preventDefault(); no(new Error(e.message || 'worker failed')); };
   });
   const off = cv.transferControlToOffscreen();
-  w.postMessage({ canvas: off, texts: s.texts, urls: s.urls }, [off]);
+  w.postMessage({ canvas: off, texts: s.texts, urls: s.urls, query }, [off]);
   return Object.assign(h, { ready, seek: t => new Promise(f => { waits.push(f); w.postMessage({ seek: t }); }),
     vary: v => new Promise(f => { strips.push(f); w.postMessage({ vary: v }); }),
     stop: () => { w.terminate(); cv.remove(); waits.splice(0).forEach(f => f()); strips.splice(0).forEach(f => f(null)); } });
 }
-function framePlate(dir, el) {
+function framePlate(dir, el, query = '') {
   const fr = el.querySelector('iframe'), R = () => { try { return fr.contentWindow && fr.contentWindow.__riso; } catch (e) { return null; } };
-  let poll = 0; fr.src = dir + '/index.html?t=0';
+  let poll = 0; fr.src = dir + '/index.html?t=0' + query.replace('?', '&');
   const V = () => { try { return fr.contentWindow.__vary || null; } catch (e) { return null; } }, h = {};
   const ready = new Promise(ok => { poll = setInterval(() => { const r = R(); if (r && r.ready) { clearInterval(poll); const v = V(); h.control = v && { ...v, draw: undefined }; ok(); } }, 60); });
   return Object.assign(h, { ready, seek: async t => { const r = R(); r && await r.seek(t); }, vary: async v => { const c = V(); return c ? c.draw(v) : null; }, stop: () => { clearInterval(poll); fr.src = 'about:blank'; } });
 }
 const BOOT_URL = OFF ? blob(BOOT) : null;
-async function open(dir, el) {
+async function open(dir, el, query = '') {
   if (OFF) {
     let h = null;
-    try { h = await workerPlate(dir, el); await h.ready; return h; }
+    try { h = await workerPlate(dir, el, query); await h.ready; return h; }
     catch (e) { console.warn(`plate ${dir}: ${e.message}; running it in an iframe`); h && h.stop(); }
   }
-  const h = framePlate(dir, el); await h.ready; return h;
+  const h = framePlate(dir, el, query); await h.ready; return h;
 }
 let active = null;
-function stop(L) {
+function stop(L, keep = false) {
   if (!L) return; L.dead = true; clearInterval(L.clock); cancelAnimationFrame(L.raf);
-  L.el.classList.remove('on', 'busy'); L.h && L.h.stop(); if (L.scrub) L.scrub.classList.remove('on'); if (L.vary) L.vary.hidden = true;
+  L.el.classList.remove('on', 'busy'); L.h && L.h.stop(); if (L.scrub) L.scrub.classList.remove('on'); if (L.vary && !keep) L.vary.hidden = true;
   const lbl = L.el.querySelector('.lbl'); if (lbl) { lbl.textContent = 'Run the model'; L.el.querySelector('.clk').textContent = ''; }
   L.onStop && L.onStop();
 }
 // grow(el, dir, o): compute the plate (o.onTick(s) every 0.1 s meanwhile), then play its build
 function grow(el, dir, o = {}) {
-  if (active && active.el !== el) stop(active);
+  if (active) stop(active, active.el === el);
   const L = active = { el, scrub: o.scrub || null, vary: o.vary || null, raf: 0, gen: 0, h: null, dead: false, clock: 0, onStop: o.onStop }, t0 = performance.now();
   el.classList.add('busy'); o.onTick && o.onTick(0);
   L.clock = setInterval(() => o.onTick && o.onTick((performance.now() - t0) / 1000), 100);
-  open(dir, el).then(h => {
+  open(dir, el, o.query).then(h => {
     if (L.dead) return h.stop();
     L.h = h; clearInterval(L.clock); el.classList.remove('busy'); el.classList.add('on');
     o.onLive && o.onLive((performance.now() - t0) / 1000);
     if (L.scrub) { L.scrub.classList.add('on'); bindScrub(L); }
-    if (h.control && L.vary) bindVary(L, h.control);
+    if (h.control && L.vary) bindVary(L, h.control, o.regrow);
     replay(L, () => o.onDone && o.onDone(L));
   });
   return L;
@@ -430,12 +434,13 @@ function bindScrub(L) {
 }
 // bindVary(L, c): the plate's model input, when its page offers one (window.__vary): a slider over
 // c.min to c.max, the trial values marked, and the model's output redrawn as you drag
-function bindVary(L, c) {
-  const box = L.vary, inp = box.querySelector('input'), cv = box.querySelector('canvas'), out = box.querySelector('.val'), cap = box.querySelector('.cap');
+function bindVary(L, c, regrow) {
+  const box = L.vary, ap = box.querySelector('.apply'), inp = box.querySelector('input'), cv = box.querySelector('canvas'), out = box.querySelector('.val'), cap = box.querySelector('.cap');
   const log = c.scale === 'log', lo = log ? Math.log(c.min) : c.min, hi = log ? Math.log(c.max) : c.max;
   const toV = u => { const x = lo + (hi - lo) * u; return Math.round((log ? Math.exp(x) : x) / c.step) * c.step; };
   const toU = v => ((log ? Math.log(v) : v) - lo) / (hi - lo);
   const fmt = v => v.toFixed(c.digits ?? 2);
+  box.dataset.key = c.key;
   box.querySelector('.sym').innerHTML = c.name.replace(/_(\w+)/, '<sub>$1</sub>');
   box.querySelector('.marks').innerHTML = c.marks.map(([v, w, real]) => `<button type="button" style="left:${(toU(v) * 100).toFixed(2)}%" data-v="${v}" title="${c.name} = ${fmt(v)}"${real ? ' class="real"' : ''}>${w}${real ? ' ✓' : ''}</button>`).join('');
   let busy = false, want = null;
@@ -444,20 +449,24 @@ function bindVary(L, c) {
     while (want !== null) {
       const v = want; want = null; const s = await L.h.vary(v); if (!s || L.dead) break;
       cv.width = s.w; cv.height = s.h; cv.getContext('2d').putImageData(new ImageData(s.data, s.w, s.h), 0, 0);
-      cap.innerHTML = c.note.replace('{v}', fmt(v)) + (Math.abs(v - c.value) < 1e-9 ? ', the shell’s own value' : '');
+      cap.innerHTML = c.note.replace('{v}', fmt(v)) + (Math.abs(v - c.textile) < 1e-9 ? ', the real shell’s value' : '');
       box.classList.remove('wait');
     }
     busy = false;
   };
-  const set = v => { inp.value = toU(v); out.textContent = fmt(v); want = v; if (!busy) draw(); };
+  const set = v => { inp.value = toU(v); out.textContent = fmt(v); want = v; if (!busy) draw();
+    ap.hidden = !regrow || Math.abs(v - c.value) < 1e-9; ap.innerHTML = `<span>Apply ${box.querySelector('.sym').innerHTML} = ${fmt(v)} to the shell</span>`; ap.onclick = () => regrow(v); };
   inp.oninput = () => set(toV(+inp.value));
   box.querySelectorAll('.marks button').forEach(b => b.onclick = () => set(+b.dataset.v));
+  inp.disabled = false; box.querySelectorAll('button').forEach(b => b.disabled = false);
   box.hidden = false; box.classList.add('wait'); set(c.value);
 }
 document.querySelectorAll('.recto .live').forEach(el => {
   const i = +el.dataset.i, sc = el.parentElement.querySelector('.scrub'), va = el.parentElement.querySelector('.vary'), lbl = el.querySelector('.lbl'), clk = el.querySelector('.clk');
-  const go = () => { if (!el.classList.contains('on') && !el.classList.contains('busy')) grow(el, P[i].d, { scrub: sc, vary: va, onTick: s => { lbl.textContent = P[i].run; clk.textContent = `· ${s.toFixed(1)} s`; } }); };
-  el.addEventListener('click', go);
+  // regrow(v): the whole plate again with its model input at v; the panel waits on the plate's clock
+  const regrow = v => { va.classList.add('wait'); va.querySelector('input').disabled = true; va.querySelectorAll('button').forEach(b => b.disabled = true); run('?' + new URLSearchParams({ [va.dataset.key]: +v.toFixed(3) })); };
+  const run = query => grow(el, P[i].d, { scrub: sc, vary: va, query, regrow, onTick: s => { lbl.textContent = P[i].run; clk.textContent = `· ${s.toFixed(1)} s`; } });
+  el.addEventListener('click', () => { if (!el.classList.contains('on') && !el.classList.contains('busy')) run(''); });
 });
 
 // the hero computes on arrival
