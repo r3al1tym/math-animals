@@ -55,7 +55,7 @@
   .wall { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); background: var(--drawer); box-shadow: 0 30px 60px -40px rgba(40,24,8,.8); }
   .wall .cells { display: contents; }
   .wall { grid-auto-flow: dense; }
-  /* two drawers shown large, 2 x 2 so they keep the drawers' 4:5: the live dragonfly beside the title, the nautilus below */
+  /* two drawers shown large, 2 x 2 so they keep the drawers' 4:5: the live honeybee comb beside the title, the nautilus below */
   .cell.f1 { grid-column: 3 / span 2; grid-row: 1 / span 2; }
   .cell.f2 { grid-column: 5 / span 2; grid-row: 2 / span 2; }
   /* the title drawer is a specimen drawer: the kit's card, walls, oak, light and glass, the title in
@@ -280,8 +280,8 @@
     .vary .marks { height: 42px; }
     .vary .vhead { flex-direction: column; align-items: flex-start; gap: 6px; }
     .vary .hint { text-align: left; max-width: none; }
-    .cell .grow .lbl { display: none; }
-    .cell .grow .clk::before { content: none !important; }
+    .cell:not(.f1) .grow .lbl { display: none; }
+    .cell:not(.f1) .grow .clk::before { content: none !important; }
     .cell .live.busy .grow { padding: 8px 10px 9px; gap: 7px; }
     .vary .marks button:nth-child(even) { top: 17px; }
     .vary figcaption { flex-direction: column; align-items: flex-start; }
@@ -405,15 +405,17 @@ const P = [
     vary: {"key": "l0", "sym": "<i>L</i><sub>0</sub>", "value": 36, "real": 36, "min": 12, "max": 150, "step": 1, "scale": "log", "w": 389, "h": 166, "marks": [[36, "accretion"], [150, "whole"]], "noun": "shell", "idle": "Move <i>L</i><sub>0</sub> to run the model.", "cap": "The keratin laid flat down the spine of a 150 mm shell grown from a hatchling of {v} mm{real}: each yellow areola is the hatchling’s scute, ringed by nine equal years of growth.", "realNote": ", the size radiated tortoises hatch at (32 to 40 mm)", "unit": " mm"} },
 ];
 const $ = id => document.getElementById(id), slug = d => d.slice(3);
+const HI = 0; // the hero: the plate whose drawer computes live on arrival
 
-// the wall's drawers: each plate's still (the dragonfly's drawer computes live) and the input its
+// the wall's drawers: each plate's still (the hero's drawer computes live: the comb, the quickest
+// plate to compute, about 4 s) and the input its
 // model takes at the value the plate was grown at
 $('toc').innerHTML = P.map((p, i) => {
   const c = p.vary, inp = c ? `<span class="in">${c.sym} = ${fmtV(c.value, c.step)}${c.unit || ''}<span class="knob" aria-hidden="true"></span><span class="go">Tweak parameters</span></span>` : '';
-  const thumb = i === 2
-    ? `<div class="live" id="hero-live"><div class="inner"><img src="images/plates/${p.d}-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div><div class="grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span><span class="bar"></span></div></div>`
+  const thumb = i === HI
+    ? `<div class="live" id="hero-live"><div class="inner"><img src="images/plates/${p.d}-t0.jpg" alt="An empty specimen drawer, about to draw ${p.nm.toLowerCase()}"><iframe title="Plate ${i + 1}, computing live" tabindex="-1"></iframe></div><div class="grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span><span class="bar"></span></div></div>`
     : `<img src="images/plates/${p.d}${i === 4 ? '@2x' : ''}.jpg" width="720" height="900" alt="${p.nm}, rendered in code">`; // the large drawer gets the full 1080 px still
-  return `<li class="cell${i === 2 ? ' busy-cell f1' : i === 4 ? ' f2' : ''}"><a href="#${slug(p.d)}" aria-label="Plate ${i + 1}, ${p.nm}"><div class="thumb">${thumb}</div>${inp}</a></li>`;
+  return `<li class="cell${i === HI ? ' busy-cell f1' : i === 4 ? ' f2' : ''}"><a href="#${slug(p.d)}" aria-label="Plate ${i + 1}, ${p.nm}"><div class="thumb">${thumb}</div>${inp}</a></li>`;
 }).join('');
 // until the visitor hovers a drawer, one drawer at a time shows its input, in turn
 {
@@ -589,10 +591,11 @@ function grow(el, dir, o = {}) {
 function replay(L, done) {
   cancelAnimationFrame(L.raf); const s0 = performance.now(), g = ++L.gen;
   setT(L, 0);
-  // the build's clock runs with the wall clock but never jumps more than a twelfth of a second a frame:
-  // a slow frame slows the build for a moment instead of skipping part of it
+  // the build's clock runs with the wall clock but steps at most a twelfth of a second a frame, so a
+  // slow frame slows the build for a moment instead of skipping part of it; it never falls below half
+  // speed, so a slow device still sees the whole build in at most twice its length
   let t = 0, last = s0;
-  const tick = async () => { const now = performance.now(); t = Math.min(HERO, t + Math.min(now - last, 1000 / 12) / 1000); last = now; await L.h.seek(t); if (L.dead || L.gen !== g) return; setT(L, t); if (t < HERO) L.raf = requestAnimationFrame(tick); else done && done(); };
+  const tick = async () => { const now = performance.now(); t = Math.min(HERO, Math.max(t + Math.min(now - last, 1000 / 12) / 1000, (now - s0) / 2000)); last = now; await L.h.seek(t); if (L.dead || L.gen !== g) return; setT(L, t); if (t < HERO) L.raf = requestAnimationFrame(tick); else done && done(); };
   L.raf = requestAnimationFrame(tick);
 }
 function setT(L, t) { if (!L.scrub) return; L.scrub.querySelector('input').value = t; L.scrub.querySelector('.tv').textContent = t.toFixed(1) + ' s'; }
@@ -657,14 +660,14 @@ document.querySelectorAll('.recto .live').forEach(el => {
   el.addEventListener('click', () => { if (!el.classList.contains('on') && !el.classList.contains('busy')) run(''); });
 });
 
-// the dragonfly's drawer computes on arrival: its clock on the plate, the time it took under it
+// the hero's drawer computes on arrival: its clock on the plate, the time it took under it
 const hero = $('hero-live');
 const cueL = hero.querySelector('.cue .lbl'), cueC = hero.querySelector('.cue .clk');
 fit(hero);
-const still = matchMedia('(prefers-reduced-motion: reduce)').matches, final = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; };
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches, final = () => { hero.querySelector('img').src = `images/plates/${P[HI].d}@2x.jpg`; };
 let heroS = 0;
-const heroGo = () => grow(hero, '03-dragonfly', {
-  ms: P[2].ms, onTick: t => { cueL.textContent = 'Computing'; cueC.textContent = t; },
+const heroGo = () => grow(hero, P[HI].d, {
+  ms: P[HI].ms, onTick: t => { cueL.textContent = 'Computing'; cueC.textContent = t; },
   onLive: s => { heroS = s; hero.closest('.cell').classList.remove('busy-cell'); }, onDone: () => { cueL.textContent = 'Computed here'; cueC.textContent = heroS.toFixed(1) + ' s'; hero.classList.add('timed'); setTimeout(() => hero.classList.remove('timed'), 6000); },
 });
 // it starts once the page has settled, unless a plate is already running or the wall has scrolled away
