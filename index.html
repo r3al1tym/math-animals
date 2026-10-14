@@ -43,7 +43,7 @@
   .btn[disabled] { opacity: .35; cursor: default; }
 
   /* the hero: one plate at monumental scale, computing as you arrive */
-  .hero { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 64px; align-items: center; padding: 36px 0 44px; }
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 64px; align-items: center; padding: 30px 0 26px; }
   .hero .copy { align-self: end; padding-bottom: 7vh; max-width: 580px; }
   .hero h1 { font: 400 clamp(34px, 3.7vw, 54px)/1.1 var(--serif); letter-spacing: -.012em; margin: 20px 0 26px; }
   .hero h1 span { display: block; }
@@ -55,7 +55,8 @@
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(184,64,47,.45); } 100% { box-shadow: 0 0 0 10px rgba(184,64,47,0); } }
   .actions { display: flex; gap: 12px; flex-wrap: wrap; }
   .hero figure { margin: 0; }
-  .hero-plate { height: min(84vh, 900px); aspect-ratio: 4 / 5; }
+  /* the plate leaves room under it for the contents row, so the first screen shows all ten */
+  .hero-plate { height: clamp(420px, calc(100vh - 262px), 860px); aspect-ratio: 4 / 5; }
   .hero figcaption { margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline; gap: 24px; font-size: 13.5px; color: var(--ink-2); }
   .eq { font: italic 400 19px/1.4 var(--math); color: var(--ink); }
 
@@ -63,40 +64,61 @@
   .live { position: relative; overflow: hidden; background: var(--drawer); box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 34px 60px -34px rgba(40,24,8,.6); }
   .live .inner { position: absolute; left: 0; top: 0; width: 720px; height: 900px; transform-origin: 0 0; }
   .live img, .live iframe, .live canvas { position: absolute; inset: 0; width: 720px; height: 900px; border: 0; display: block; }
-  .live iframe, .live canvas { opacity: 0; transition: opacity .3s ease; pointer-events: none; }
+  .live iframe, .live canvas { opacity: 0; pointer-events: none; }
   .live.on iframe, .live.on canvas { opacity: 1; }
-  .live img { transition: opacity .5s ease; }
+  .live img { transition: none; }
   .live:not(.on) { cursor: pointer; }
   .live.on img { opacity: 0; }
-  /* the button sits on every plate that has not run yet, a quiet chip over the drawer's floor */
-  .live .grow { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 2; background: rgba(22,19,15,.78); border-color: rgba(243,239,236,.28); backdrop-filter: blur(6px); transition: background .2s, border-color .2s; }
-  .live:hover .grow, .live .grow:focus-visible { background: var(--ink); border-color: rgba(243,239,236,.6); }
-  .live .grow .play { flex: none; width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent currentColor; }
+  /* Run the model: a specimen label laid on the drawer's floor, in the label cards' own stock. While
+     the model computes it becomes the plate's clock, with the time left and a hairline of progress. */
+  .live .grow { all: unset; box-sizing: border-box; position: absolute; left: 50%; bottom: 6.5%; z-index: 2; max-width: calc(100% - 28px); transform: translateX(-50%); display: inline-flex; align-items: center; gap: 11px; padding: 10px 17px 11px 15px; cursor: pointer; background: #eee6d3; color: #2a2118; font: italic 400 17px/1 var(--serif); border-radius: 1px; box-shadow: 0 0 0 1px rgba(60,40,20,.16), 0 1px 1px rgba(0,0,0,.28), 0 10px 18px -10px rgba(0,0,0,.65); transition: transform .25s cubic-bezier(.2,.7,.2,1), box-shadow .25s; overflow: hidden; }
+  .live:not(.busy):hover .grow, .live .grow:focus-visible { transform: translateX(-50%) translateY(-2px); box-shadow: 0 0 0 1px rgba(60,40,20,.26), 0 2px 3px rgba(0,0,0,.25), 0 16px 26px -10px rgba(0,0,0,.7); }
+  .live .grow:focus-visible { outline: 2px solid var(--red); outline-offset: 3px; }
+  .live .grow .play { flex: none; width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent var(--red); }
   .live.busy .grow .play { display: none; }
   .live.on .grow { display: none; }
-  /* while the model computes, the button becomes its clock */
-  .live.busy .grow { cursor: progress; background: rgba(22,19,15,.82); border-color: rgba(243,239,236,.22); font: 12.5px var(--mono); letter-spacing: 0; gap: 10px; white-space: nowrap; }
-  .live .grow { max-width: calc(100% - 28px); }
+  .live.busy .grow { cursor: progress; font: 400 12.5px/1 var(--mono); color: #3b3024; white-space: nowrap; padding: 11px 16px 12px; }
   .live .grow .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .live .grow .clk { flex: none; font-variant-numeric: tabular-nums; }
-  .live .grow .dot { display: none; }
+  .live .grow .clk { flex: none; font-variant-numeric: tabular-nums; color: #6f6252; }
+  .live .grow .dot { display: none; width: 6px; height: 6px; }
   .live.busy .grow .dot { display: block; }
+  .live .grow .bar { position: absolute; left: 0; bottom: 0; width: 100%; height: 2px; background: var(--red); transform-origin: 0 50%; transform: scaleX(var(--p, 0)); opacity: 0; transition: transform .12s linear; }
+  .live.busy .grow .bar { opacity: .8; }
   /* the hero computes on its own, so its cue shows only while it computes */
   .live .cue { display: none; pointer-events: none; }
   .live.busy .cue { display: inline-flex; }
   .live-note.wait { visibility: hidden; }
 
+  /* the bar: once past the hero, the ten plates stay one click away and the current one is named */
+  .bar { position: fixed; top: 0; left: 0; right: 0; z-index: 10; background: rgba(243,239,236,.88); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-bottom: 1px solid var(--hair); transform: translateY(-101%); transition: transform .35s cubic-bezier(.2,.7,.2,1); }
+  .bar.on { transform: none; }
+  .bar .wrap { display: flex; align-items: center; gap: 24px; height: 52px; }
+  .bar a { text-decoration: none; }
+  .bar .home { font: 400 18px var(--serif); white-space: nowrap; }
+  .bar ol { list-style: none; display: flex; align-items: center; gap: 2px; margin: 0 auto; padding: 0; }
+  .bar ol a { display: flex; align-items: baseline; gap: 7px; padding: 6px 9px; font: 13px var(--sans); color: var(--ink-3); white-space: nowrap; border-radius: 2px; }
+  .bar ol a:hover { color: var(--ink); }
+  .bar ol b { font: 600 11px var(--sans); letter-spacing: .08em; font-variant-numeric: tabular-nums; }
+  .bar ol .nm { display: none; font: 400 15px var(--serif); color: var(--ink); }
+  .bar ol a[aria-current] b { color: var(--red); }
+  .bar ol a[aria-current] .nm { display: inline; }
+  .bar .side { font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+
   /* contents: the ten plates as a table of contents */
-  .contents { padding: 40px 0 24px; }
-  .contents ol { list-style: none; margin: 22px 0 0; padding: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 14px; }
+  .contents { padding: 0 0 24px; }
+  .contents .head { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; padding-top: 16px; border-top: 1px solid var(--hair); }
+  .contents .head p { margin: 0; font-size: 14px; color: var(--ink-3); }
+  .contents ol { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 14px; }
   .contents a { display: block; text-decoration: none; }
   .contents img { width: 100%; height: auto; aspect-ratio: 4 / 5; display: block; box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 10px 20px -14px rgba(0,0,0,.45); transition: transform .4s cubic-bezier(.2,.7,.2,1); }
   .contents a:hover img { transform: translateY(-4px); }
-  .contents .n { display: block; margin-top: 10px; font: 600 11px var(--sans); letter-spacing: .12em; color: var(--ink-3); }
+  .contents .n { display: block; margin-top: 9px; font: 600 11px var(--sans); letter-spacing: .12em; color: var(--ink-3); }
   .contents .nm { display: block; font: 400 15px/1.25 var(--serif); }
 
   /* the spreads: the paper on the verso, the plate on the recto */
-  .spread { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 88px; padding: 120px 0; align-items: center; }
+  .spread { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 88px; padding: 112px 0; align-items: start; scroll-margin-top: 0; }
+  /* the plate holds still beside its paper while the text and its control scroll */
+  .recto { position: sticky; top: max(72px, calc(50vh - 350px)); }
   .verso { max-width: 560px; }
   .verso .eyebrow { margin-bottom: 26px; }
   .fl { font: 600 11px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
@@ -172,23 +194,32 @@
   @media (prefers-reduced-motion: reduce) { .rise { animation: none; opacity: 1; filter: none; transform: none; } html { scroll-behavior: auto; } }
 
   @media (max-width: 1080px) {
+    .bar ol .nm, .bar ol a[aria-current] .nm { display: none; }
+    .bar ol a { padding: 6px 7px; }
     .hero { grid-template-columns: 1fr; gap: 28px; min-height: 0; padding-top: 28px; }
     .hero .copy { align-self: auto; padding-bottom: 0; }
     .hero-plate { height: auto; width: 100%; max-width: 560px; }
     .hero figcaption { flex-direction: column; gap: 4px; }
     .contents ol { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .spread, .method { grid-template-columns: 1fr; gap: 40px; padding: 72px 0; }
-    .recto { max-width: 520px; }
+    .recto { max-width: 520px; position: static; order: -1; }
     .nums { grid-template-columns: repeat(2, auto); }
   }
   @media (max-width: 560px) {
+    .bar .side { display: none; }
+    .bar .wrap { gap: 10px; }
+    .bar ol a { padding: 6px 4px; }
     .wrap { padding: 0 22px; }
     .verso h2, .method h2 { font-size: 36px; }
     .formula { --fs: 21px !important; }
     .hero figure { order: -1; }
     .hero h1 { line-height: 1.06; }
-    .contents .nm { display: none; }
-    .contents ol { gap: 10px; }
+    /* the plate leaves the title and a row of the other nine in the first screen */
+    .hero-plate { height: min(54svh, calc((100vw - 44px) * 1.25)); width: auto; max-width: 100%; margin: 0 auto; }
+    .hero figcaption { display: none; }
+    .contents .head p { display: none; }
+    .contents ol { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 12px -22px 0; padding: 0 22px 8px; scrollbar-width: none; }
+    .contents li { flex: 0 0 27%; scroll-snap-align: start; }
     .vary .marks { height: 42px; }
     .vary .marks button:nth-child(even) { top: 17px; }
     .vary figcaption { flex-direction: column; align-items: flex-start; }
@@ -197,6 +228,7 @@
 </head>
 <body>
 <div class="ground" aria-hidden="true"></div>
+<nav class="bar" id="bar" aria-label="Plates"><div class="wrap"><a class="home" href="#">Math-Animals</a><ol id="barlist"></ol><a class="side" href="#method">Method</a></div></nav>
 <div class="wrap">
   <header class="hero">
     <div class="copy">
@@ -211,13 +243,13 @@
       </div>
     </div>
     <figure class="rise" style="animation-delay:.1s">
-      <div class="live hero-plate" id="hero-live"><div class="inner"><img src="images/plates/03-dragonfly-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div><div class="btn grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span></div></div>
+      <div class="live hero-plate" id="hero-live"><div class="inner"><img src="images/plates/03-dragonfly-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div><div class="grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span><span class="bar"></span></div></div>
       <figcaption><span>Plate 3. Emperor dragonfly, after Hoffmann et al., <i>PNAS</i> (2018)</span><span class="eq">p ∈ V<sub>s</sub> ⇔ |p − s| ≤ |p − o|</span></figcaption>
     </figure>
   </header>
 
   <nav class="contents" aria-label="Plates">
-    <div class="eyebrow">Contents</div>
+    <div class="head"><div class="eyebrow">Ten plates</div><p>Each plate computes in your browser. Open one to run its model, then change its input.</p></div>
     <ol id="toc"></ol>
   </nav>
 
@@ -259,56 +291,56 @@ const grainTile = () => {
 grainTile();
 const GH = 'https://github.com/r3al1tym/math-animals/blob/main/', HERO = 5.2;
 const P = [
-  { d: '01-honeybee', run: 'Relaxing wax circles into hexagons', nm: 'Honeybee comb', bin: 'Apis mellifera Linnaeus, 1758', tx: 'Hymenoptera',
+  { d: '01-honeybee', ms: 2400, run: 'Relaxing wax circles into hexagons', nm: 'Honeybee comb', bin: 'Apis mellifera Linnaeus, 1758', tx: 'Hymenoptera',
     paper: ['T. C. Hales', 'The honeycomb conjecture', '<i>Discrete &amp; Computational Geometry</i> 25 (2001)'],
     finding: 'Of all the ways to divide a plane into cells of equal area, the regular hexagon uses the least wall.',
     f: 'P<sub>n</sub> = √(4n · tan(π/n))', f2: 'wall per unit cell: triangle 4.559, square 4.000, hexagon 3.722',
     built: 'A band of 5.3 mm circles relaxes into hexagons, as warm wax is proposed to flow (Karihaloo, Zhang and Wang, 2013). Each cell is then ray-cast as a prism of wax under a 0.3 mm coping, on a base of three rhombi.' },
-  { d: '02-sea-urchin', run: 'Laying 20 columns of plates', nm: 'Edible sea urchin', bin: 'Echinus esculentus Linnaeus, 1758', tx: 'Echinoidea',
+  { d: '02-sea-urchin', ms: 3200, run: 'Laying 20 columns of plates', nm: 'Edible sea urchin', bin: 'Echinus esculentus Linnaeus, 1758', tx: 'Echinoidea',
     anatomy: 'From the anatomy of the Echinidae test',
     finding: 'The test is twenty columns of plates in ten double areas: five narrow ambulacra, pierced for the tube feet, alternating with five broad interambulacra.',
     f: 'φ<sub>j</sub> = θ − j · 72°', f2: 'five-fold symmetry: one sector, turned four times, j = 0 … 4',
     built: 'One sector of plates is laid by arc length down a superellipse dome 140 mm across and 108 mm tall, then turned four times about the apex.' },
-  { d: '03-dragonfly', run: 'Dividing the wing into 2,611 cells', nm: 'Emperor dragonfly', bin: 'Anax imperator Leach, 1815', tx: 'Odonata',
+  { d: '03-dragonfly', ms: 2300, run: 'Dividing the wing into 2,611 cells', nm: 'Emperor dragonfly', bin: 'Anax imperator Leach, 1815', tx: 'Odonata',
     paper: ['J. Hoffmann, S. Donoughe, K. Li, M. K. Salcedo and C. H. Rycroft', 'A simple developmental model recapitulates complex insect wing venation patterns', '<i>PNAS</i> 115 (2018)'],
     finding: 'Measuring wing cells across 232 species of dragonflies and damselflies, they found that inhibitory centres spaced evenly between the main veins, with the small veins set where those signals are weakest, reproduce the wings.',
     f: 'p ∈ V<sub>s</sub>  ⇔  |p − s| ≤ |p − o|', f2: 'a point belongs to the cell of its nearest centre s, against every other centre o',
     built: 'The wing divides into <b>2,611 cells</b>, each wall midway between two centres. It is the only plate of the ten that passed blind review.' },
-  { d: '04-orb-weaver', run: 'Solving Rayleigh’s growth rate', nm: 'Garden orb-weaver', bin: 'Araneus diadematus Clerck, 1757', tx: 'Araneae',
+  { d: '04-orb-weaver', ms: 2300, run: 'Solving Rayleigh’s growth rate', nm: 'Garden orb-weaver', bin: 'Araneus diadematus Clerck, 1757', tx: 'Araneae',
     paper: ['Lord Rayleigh', 'On the instability of jets', '<i>Proc. London Math. Soc.</i> 10 (1878)'],
     finding: 'A cylinder of liquid is unstable: it breaks into drops, and the fastest-growing disturbance has a wavelength of about nine radii.',
     f: 'σ² ∝ x(1 − x²) I<sub>1</sub>(x) / I<sub>0</sub>(x)', f2: 'growth rate of a disturbance of wavenumber k on a thread of radius r, x = kr; fastest at x = 0.697',
     built: 'The page solves Rayleigh’s growth rate itself and beads the glue every <b>9.01 radii</b>, 144 µm on a 16 µm coat, along an Archimedean spiral with 31 rays (web geometry from Zschokke, 1993 and 2011).' },
-  { d: '05-nautilus', run: 'Laying 35 septa on the spiral', nm: 'Chambered nautilus', bin: 'Nautilus pompilius Linnaeus, 1758', tx: 'Cephalopoda',
+  { d: '05-nautilus', ms: 2600, run: 'Laying 35 septa on the spiral', nm: 'Chambered nautilus', bin: 'Nautilus pompilius Linnaeus, 1758', tx: 'Cephalopoda',
     paper: ['H. Moseley', 'On the geometrical forms of turbinated and discoid shells', '<i>Phil. Trans. R. Soc.</i> 128 (1838)'],
     finding: 'Measured shells widen by the same ratio every whorl, 2.83 to 3.02: the shell is a logarithmic spiral.',
     f: 'r = a e<sup>bθ</sup>', f2: 'b = 0.175, so each whorl widens by W = e<sup>2πb</sup> = 3.00',
     built: 'Thirty-five septa, each the last one scaled and turned 25°. The trial spirals below the shell compare W = 3.00 with the golden spiral’s W = φ⁴ = 6.85; 80 measured shells average <b>2.9</b> (Bartlett, 2018), so the nautilus is not a golden spiral.' },
-  { d: '06-camp-pitar', run: 'Running the reaction along the margin', nm: 'Camp pitar', bin: 'Lioconcha castrensis (Linnaeus, 1758)', tx: 'Bivalvia',
+  { d: '06-camp-pitar', ms: 1900, run: 'Running the reaction along the margin', nm: 'Camp pitar', bin: 'Lioconcha castrensis (Linnaeus, 1758)', tx: 'Bivalvia',
     paper: ['H. Meinhardt', 'The Algorithmic Beauty of Sea Shells', 'Springer (1995)'],
     finding: 'The pigment pattern on a shell is the record of a reaction–diffusion system running along the growing edge, one row for each step of growth.',
     f: 'r = r<sub>0</sub> + (1 − r<sub>0</sub>) (1 − e<sup>−ke</sup>) / (1 − e<sup>−kE</sup>)', f2: 'von Bertalanffy growth: the margin r at age e, less any pauses',
     built: 'The valve grows by accretion on that von Bertalanffy curve, fastest while young, with two growth checks. An activator–inhibitor reaction run along the lengthening mantle edge lays down its rows of <b>brown tents</b>.' },
-  { d: '07-sea-fan', run: 'Growing toward 4,526 attractors', nm: 'Common sea fan', bin: 'Gorgonia ventalina Linnaeus, 1758', tx: 'Octocorallia',
+  { d: '07-sea-fan', ms: 2300, run: 'Growing toward 4,526 attractors', nm: 'Common sea fan', bin: 'Gorgonia ventalina Linnaeus, 1758', tx: 'Octocorallia',
     paper: ['A. Runions, B. Lane and P. Prusinkiewicz', 'Modeling trees with a space colonization algorithm', '<i>Eurographics Workshop on Natural Phenomena</i> (2007)'],
     finding: 'A branching network grows when every tip advances toward the free space near it, and each point of space is used up once a branch reaches it.',
     f: 'v′ = v + D n̂,   n̂ ∝ Σ (s − v) / |s − v|', f2: 'each tip v steps a distance D toward the attractors s nearest it',
     built: '<b>4,526 attractor points</b> spaced 1.9 mm apart fill the fan’s outline. A fusion rule, which is not in Runions et al., joins branches where they meet and closes the mesh.' },
-  { d: '08-cone-shell', run: 'Running 8,521 growth lines of the lip', nm: 'Textile cone', bin: 'Conus textile Linnaeus, 1758', tx: 'Gastropoda',
+  { d: '08-cone-shell', ms: 2900, run: 'Running 8,521 growth lines of the lip', nm: 'Textile cone', bin: 'Conus textile Linnaeus, 1758', tx: 'Gastropoda',
     paper: ['H. Meinhardt and M. Klingler', 'A model for pattern formation on the shells of molluscs', '<i>J. Theor. Biol.</i> 126 (1987)'],
     finding: 'An activator–inhibitor reaction along the shell’s lip, with a hormone that spreads through the whole animal, produces the cone’s cascades of triangles.',
     f: '∂a/∂t = s a² / ((s<sub>b</sub> + b)(1 + s<sub>a</sub>a²)) − r<sub>a</sub> a + D<sub>a</sub> a″', f2: 'the activator a along the lip, held in check by the inhibitor b and a global hormone',
     built: 'The page runs Meinhardt’s own program for <i>Conus textile</i>, one row per growth step, so the shell’s surface is the reaction’s <b>space-time diagram</b>.',
-    vary: { key: 'sb', sym: '<i>s</i><sub>b</sub>', value: 0.1, real: 0.1, min: 0.03, max: 0.6, step: 0.005, w: 260, h: 64,
+    vary: { key: 'sb', sym: '<i>s</i><sub>b</sub>', value: 0.1, real: 0.1, min: 0.03, max: 0.6, step: 0.005, scale: 'log', w: 260, h: 64,
       marks: [[0.05, 'zigzags'], [0.1, 'triangles'], [0.22, 'beads'], [0.3, 'stripes'], [0.6, 'blank']],
-      idle: 'Move <i>s</i><sub>b</sub> to run the model along the lip.',
-      cap: (v, real) => `The lip at <i>s</i><sub>b</sub> = ${v}${real ? ', Meinhardt’s value for <i>C. textile</i>' : ''}. One row per growth line, the newest at the foot.` } },
-  { d: '09-angelfish', run: 'Growing the skin from 3 to 13 stripes', nm: 'Semicircle angelfish', bin: 'Pomacanthus semicirculatus (Cuvier, 1831)', tx: 'Pomacanthidae',
+      idle: 'Move <i>s</i><sub>b</sub> to run the model along the lip.', noun: 'shell',
+      cap: 'The lip at <i>s</i><sub>b</sub> = {v}. One row per growth line, the newest at the foot.', realNote: ', Meinhardt’s value for <i>C. textile</i>' } },
+  { d: '09-angelfish', ms: 4200, run: 'Growing the skin from 3 to 13 stripes', nm: 'Semicircle angelfish', bin: 'Pomacanthus semicirculatus (Cuvier, 1831)', tx: 'Pomacanthidae',
     paper: ['S. Kondo and R. Asai', 'A reaction–diffusion wave on the skin of the marine angelfish <i>Pomacanthus</i>', '<i>Nature</i> 376 (1995)'],
     finding: 'As the juvenile grows, new stripes open between the old ones, as a Turing pattern on a growing skin predicts.',
     f: '∂u/∂t = f(u, v) + D<sub>u</sub> ∇²u', f2: 'two substances, u and v, react and diffuse on a skin that grows; with ∂v/∂t = g(u, v) + D<sub>v</sub> ∇²v',
     built: 'The page solves the model once, in the fish’s own outline, and shows the same fish at 20, 40, 60 and 80 mm as the stripe count goes from <b>3 to 13</b>.' },
-  { d: '10-tortoise', run: 'Growing nine rings on each scute', nm: 'Radiated tortoise', bin: 'Astrochelys radiata (Shaw, 1802)', tx: 'Testudines',
+  { d: '10-tortoise', ms: 4300, run: 'Growing nine rings on each scute', nm: 'Radiated tortoise', bin: 'Astrochelys radiata (Shaw, 1802)', tx: 'Testudines',
     anatomy: 'From how a scute grows',
     finding: 'Keratin is added only at a scute’s edges and never stretches, so every season’s outline stays on the shell as a ring around the hatchling’s own scute.',
     f: 'r<sub>k</sub> = r<sub>0</sub> (1 + 0.352 k)', f2: 'ring k is the areola r<sub>0</sub> scaled about its growth centre',
@@ -336,10 +368,24 @@ $('plates').innerHTML = P.map((p, i) => `
       <div class="links"><a href="${GH + p.d}/NOTES.md">Notes and sources</a><a href="${GH + p.d}/index.html">Source code</a><a href="${p.d}/index.html?play">Page</a></div>
     </div>
     <div class="recto">
-      <div class="live" data-i="${i}"><div class="inner"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt="${p.nm}, rendered in code"><iframe title="${p.nm}, computing live" tabindex="-1"></iframe></div><button class="btn grow"><span class="play" aria-hidden="true"></span><span class="dot"></span><span class="lbl">Run the model</span><span class="clk"></span></button></div>
+      <div class="live" data-i="${i}"><div class="inner"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt="${p.nm}, rendered in code"><iframe title="${p.nm}, computing live" tabindex="-1"></iframe></div><button class="grow"><span class="play" aria-hidden="true"></span><span class="dot"></span><span class="lbl">Run the model</span><span class="clk"></span><span class="bar"></span></button></div>
       <div class="scrub"><button class="again">Replay</button><input type="range" min="0" max="6" step="0.01" value="5.2" aria-label="Time"><span class="tv">5.2 s</span></div>
     </div>
   </article>`).join('');
+
+// the bar: shown once the hero has scrolled away; names the plate in view
+$('barlist').innerHTML = P.map((p, i) => `<li><a href="#${slug(p.d)}" title="${p.nm}"><b>${i + 1}</b><span class="nm">${p.nm}</span></a></li>`).join('');
+{
+  const bar = $('bar'), links = [...bar.querySelectorAll('ol a')];
+  new IntersectionObserver(([e]) => bar.classList.toggle('on', !e.isIntersecting), { rootMargin: '-60px 0px 0px 0px' }).observe(document.querySelector('.hero'));
+  const seen = new Map();
+  const io = new IntersectionObserver(es => {
+    for (const e of es) seen.set(e.target.id, e.intersectionRatio);
+    let best = null, r = 0; for (const [id, q] of seen) if (q > r) { r = q; best = id; }
+    links.forEach(a => a.getAttribute('href') === '#' + best && r > 0 ? a.setAttribute('aria-current', 'true') : a.removeAttribute('aria-current'));
+  }, { threshold: [0, 0.15, 0.3, 0.5, 0.7, 0.9] });
+  document.querySelectorAll('.spread').forEach(el => io.observe(el));
+}
 
 // one live plate at a time: the still, then the page computing and building in place.
 // Each plate runs in its own Worker and draws into a canvas the worker owns, so this page stays
@@ -349,7 +395,7 @@ $('plates').innerHTML = P.map((p, i) => `
 const fit = el => { const k = el.clientWidth / 720; el.querySelector('.inner').style.transform = `scale(${k})`; };
 const lives = [...document.querySelectorAll('.live')];
 addEventListener('resize', () => lives.forEach(fit)); lives.forEach(fit);
-const OFF = typeof Worker === 'function' && typeof OffscreenCanvas === 'function' && 'transferControlToOffscreen' in HTMLCanvasElement.prototype;
+const OFF = typeof Worker === 'function' && typeof OffscreenCanvas === 'function' && typeof createImageBitmap === 'function';
 const BOOT = `"use strict";
 self.window = self;
 let __c = null;
@@ -358,14 +404,14 @@ self.__siteKitStart = (init, seek) => {
   let busy = false, want = null, wantV = null;
   const run = async () => { busy = true;
     while (want !== null || wantV !== null) {
-      if (want !== null) { const t = want; want = null; await seek(t); postMessage({ at: t }); }
+      if (want !== null) { const t = want; want = null; await seek(t); const bmp = await createImageBitmap(__c); postMessage({ at: t, bmp }, [bmp]); }
       else { const v = wantV; wantV = null; const s = self.__vary.draw(v); postMessage({ strip: s, v }, [s.data.buffer]); }
     } busy = false; };
   self.onmessage = e => { if ('seek' in e.data) want = e.data.seek; else wantV = e.data.vary; if (!busy) run(); };
-  (async () => { await init(); await seek(0); const V = self.__vary; postMessage({ ready: true, vary: V ? { ...V, draw: undefined } : null }); })().catch(e => postMessage({ err: String(e && e.stack || e) }));
+  (async () => { await init(); await seek(0); const V = self.__vary, bmp = await createImageBitmap(__c); postMessage({ ready: true, bmp, vary: V ? { ...V, draw: undefined } : null }, [bmp]); })().catch(e => postMessage({ err: String(e && e.stack || e) }));
 };
 self.onmessage = e => {
-  __c = e.data.canvas; self.__query = e.data.query || ''; document.scripts = e.data.texts.map(t => ({ src: '', textContent: t }));
+  __c = new OffscreenCanvas(e.data.w, e.data.h); self.__query = e.data.query || ''; document.scripts = e.data.texts.map(t => ({ src: '', textContent: t }));
   try { e.data.urls.forEach((u, i) => { document.currentScript = document.scripts[i]; importScripts(u); }); }
   catch (err) { postMessage({ err: String(err && err.stack || err) }); }
 };`;
@@ -380,17 +426,19 @@ async function source(dir) {
   const run = texts.slice(); run[last] = texts[last].slice(0, at) + '\n__siteKitStart(' + texts[last].slice(at + 10);
   return SRC[dir] = { texts, urls: run.map(t => blob(t)), w: +c.getAttribute('width'), h: +c.getAttribute('height') };
 }
-// a plate: { ready, seek(t), stop() }; seek resolves once frame t (or a later one asked for) is drawn
+// a plate: { ready, seek(t), stop() }; seek resolves once frame t (or a later one asked for) is shown.
+// The worker draws into its own OffscreenCanvas and sends each finished frame as an ImageBitmap, so
+// this page decides the moment a frame appears and the canvas never shows an empty one.
 async function workerPlate(dir, el, query = '') {
   const s = await source(dir), cv = document.createElement('canvas');
   cv.width = s.w; cv.height = s.h; el.querySelector('.inner').append(cv);
+  const show = cv.getContext('bitmaprenderer'), put = m => { if (m.bmp) show.transferFromImageBitmap(m.bmp); };
   const w = new Worker(BOOT_URL), waits = [], strips = [], h = {};
   const ready = new Promise((ok, no) => {
-    w.onmessage = e => { const m = e.data; if (m.ready) { h.control = m.vary; ok(); } else if (m.err) no(new Error(m.err)); else if ('at' in m) waits.splice(0).forEach(f => f()); else if (m.strip) strips.splice(0).forEach(f => f(m.strip)); };
+    w.onmessage = e => { const m = e.data; if (m.ready) { put(m); h.control = m.vary; ok(); } else if (m.err) no(new Error(m.err)); else if ('at' in m) { put(m); waits.splice(0).forEach(f => f()); } else if (m.strip) strips.splice(0).forEach(f => f(m.strip)); };
     w.onerror = e => { e.preventDefault(); no(new Error(e.message || 'worker failed')); };
   });
-  const off = cv.transferControlToOffscreen();
-  w.postMessage({ canvas: off, texts: s.texts, urls: s.urls, query }, [off]);
+  w.postMessage({ w: s.w, h: s.h, texts: s.texts, urls: s.urls, query });
   return Object.assign(h, { ready, seek: t => new Promise(f => { waits.push(f); w.postMessage({ seek: t }); }),
     vary: v => new Promise(f => { strips.push(f); w.postMessage({ vary: v }); }),
     stop: () => { w.terminate(); cv.remove(); waits.splice(0).forEach(f => f()); strips.splice(0).forEach(f => f(null)); } });
@@ -418,19 +466,29 @@ function stop(L, keep = false) {
   const lbl = L.el.querySelector('.lbl'); if (lbl) { lbl.textContent = 'Run the model'; L.el.querySelector('.clk').textContent = ''; }
   L.onStop && L.onStop();
 }
-// grow(el, dir, o): compute the plate (o.onTick(s) every 0.1 s meanwhile), then play its build
+// The clock counts down from an estimate: each plate's compute time on a reference laptop (P[i].ms)
+// times this browser's own speed, learned from every plate it computes (K, kept across visits).
+let K = +localStorage.getItem('ma-speed') || 1;
+const left = s => s >= 1 ? `about ${Math.ceil(s)} s left` : s > 0 ? 'under a second left' : 'almost done';
+// grow(el, dir, o): compute the plate, its chip counting down meanwhile (o.onTick(text) every 0.1 s),
+// then play its build from the empty drawer, which stays under the canvas so nothing flashes
 function grow(el, dir, o = {}) {
   if (active) stop(active, active.el === el);
   const L = active = { el, dir, scrub: o.scrub || null, raf: 0, gen: 0, h: null, dead: false, clock: 0, onStop: o.onStop }, t0 = performance.now();
-  const img = el.querySelector('img'), d = dir; img.src = `images/plates/${d}-t0.jpg`;
-  el.classList.add('busy'); o.onTick && o.onTick(0);
-  L.clock = setInterval(() => o.onTick && o.onTick((performance.now() - t0) / 1000), 100);
+  const img = el.querySelector('img'), chip = el.querySelector('.grow'), est = (o.ms || 3000) * K / 1000;
+  img.src = `images/plates/${dir}-t0.jpg`;
+  const tick = () => { const s = (performance.now() - t0) / 1000, f = s / est;
+    chip && chip.style.setProperty('--p', f < 1 ? f * 0.96 : 0.96 + 0.03 * (1 - 1 / f)); o.onTick && o.onTick(left(est - s)); };
+  el.classList.add('busy'); tick(); L.clock = setInterval(tick, 100);
   open(dir, el, o.query).then(h => {
     if (L.dead) return h.stop();
-    L.h = h; clearInterval(L.clock); el.classList.remove('busy'); el.classList.add('on'); img.src = `images/plates/${d}.jpg`;
-    o.onLive && o.onLive((performance.now() - t0) / 1000);
+    const took = (performance.now() - t0) / 1000;
+    if (o.ms) { K = Math.min(8, Math.max(0.2, 0.6 * K + 0.4 * took * 1000 / o.ms)); try { localStorage.setItem('ma-speed', K.toFixed(3)); } catch (e) {} }
+    L.h = h; clearInterval(L.clock); chip && chip.style.setProperty('--p', 1);
+    el.classList.remove('busy'); el.classList.add('on');
+    o.onLive && o.onLive(took);
     if (L.scrub) { L.scrub.classList.add('on'); bindScrub(L); }
-    replay(L, () => o.onDone && o.onDone(L));
+    replay(L, () => { img.src = `images/plates/${dir}.jpg`; o.onDone && o.onDone(L); });
   });
   return L;
 }
@@ -451,19 +509,20 @@ function bindScrub(L) {
 // parameter set into the formula's own line, a printed scale marked at the plate's trial values,
 // and the model's output at that value as a small figure. Moving it runs the plate's model if it
 // has not run; the figure redraws as you move; Grow sends the whole plate round again at it.
-function fmtV(v) { return v.toFixed(Math.round(v * 1000) % 10 ? 3 : 2); }
+// a value to the step's precision, a trailing zero past the hundredths dropped (0.220 reads 0.22)
+function fmtV(v, step) { const d = Math.max(0, Math.ceil(-Math.log10(step) - 1e-9)); let t = v.toFixed(d); if (d > 2 && t.endsWith('0')) t = t.slice(0, -1); return t; }
 function varyHTML(p) {
   const c = p.vary;
   return `<div class="vary wait">
-        <div class="vrow"><label class="eq" for="v-${slug(p.d)}">${c.sym} = <output class="val">${fmtV(c.value)}</output></label>
-          <div class="track"><input id="v-${slug(p.d)}" type="range" min="0" max="1" step="0.001"><div class="marks">${c.marks.map(([v, w]) => `<button type="button" data-v="${v}" tabindex="-1"${v === c.value ? ' class="real"' : ''}>${w}</button>`).join('')}</div></div></div>
+        <div class="vrow"><label class="eq" for="v-${slug(p.d)}">${c.sym} = <output class="val">${fmtV(c.value, c.step)}</output></label>
+          <div class="track"><input id="v-${slug(p.d)}" type="range" min="0" max="1" step="0.001"><div class="marks">${c.marks.map(([v, w]) => `<button type="button" data-v="${v}" tabindex="-1"${v === c.real ? ' class="real"' : ''}>${w}</button>`).join('')}</div></div></div>
         <figure><canvas width="${c.w}" height="${c.h}"></canvas><figcaption><span class="cap">${c.idle}</span><button type="button" class="btn ghost apply"></button></figcaption></figure>
       </div>`;
 }
 function bindVary(i, el, box, run) {
   const c = P[i].vary, ap = box.querySelector('.apply'), inp = box.querySelector('input'), cv = box.querySelector('canvas'), out = box.querySelector('.val'), cap = box.querySelector('.cap');
-  const lo = Math.log(c.min), hi = Math.log(c.max);
-  const toV = u => Math.round(Math.exp(lo + (hi - lo) * u) / c.step) * c.step, toU = v => (Math.log(v) - lo) / (hi - lo);
+  const log = c.scale === 'log', f = log ? Math.log : x => x, lo = f(c.min), hi = f(c.max), fmt = v => fmtV(v, c.step);
+  const toV = u => { const x = lo + (hi - lo) * u; return Math.min(c.max, Math.max(c.min, Math.round((log ? Math.exp(x) : x) / c.step) * c.step)); }, toU = v => (f(v) - lo) / (hi - lo);
   box.querySelectorAll('.marks button').forEach(b => { b.style.left = (toU(+b.dataset.v) * 100).toFixed(2) + '%'; b.onclick = () => set(+b.dataset.v); });
   let grown = c.value, cur = c.value, busy = false, want = null;
   const live = () => active && active.el === el && active.h && active.h.vary ? active.h : null;
@@ -472,20 +531,20 @@ function bindVary(i, el, box, run) {
     while (want !== null && live()) {
       const v = want; want = null; const s = await live().vary(v); if (!s) break;
       cv.getContext('2d').putImageData(new ImageData(s.data, s.w, s.h), 0, 0);
-      cap.innerHTML = c.cap(fmtV(v), Math.abs(v - c.real) < 1e-9); box.classList.remove('wait');
+      cap.innerHTML = c.cap.replace('{v}', fmt(v) + (Math.abs(v - c.real) < c.step / 2 ? c.realNote : '')); box.classList.remove('wait');
     }
     busy = false;
   };
   const sync = () => { const off = Math.abs(cur - grown) > 1e-9 && !box.classList.contains('held') && !el.classList.contains('busy');
-    ap.classList.toggle('show', off); ap.disabled = !off; if (off) ap.innerHTML = `<span>Grow the shell at ${c.sym} = ${fmtV(cur)}</span>`; };
+    ap.classList.toggle('show', off); ap.disabled = !off; if (off) ap.innerHTML = `<span>Grow the ${c.noun || 'plate'} at ${c.sym} = ${fmt(cur)}</span>`; };
   const set = v => {
-    cur = v; inp.value = toU(v); out.textContent = fmtV(v); want = v;
+    cur = v; inp.value = toU(v); out.textContent = fmt(v); want = v;
     if (!el.classList.contains('on') && !el.classList.contains('busy')) run('');
     sync();
     if (!busy) draw();
   };
   inp.oninput = () => set(toV(+inp.value));
-  ap.onclick = () => { grown = cur; box.classList.add('held'); sync(); run('?' + new URLSearchParams({ [c.key]: +cur.toFixed(3) })); };
+  ap.onclick = () => { grown = cur; box.classList.add('held'); sync(); run(Math.abs(cur - c.value) < c.step / 2 ? '' : '?' + new URLSearchParams({ [c.key]: fmt(cur) })); };
   inp.value = toU(c.value); sync();
   // the plate calls these as it computes and comes live
   return { live: () => { box.classList.remove('held'); sync(); want = cur; if (!busy) draw(); }, stop: () => { if (!box.classList.contains('held')) { grown = c.value; sync(); } } };
@@ -493,7 +552,7 @@ function bindVary(i, el, box, run) {
 document.querySelectorAll('.recto .live').forEach(el => {
   const i = +el.dataset.i, art = el.closest('.spread'), sc = art.querySelector('.scrub'), va = art.querySelector('.vary'), lbl = el.querySelector('.lbl'), clk = el.querySelector('.clk');
   const run = query => grow(el, P[i].d, { scrub: sc, query, onLive: () => V && V.live(), onStop: () => V && V.stop(),
-    onTick: s => { lbl.textContent = P[i].run; clk.textContent = `· ${s.toFixed(1)} s`; } });
+    ms: P[i].ms * (query ? 1.2 : 1), onTick: t => { lbl.textContent = P[i].run; clk.textContent = `· ${t}`; } });
   const V = va ? bindVary(i, el, va, run) : null;
   el.addEventListener('click', () => { if (!el.classList.contains('on') && !el.classList.contains('busy')) run(''); });
 });
@@ -507,13 +566,14 @@ const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 if (still) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; said('Plate 3, final frame.'); rb.disabled = false; }
 let heroS = 0;
 const heroGo = () => grow(hero, '03-dragonfly', {
-  onTick: s => { cueL.textContent = 'Computing 2,611 wing cells'; cueC.textContent = `· ${s.toFixed(1)} s`; },
-  onLive: s => { heroS = s; hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; },
+  ms: P[2].ms, onTick: t => { cueL.textContent = 'Computing 2,611 wing cells'; cueC.textContent = `· ${t}`; },
+  onLive: s => { heroS = s; },
   onStop: () => { if (rb.disabled) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; said('Plate 3, final frame.'); rb.disabled = false; rb.onclick = heroGo; } },
   onDone: L => { said(`Plate 3 computed in this browser in ${heroS.toFixed(1)} s.`); rb.disabled = false;
     rb.onclick = () => { if (active !== L) return heroGo(); rb.disabled = true; dot.classList.remove('done'); replay(L, () => { rb.disabled = false; dot.classList.add('done'); }); }; },
 });
-if (!still) setTimeout(heroGo, 900); else rb.onclick = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly-t0.jpg'; rb.disabled = true; heroGo(); };
+// it starts after the copy has risen, unless a plate is already running or the hero has scrolled away
+if (!still) setTimeout(() => { if (!active && hero.getBoundingClientRect().bottom > 0) heroGo(); else said('Plate 3, final frame.'), hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg', rb.disabled = false, rb.onclick = heroGo; }, 900); else rb.onclick = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly-t0.jpg'; rb.disabled = true; heroGo(); };
 
 // a plate named in the address bar grows when you arrive at it
 const h = location.hash.slice(1), hi = P.findIndex(p => slug(p.d) === h);
