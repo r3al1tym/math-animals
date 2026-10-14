@@ -967,15 +967,14 @@ const perimUnit = n => Math.sqrt(4 * n * Math.tan(Math.PI / n));
 // pointy-top hexagons in horizontal rows. (u, v) are the lattice's own axes in px; the fragment lies
 // as it hung, so +v points down the card and the comb's top (-v, where the bees began) is at the top.
 // Cell (i, j) sits at u = (i + j/2) F, v = j ROW.
-const F = 5.3 * MM, S3 = Math.sqrt(3), RC = F / S3, ROW = F * S3 / 2;
+const F6 = 5.3 * MM, S3 = Math.sqrt(3), RC6 = F6 / S3, ROW6 = F6 * S3 / 2, CELL_A = S3 / 2 * F6 * F6; // the worker cell, 24.3 mm²
 const ROT = 0, CR = Math.cos(ROT), SR = Math.sin(ROT);
 const LO = [555, 524]; // the lattice origin: a cell centre at the middle of the comb
 const toL = (x, y) => { const dx = x - LO[0], dy = y - LO[1]; return [dx * CR + dy * SR, -dx * SR + dy * CR]; };
 const toW = (u, v) => [LO[0] + u * CR - v * SR, LO[1] + u * SR + v * CR];
-const ctrL = (i, j) => [(i + j / 2) * F, j * ROW];
-const ctrW = (i, j) => toW((i + j / 2) * F, j * ROW);
-function cellOf(u, v) { // nearest centre by cube rounding
-  const j = v / ROW, i = u / F - j / 2, k = -i - j;
+const ctrL6 = (i, j) => [(i + j / 2) * F6, j * ROW6];
+function cellOf6(u, v) { // nearest centre by cube rounding
+  const j = v / ROW6, i = u / F6 - j / 2, k = -i - j;
   let ri = Math.round(i), rj = Math.round(j); const rk = Math.round(k);
   const di = Math.abs(ri - i), dj = Math.abs(rj - j), dk = Math.abs(rk - k);
   if (di > dj && di > dk) ri = -rj - rk; else if (dj > dk) rj = -ri - rk;
@@ -988,6 +987,53 @@ for (let k = 0; k < 6; k++) { NX[k] = Math.cos(k * Math.PI / 3); NY[k] = Math.si
 const MXb = [CX[1], CX[3], CX[5]], MYb = [CY[1], CY[3], CY[5]];
 // a triple junction is shared by three cells; corner c of cell (i, j) is junction JK(i, j, c)
 const JK = (i, j, c) => { const t = [[i, j, 0], [i, j, 1], [i - 1, j, 0], [i, j - 1, 1], [i, j - 1, 0], [i + 1, j - 1, 1]][c]; return (t[0] + 200) * 1000 + (t[1] + 200) * 2 + t[2]; };
+
+// ---------- the comb at another tiling ----------
+// ?angle=90 grows the whole plate as a comb of square cells and ?angle=60 of triangles (the site's
+// Apply button does this through self.__query): the trials' other two tilings, every cell the worker
+// cell's 24.3 mm², the same tilings the trials draw. The angle is the cell's corner: 120° for the bees'
+// hexagons. Everything below reads the lattice through these: n sides; F twice the inradius (the drawn
+// circle); RC the corner radius; each cell's orientation o (triangles point up and down in turn),
+// its wall normals ONX[o], ONY[o], corners OCX[o], OCY[o] and base facets OBX[o], OBY[o]; NBR(i, j, k)
+// the cell across wall k. A Plateau junction of three walls is the hexagon's alone, so at another
+// angle no flow is named. The page lays the bees' own comb with exactly the hexagon's numbers above.
+const N_BEES = 6, ANGLE = { 3: 60, 4: 90, 6: 120 };
+let NS = N_BEES;
+{ const v = Number(new URLSearchParams(self.__query ?? location.search).get('angle')); if (v >= 60 && v <= 120) NS = [3, 4, 6][Math.round((v - 60) / 30)]; }
+let F, RC, ROW, COSN, ctrL, cellOf, oriOf, NBR, jkey, ONX, ONY, OCX, OCY, OBX, OBY, CELL_NAME, COVER;
+function setLattice(n) {
+  NS = n; CELL_NAME = { 3: 'triangles', 4: 'squares', 6: 'hexagons' }[n];
+  if (n === 6) {
+    F = F6; RC = RC6; ROW = ROW6; COSN = S3 / 2; ctrL = ctrL6; cellOf = cellOf6; oriOf = () => 0;
+    NBR = (i, j, k) => [i + NB[k][0], j + NB[k][1]]; jkey = (i, j, k) => JK(i, j, k);
+    ONX = [NX]; ONY = [NY]; OCX = [CX]; OCY = [CY]; OBX = [MXb]; OBY = [MYb];
+    COVER = Math.PI / (2 * S3); // the packing density of circles: 0.9069
+    return;
+  }
+  const ring = (off, ph) => [Array.from({ length: n }, (_, k) => Math.cos(off + (k + ph) * 2 * Math.PI / n)), Array.from({ length: n }, (_, k) => Math.sin(off + (k + ph) * 2 * Math.PI / n))];
+  COSN = Math.cos(Math.PI / n); COVER = Math.PI / (n * Math.tan(Math.PI / n));
+  if (n === 4) { // squares in rows and columns, side s
+    const s = Math.sqrt(CELL_A); F = s; RC = s / Math.SQRT2; ROW = s;
+    ctrL = (i, j) => [i * s, j * s]; cellOf = (u, v) => [Math.round(u / s), Math.round(v / s)]; oriOf = () => 0;
+    const D = [[1, 0], [0, 1], [-1, 0], [0, -1]]; NBR = (i, j, k) => [i + D[k][0], j + D[k][1]];
+    const [nx, ny] = ring(0, 0), [cx, cy] = ring(0, 0.5); ONX = [nx]; ONY = [ny]; OCX = [cx]; OCY = [cy];
+  } else { // triangles in rows of height h, side s, pointing up where i + j is even
+    const s = Math.sqrt(4 * CELL_A / S3), h = s * S3 / 2; F = 2 * h / 3; RC = 2 * h / 3; ROW = h;
+    oriOf = (i, j) => (i + j) & 1;
+    ctrL = (i, j) => [i * s / 2, j * h + (oriOf(i, j) ? -h / 6 : h / 6)];
+    const D = [[[0, 1], [-1, 0], [1, 0]], [[0, -1], [1, 0], [-1, 0]]]; NBR = (i, j, k) => { const d = D[oriOf(i, j)][k]; return [i + d[0], j + d[1]]; };
+    const T = [ring(Math.PI / 2, 0), ring(-Math.PI / 2, 0)], C = [ring(Math.PI / 2, 0.5), ring(-Math.PI / 2, 0.5)];
+    ONX = [T[0][0], T[1][0]]; ONY = [T[0][1], T[1][1]]; OCX = [C[0][0], C[1][0]]; OCY = [C[0][1], C[1][1]];
+    cellOf = (u, v) => { // the row, then which of the triangles about u holds the point
+      const j = Math.round(v / h), i0 = Math.round(u / (s / 2)); let bi = i0, bd = -1e9;
+      for (let i = i0 - 1; i <= i0 + 1; i++) { const [cu, cv] = ctrL(i, j), o = oriOf(i, j); let d = 1e9; for (let k = 0; k < 3; k++) d = Math.min(d, F / 2 - ((u - cu) * ONX[o][k] + (v - cv) * ONY[o][k])); if (d > bd) { bd = d; bi = i; } }
+      return [bi, j];
+    };
+  }
+  OBX = OCX; OBY = OCY; // the base: a facet rising to each corner
+  jkey = (i, j, k) => { const [u, v] = ctrL(i, j), o = oriOf(i, j); return Math.round((u + RC * OCX[o][k]) * 8) + ':' + Math.round((v + RC * OCY[o][k]) * 8); };
+}
+setLattice(NS);
 
 // ---------- the comb fragment ----------
 // A piece cut from the top of a brood frame: straight along the top bar, where the knife went through
@@ -1008,17 +1054,28 @@ function fragSD(u, v) {
 // the knife's line alone: signed px below the top bar's cut
 function cutSD(u, v) { const du = (u - FRAG.u) / FRAG.au, dv = (v - FRAG.v) / FRAG.av; return (dv - FRAG.cut + 0.012 * nzc('frag')(du * 9, 4.4)) * FRAG.av; }
 const inFragment = (u, v) => fragSD(u, v) > -0.42 * F;
-const GOFF = 40, GW = 81, GRID = new Int32Array(GW * GW).fill(-1);
+// The zones as a beekeeper sees them, in arcs from the top bar (-v, the knife's cut) down: sealed honey
+// along the top rim, open honey, an arc of pollen round the brood, and the capped brood in the middle
+// and below. BN is the nest in lattice px, its rings squeezed toward the top bar.
+const BN = (() => { const [u, v] = toL(662, 724); return { u, v, ru: 124, rvT: 128, rvB: 260, pollen: 1, honey: 1.42, sealed: 3.1, rim: 62 }; })();
+const T_EMPTY = 0, T_HONEY = 1, T_CAPH = 2, T_POLLEN = 3, T_BROOD = 4, T_LARVA = 5;
+const POLLEN = ['#e8c23e', '#ddb036', '#d89a2e', '#c98a34', '#b07436', '#e4b84a', '#a86c34', '#d0a43c', '#c4782c'].map(hex); // yellow, ochre, orange, brown
+const GOFF = 40, GW = 81, GRID = new Int32Array(GW * GW);
 const gridAt = (i, j) => { const a = i + GOFF, b = j + GOFF; return a < 0 || b < 0 || a >= GW || b >= GW ? -1 : GRID[b * GW + a]; };
-const CELLS = [];
+// The comb's layout, laid once for its n at load; a worker handed another n lays it again (relayComb)
+let CELLS, NC, CU, CV, ORI, CNB, CINT, V_TOP, V_BOT, X_L, X_R, LEFT_W, SL, LMAXP, LMAX, RMAX, DMAX, ROWX;
+let KNIFE, TEAR, TNX, TNY, TC, TPH, MENC, HK, SJ, TLX, TLY, GS, HCOL, DSH, CT, HD, WET, PCOL, WAXF, ZF, EDGE, LAR;
+const LAY = [], lay = f => { LAY.push(f); f(); };
+lay(() => {
+GRID.fill(-1); CELLS = [];
 for (let j = -30; j <= 30; j++) for (let i = -40; i <= 40; i++) {
   const [u, v] = ctrL(i, j); if (!inFragment(u, v)) continue;
   GRID[(j + GOFF) * GW + i + GOFF] = CELLS.length; CELLS.push({ i, j, u, v });
 }
-const NC = CELLS.length, CU = new Float32Array(NC), CV = new Float32Array(NC);
+NC = CELLS.length; CU = new Float32Array(NC); CV = new Float32Array(NC); ORI = new Uint8Array(NC); CELLS.forEach((c, ci) => { ORI[ci] = oriOf(c.i, c.j); });
 // per cell: which walls face another comb cell, which corners are junctions inside the comb
-const CNB = new Uint8Array(NC * 6), CINT = new Uint8Array(NC * 6);
-const V_TOP = Math.min(...CELLS.map(c => c.v)), V_BOT = Math.max(...CELLS.map(c => c.v));
+CNB = new Uint8Array(NC * 6); CINT = new Uint8Array(NC * 6);
+V_TOP = Math.min(...CELLS.map(c => c.v)); V_BOT = Math.max(...CELLS.map(c => c.v));
 // The comb's left third is its growing margin, laid over the curator's drawing. Across it the page
 // shows the build in space: the first columns are the drawn circles alone, then the bees' first round
 // cups stand on them, then cells whose corners have filled to the drawn hexagons, then cells drawn out
@@ -1026,25 +1083,19 @@ const V_TOP = Math.min(...CELLS.map(c => c.v)), V_BOT = Math.max(...CELLS.map(c 
 // far the drawn outline has gone from circle to hexagon (over three columns, before any wax), and
 // LMAX, RMAX, DMAX how far each wax cell's corners fill, its cup rises and it is drawn out: the cups
 // stand round on the drawn hexagons and straighten onto them.
-const X_L = Math.min(...CELLS.map(c => toW(c.u, c.v)[0])), X_R = Math.max(...CELLS.map(c => toW(c.u, c.v)[0])), LEFT_W = 0.42 * (X_R - X_L);
-const SL = new Float32Array(NC), LMAXP = new Float32Array(NC), LMAX = new Float32Array(NC), RMAX = new Float32Array(NC), DMAX = new Float32Array(NC);
-const ROWX = {}; CELLS.forEach(c => { const x = toW(c.u, c.v)[0]; ROWX[c.j] = Math.min(ROWX[c.j] ?? 1e9, x); }); // each row's own left end, so the margin follows the comb's edge
+X_L = Math.min(...CELLS.map(c => toW(c.u, c.v)[0])); X_R = Math.max(...CELLS.map(c => toW(c.u, c.v)[0])); LEFT_W = 0.42 * (X_R - X_L);
+SL = new Float32Array(NC); LMAXP = new Float32Array(NC); LMAX = new Float32Array(NC); RMAX = new Float32Array(NC); DMAX = new Float32Array(NC);
+ROWX = {}; CELLS.forEach(c => { const x = toW(c.u, c.v)[0]; ROWX[c.j] = Math.min(ROWX[c.j] ?? 1e9, x); }); // each row's own left end, so the margin follows the comb's edge
 CELLS.forEach((c, ci) => { const s = (toW(c.u, c.v)[0] - lerp(X_L, ROWX[c.j], 0.75)) / LEFT_W + 0.17 * nzc('margin')(c.v * 0.011, 2.3) + 0.12 * (rngFor('sl' + ci)() - 0.5); SL[ci] = s; /* the front is ragged, cell by cell */ LMAXP[ci] = smooth(0.13, 0.36, s); LMAX[ci] = smooth(0.46, 0.64, s); RMAX[ci] = smooth(0.4, 0.48, s); DMAX[ci] = smooth(0.5, 0.76, s); });
-// The zones as a beekeeper sees them, in arcs from the top bar (-v, the knife's cut) down: sealed honey
-// along the top rim, open honey, an arc of pollen round the brood, and the capped brood in the middle
-// and below. BN is the nest in lattice px, its rings squeezed toward the top bar.
-const BN = (() => { const [u, v] = toL(662, 724); return { u, v, ru: 124, rvT: 128, rvB: 260, pollen: 1, honey: 1.42, sealed: 3.1, rim: 62 }; })();
-const T_EMPTY = 0, T_HONEY = 1, T_CAPH = 2, T_POLLEN = 3, T_BROOD = 4, T_LARVA = 5;
-const POLLEN = ['#e8c23e', '#ddb036', '#d89a2e', '#c98a34', '#b07436', '#e4b84a', '#a86c34', '#d0a43c', '#c4782c'].map(hex); // yellow, ochre, orange, brown
-const KNIFE = new Uint8Array(NC), TEAR = new Uint8Array(NC), TNX = new Float32Array(NC), TNY = new Float32Array(NC), TC = new Float32Array(NC), TPH = new Float32Array(NC);
-const MENC = new Float32Array(NC), HK = new Float32Array(NC);
-const SJ = new Float32Array(NC), TLX = new Float32Array(NC), TLY = new Float32Array(NC), GS = new Float32Array(NC);
-const HCOL = [], DSH = new Float32Array(NC), CT = new Uint8Array(NC), HD = new Float32Array(NC), WET = new Float32Array(NC), PCOL = [], WAXF = [], ZF = new Float32Array(NC), EDGE = new Uint8Array(NC), LAR = new Float32Array(NC);
+KNIFE = new Uint8Array(NC); TEAR = new Uint8Array(NC); TNX = new Float32Array(NC); TNY = new Float32Array(NC); TC = new Float32Array(NC); TPH = new Float32Array(NC);
+MENC = new Float32Array(NC); HK = new Float32Array(NC);
+SJ = new Float32Array(NC); TLX = new Float32Array(NC); TLY = new Float32Array(NC); GS = new Float32Array(NC);
+HCOL = []; DSH = new Float32Array(NC); CT = new Uint8Array(NC); HD = new Float32Array(NC); WET = new Float32Array(NC); PCOL = []; WAXF = []; ZF = new Float32Array(NC); EDGE = new Uint8Array(NC); LAR = new Float32Array(NC);
 CELLS.forEach((c, ci) => {
   CU[ci] = c.u; CV[ci] = c.v;
   let edge = 0;
-  for (let k = 0; k < 6; k++) { const n = gridAt(c.i + NB[k][0], c.j + NB[k][1]) >= 0; CNB[ci * 6 + k] = n ? 1 : 0; if (!n) edge = 1; }
-  for (let k = 0; k < 6; k++) { const k1 = (k + 1) % 6; CINT[ci * 6 + k] = CNB[ci * 6 + k] && CNB[ci * 6 + k1] ? 1 : 0; }
+  for (let k = 0; k < NS; k++) { const [a, b] = NBR(c.i, c.j, k), n = gridAt(a, b) >= 0; CNB[ci * 6 + k] = n ? 1 : 0; if (!n) edge = 1; }
+  for (let k = 0; k < NS; k++) { const k1 = (k + 1) % NS; CINT[ci * 6 + k] = CNB[ci * 6 + k] && CNB[ci * 6 + k1] ? 1 : 0; }
   EDGE[ci] = edge;
   // the zones, each boundary decided cell by cell so the fronts are ragged as on a real frame
   const r = rngFor('cell:' + c.i + ':' + c.j), n = nzc('zones');
@@ -1060,7 +1111,7 @@ CELLS.forEach((c, ci) => {
   // the knife went through the top row of cells, and the torn edge broke some cells in half: both stand open and empty
   KNIFE[ci] = cutSD(c.u, c.v) < RC ? 1 : 0;
   if (edge && !KNIFE[ci] && r() < 0.55) {
-    let nx = 0, ny = 0; for (let k = 0; k < 6; k++) if (!CNB[ci * 6 + k]) { nx += NX[k]; ny += NY[k]; }
+    let nx = 0, ny = 0; for (let k = 0; k < NS; k++) if (!CNB[ci * 6 + k]) { nx += ONX[ORI[ci]][k]; ny += ONY[ORI[ci]][k]; }
     const a = Math.atan2(ny, nx) + (r() - 0.5) * 1.1; TEAR[ci] = 1; TNX[ci] = Math.cos(a); TNY[ci] = Math.sin(a); TC[ci] = 0.47 * F * (-0.45 + 0.85 * r()); TPH[ci] = r() * 6.28;
   }
   if (KNIFE[ci] || TEAR[ci] || (edge && r() < 0.3)) t = T_EMPTY;
@@ -1086,6 +1137,7 @@ CELLS.forEach((c, ci) => {
   const age = clamp(zf + 0.08 * (r() - 0.5));
   WAXF[ci] = mix(mix(hex('#e8c879'), hex('#dcb664'), r()), mix(hex('#b98a4c'), hex('#a8783e'), r()), age);
 });
+});
 
 // ---------- the cell, in depth ----------
 // Each cell is a prism of wax: its walls 0.07 mm thick under a thickened rim (the coping, 0.3 mm), its
@@ -1093,40 +1145,44 @@ CELLS.forEach((c, ci) => {
 // shallow corners, as on a rhombic dodecahedron, so the bases of the far side fit against it. The
 // lumen is a hexagon of inradius AL with each corner filleted by its own radius rho: rho = AL is a
 // circle, a small rho the finished cell. Each pixel is ray-cast down its cell from a camera 400 mm up.
-const WALL = 0.3 * MM, AL = F / 2 - WALL / 2, RHO_F = 0.3 * MM, COS30 = S3 / 2, TILT = Math.tan(13 * Math.PI / 180);
-const Z_FULL = 25 * MM, Z_APEX = 12.3 * MM, CAP_DEPTH = RC / Math.SQRT2, CAM = 400 * MM, VC = [540, 675];
+const WALL = 0.3 * MM, RHO_F = 0.3 * MM, TILT = Math.tan(13 * Math.PI / 180);
+const Z_FULL = 25 * MM, Z_APEX = 12.3 * MM, CAM = 400 * MM, VC = [540, 675];
+let AL, CAP_DEPTH; lay(() => { AL = F / 2 - WALL / 2; CAP_DEPTH = RC / Math.SQRT2; });
 const SHL = [SH.x * CR + SH.y * SR, -SH.x * SR + SH.y * CR], SINE = 1 / Math.hypot(1, K), COSE = K / Math.hypot(1, K);
 const LH0 = -SHL[0] * COSE, LH1 = -SHL[1] * COSE; // the window's direction, horizontal part, lattice axes
 const LAMX = -K * SHL[0], LAMY = -K * SHL[1] + TILT; // a light ray in a cell's sheared frame, per px of rise
 const LAMIX = LAMX * 0.52, LAMIY = -K * SHL[1] * 0.52 + TILT; // the same ray refracted into honey (n = 1.49)
 const IS = 1, IA = 0.62, NORM = 1 / (SINE * IS + IA);
 // per-cell state for the frame being drawn
-const ALC = new Float32Array(CELLS.length).fill(AL), RHO = new Float32Array(NC * 6).fill(RHO_F), ZT = new Float32Array(NC).fill(Z_FULL), DA = new Float32Array(NC), KAP = new Float32Array(NC);
-const BA = new Float32Array(NC).fill(1), CA = new Float32Array(NC).fill(1), CP = new Float32Array(NC).fill(1), WX = new Float32Array(NC).fill(1);
+let ALC, RHO, ZT, DA, KAP, BA, CA, CP, WX;
+lay(() => {
+  ALC = new Float32Array(CELLS.length).fill(AL); RHO = new Float32Array(NC * 6).fill(RHO_F); ZT = new Float32Array(NC).fill(Z_FULL); DA = new Float32Array(NC); KAP = new Float32Array(NC);
+  BA = new Float32Array(NC).fill(1); CA = new Float32Array(NC).fill(1); CP = new Float32Array(NC).fill(1); WX = new Float32Array(NC).fill(1);
+});
 const WAX0 = hex('#f2e4b6'); // new wax, pale and only a little yellow
 let GX = 0, GY = 0, WG = -1, BI = 0;
 // signed distance into the lumen (negative in the wax); (GX, GY) its gradient, the wall's inward normal.
 // ALC is each cell's lumen inradius: the round cells are laid thick-walled, and the walls thin as they flow
 function lumenD(ci, qx, qy) {
-  let best = 1e9, kb = 0; const al = ALC[ci];
-  for (let k = 0; k < 6; k++) { const d = al - (qx * NX[k] + qy * NY[k]); if (d < best) { best = d; kb = k; } }
+  let best = 1e9, kb = 0; const al = ALC[ci], or = ORI[ci], NX = ONX[or], NY = ONY[or], CX = OCX[or], CY = OCY[or];
+  for (let k = 0; k < NS; k++) { const d = al - (qx * NX[k] + qy * NY[k]); if (d < best) { best = d; kb = k; } }
   GX = -NX[kb]; GY = -NY[kb]; WG = -1;
   const o = ci * 6;
   for (let s = 0; s < 2; s++) {
-    const c = s ? kb : (kb + 5) % 6, c1 = (c + 1) % 6, rho = Math.min(RHO[o + c], al), f = (al - rho) / COS30, rx = qx - f * CX[c], ry = qy - f * CY[c];
+    const c = s ? kb : (kb + NS - 1) % NS, c1 = (c + 1) % NS, rho = Math.min(RHO[o + c], al), f = (al - rho) / COSN, rx = qx - f * CX[c], ry = qy - f * CY[c];
     if (NX[c] * ry - NY[c] * rx >= 0 && rx * NY[c1] - ry * NX[c1] >= 0) { const l = Math.hypot(rx, ry) || 1e-6; GX = -rx / l; GY = -ry / l; WG = c; return rho - l; }
   }
   return best;
 }
 // depth at which a ray from q, moving w per px of depth, meets the wall; (GX, GY) the wall's normal there
 function exitW(ci, qx, qy, wx, wy) {
-  let tm = 1e9, kk = -1; const al = ALC[ci];
-  for (let k = 0; k < 6; k++) { const den = NX[k] * wx + NY[k] * wy; if (den > 1e-7) { const t = (al - qx * NX[k] - qy * NY[k]) / den; if (t < tm) { tm = t; kk = k; } } }
+  let tm = 1e9, kk = -1; const al = ALC[ci], or = ORI[ci], NX = ONX[or], NY = ONY[or], CX = OCX[or], CY = OCY[or];
+  for (let k = 0; k < NS; k++) { const den = NX[k] * wx + NY[k] * wy; if (den > 1e-7) { const t = (al - qx * NX[k] - qy * NY[k]) / den; if (t < tm) { tm = t; kk = k; } } }
   if (kk < 0) return 1e9;
   GX = -NX[kk]; GY = -NY[kk];
   const ex = qx + tm * wx, ey = qy + tm * wy, o = ci * 6;
   for (let s = 0; s < 2; s++) {
-    const c = s ? kk : (kk + 5) % 6, c1 = (c + 1) % 6, rho = Math.min(RHO[o + c], al), f = (al - rho) / COS30, fx = f * CX[c], fy = f * CY[c], rx = ex - fx, ry = ey - fy;
+    const c = s ? kk : (kk + NS - 1) % NS, c1 = (c + 1) % NS, rho = Math.min(RHO[o + c], al), f = (al - rho) / COSN, fx = f * CX[c], fy = f * CY[c], rx = ex - fx, ry = ey - fy;
     if (NX[c] * ry - NY[c] * rx >= 0 && rx * NY[c1] - ry * NX[c1] >= 0) {
       const px = qx - fx, py = qy - fy, A = wx * wx + wy * wy, B = px * wx + py * wy, C = px * px + py * py - rho * rho, disc = B * B - A * C;
       if (disc < 0 || A < 1e-12) return tm;
@@ -1137,9 +1193,9 @@ function exitW(ci, qx, qy, wx, wy) {
   return tm;
 }
 // depth at which the ray meets the base: the nearest of the three rhombus planes (BI is which)
-function baseHit(qx, qy, wx, wy, da, kap) {
-  let best = 1e9;
-  for (let i = 0; i < 3; i++) { const den = 1 + kap * (wx * MXb[i] + wy * MYb[i]); if (den < 1e-4) continue; const t = (da - kap * (qx * MXb[i] + qy * MYb[i])) / den; if (t < best) { best = t; BI = i; } }
+function baseHit(ci, qx, qy, wx, wy, da, kap) {
+  let best = 1e9; const MXb = OBX[ORI[ci]], MYb = OBY[ORI[ci]];
+  for (let i = 0; i < MXb.length; i++) { const den = 1 + kap * (wx * MXb[i] + wy * MYb[i]); if (den < 1e-4) continue; const t = (da - kap * (qx * MXb[i] + qy * MYb[i])) / den; if (t < best) { best = t; BI = i; } }
   return best;
 }
 
@@ -1154,7 +1210,7 @@ const ambAt = dh => 0.12 + 0.88 / (1 + (dh / (1.6 * AL)) * (dh / (1.6 * AL)));
 function waxOf(ci) { const f = WAXF[ci], k = WX[ci]; WR = lerp(WAX0[0], f[0], k); WGr = lerp(WAX0[1], f[1], k); WB = lerp(WAX0[2], f[2], k); }
 let H_D = 0, H_N = 0, H_X = 0, H_Y = 0, H_B = 0, H_AO = 1;
 function firstHit(ci, qx, qy, wx, wy, da, kap) {
-  const dw = exitW(ci, qx, qy, wx, wy), gx = GX, gy = GY, db = baseHit(qx, qy, wx, wy, da, kap);
+  const dw = exitW(ci, qx, qy, wx, wy), gx = GX, gy = GY, db = baseHit(ci, qx, qy, wx, wy, da, kap), MXb = OBX[ORI[ci]], MYb = OBY[ORI[ci]];
   if (dw < db) { H_D = dw; H_N = gx * LH0 + gy * LH1; H_B = 0; }
   else { H_D = db; H_N = (SINE - kap * (MXb[BI] * LH0 + MYb[BI] * LH1)) / Math.sqrt(1 + kap * kap); H_B = 1; }
   H_AO = 0.62 + 0.38 * smooth(0, 5, Math.abs(dw - db)); // the corner where wall meets base gets less light
@@ -1189,7 +1245,7 @@ function shadeEmpty(ci, qx, qy, wx, wy, larva) {
 const MEN = 1.2, MEN_L = 1.4;
 function shadeHoney(ci, qx, qy, wx, wy, hs) {
   const dw = exitW(ci, qx, qy, wx, wy);
-  if (Math.min(dw, baseHit(qx, qy, wx, wy, DA[ci], KAP[ci])) < hs) { shadeEmpty(ci, qx, qy, wx, wy, 0); return; }
+  if (Math.min(dw, baseHit(ci, qx, qy, wx, wy, DA[ci], KAP[ci])) < hs) { shadeEmpty(ci, qx, qy, wx, wy, 0); return; }
   const sx = qx + hs * wx, sy = qy + hs * wy, ds = lumenD(ci, sx, sy), tl = MEN * MENC[ci] / MEN_L * Math.exp(-Math.max(0, ds) / MEN_L), dk = 2 * DSH[ci] / (AL * AL);
   let nx = tl * GX - dk * sx + TLX[ci], ny = tl * GY - dk * sy + TLY[ci], nz = 1; const nl = Math.hypot(nx, ny, nz); nx /= nl; ny /= nl; nz /= nl;
   // the window, mirrored in the honey's surface
@@ -1213,7 +1269,7 @@ function shadeHoney(ci, qx, qy, wx, wy, hs) {
 }
 function shadePollen(ci, qx, qy, wx, wy, hs, x, y) {
   const dw = exitW(ci, qx, qy, wx, wy);
-  if (Math.min(dw, baseHit(qx, qy, wx, wy, DA[ci], KAP[ci])) < hs) { shadeEmpty(ci, qx, qy, wx, wy, 0); return; }
+  if (Math.min(dw, baseHit(ci, qx, qy, wx, wy, DA[ci], KAP[ci])) < hs) { shadeEmpty(ci, qx, qy, wx, wy, 0); return; }
   const sx = qx + hs * wx, sy = qy + hs * wy, lit = litIn(ci, sx, sy, hs), t = texAt(x, y), tx = texAt(x + 1, y) - texAt(x - 1, y), ty = texAt(x, y + 1) - texAt(x, y - 1);
   // packed and tamped: a matte paste, a faint grain, no sparkle
   const ndl = SINE + 0.22 * COSE * (tx * SH.x + ty * SH.y), L = ((lit * Math.max(0, ndl) + ambAt(hs) * IA) * NORM + 0.05) * (0.95 + 0.1 * t), c = PCOL[ci];
@@ -1274,20 +1330,23 @@ function sampleComb(x, y) {
   const k = 1 + 0.06 * lowAt(x, y); // the comb is not quite flat
   OR *= k; OG *= k; OB *= k;
 }
-const NBI = new Int32Array(NC * 6); CELLS.forEach((c, ci) => { for (let k = 0; k < 6; k++) NBI[ci * 6 + k] = gridAt(c.i + NB[k][0], c.j + NB[k][1]); });
-const cint = (ci, k) => { const a = NBI[ci * 6 + k], b = NBI[ci * 6 + (k + 1) % 6]; return a >= 0 && b >= 0 && CA[a] > 0 && CA[b] > 0; }; // a junction with wax on all three sides
+let NBI; lay(() => { NBI = new Int32Array(NC * 6); CELLS.forEach((c, ci) => { for (let k = 0; k < NS; k++) NBI[ci * 6 + k] = gridAt(...NBR(c.i, c.j, k)); }); });
+const cint = (ci, k) => { const a = NBI[ci * 6 + k], b = NBI[ci * 6 + (k + 1) % NS]; return a >= 0 && b >= 0 && CA[a] > 0 && CA[b] > 0; }; // a junction with wax on all three sides
 const wop = ci => CA[ci] * (0.88 + 0.12 * WX[ci]);
 // how far past the line a half-cell broke along, ragged (px in the cell's frame; > 0 is gone)
 const tearD = (ci, qx, qy) => { const a = -qx * TNY[ci] + qy * TNX[ci]; return qx * TNX[ci] + qy * TNY[ci] - TC[ci] + 0.7 * Math.sin(a * 0.9 + TPH[ci]) + 0.35 * Math.sin(a * 2.3 + 2 * TPH[ci]); }; // young wax is thin enough to show the pencil through
 function sampleCell(x, y) {
   const dx = x - LO[0], dy = y - LO[1], u = dx * CR + dy * SR, v = -dx * SR + dy * CR;
-  const jf = v / ROW, fi = u / F - jf / 2, kf = -fi - jf;
-  let ri = Math.round(fi), rj = Math.round(jf); const rk = Math.round(kf), di = Math.abs(ri - fi), dj = Math.abs(rj - jf), dk = Math.abs(rk - kf);
-  if (di > dj && di > dk) ri = -rj - rk; else if (dj > dk) rj = -ri - rk;
+  let ri, rj;
+  if (NS === 6) {
+    const jf = v / ROW, fi = u / F - jf / 2, kf = -fi - jf;
+    ri = Math.round(fi); rj = Math.round(jf); const rk = Math.round(kf), di = Math.abs(ri - fi), dj = Math.abs(rj - jf), dk = Math.abs(rk - kf);
+    if (di > dj && di > dk) ri = -rj - rk; else if (dj > dk) rj = -ri - rk;
+  } else [ri, rj] = cellOf(u, v);
   const ci = gridAt(ri, rj);
   if (ci < 0 || CA[ci] <= 0) { // the outer half of a boundary wall belongs to the comb cell next door (or the drawing shows)
-    for (let k = 0; k < 6; k++) {
-      const n = gridAt(ri + NB[k][0], rj + NB[k][1]); if (n < 0 || CA[n] <= 0) continue;
+    for (let k = 0; k < NS; k++) {
+      const n = NS === 6 ? gridAt(ri + NB[k][0], rj + NB[k][1]) : gridAt(...NBR(ri, rj, k)); if (n < 0 || CA[n] <= 0) continue;
       const qx = u - CU[n], qy = v - CV[n]; if (TEAR[n] && tearD(n, qx, qy) > 0) continue;
       const d = lumenD(n, qx, qy), cov = smooth(-0.5, 0.5, d + WALL + 2 * (AL - ALC[n]));
       if (cov > 0) { waxOf(n); shadeRim(n, d, GX, GY, x, y); OA = cov * wop(n); return; }
@@ -1309,8 +1368,8 @@ function sampleCell(x, y) {
   else OA = ia * cov * CA[ci];
 }
 let CBX0 = 0, CBY0 = 0, CBW = 0, CBH = 0;
-{ let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let ci = 0; ci < NC; ci++) { const [x, y] = toW(CU[ci], CV[ci]); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-  CBX0 = Math.floor(x0 - RC - 3); CBY0 = Math.floor(y0 - RC - 3); CBW = Math.ceil(x1 + RC + 3) - CBX0; CBH = Math.ceil(y1 + RC + 3) - CBY0; }
+lay(() => { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let ci = 0; ci < NC; ci++) { const [x, y] = toW(CU[ci], CV[ci]); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  CBX0 = Math.floor(x0 - RC - 3); CBY0 = Math.floor(y0 - RC - 3); CBW = Math.ceil(x1 + RC + 3) - CBX0; CBH = Math.ceil(y1 + RC + 3) - CBY0; });
 // The comb at ss x ss samples a pixel into img, and into tall its silhouette weighted by each cell's
 // height, for the long shadow. Given the final images, a pixel whose cells have all reached their final
 // state is copied from them, so a seek late in the build only renders the cells still changing.
@@ -1379,7 +1438,6 @@ function sweptShadow(ctx, img, x, y, hTop, alpha = 0.5) {
 // contact, which cover all of it. Under the drawn-out comb the hexagons are drawn too, and nowhere
 // beyond its outline. Baked once into CONS, with a time map TM holding the moment the pencil passes
 // each pixel.
-const COVER = Math.PI / (2 * S3); // the packing density of circles: 0.9069
 const frontOf = (u, v) => clamp((v - V_TOP) / (V_BOT - V_TOP + 160) + 0.12); // the build runs from the comb's top
 const HALO = []; // the faint circles' centres, screen px
 let CONS, CONS_ID, TM, REV, REV_ID, TM_END = 0, CB = [W, H, 0, 0];
@@ -1407,11 +1465,12 @@ function stampTime(P, t0, t1, ext = 0) {
 function cStroke(P, t0, t1, o) { // a hand presses a little harder or lighter from line to line
   const tone = clamp((o.tone ?? 0.8) * (0.9 + 0.2 * rngFor('pr:' + (o.seed || ''))()), 0, 1);
   pencil(CONS.getContext('2d'), P, { ...o, tone }); stampTime(P, t0, t1, o.overshoot ? (o.overshoot === true ? 9 : o.overshoot * 1.5) : 0); }
-const cornerW = (i, j, c, r = RC) => { const [u, v] = ctrL(i, j); return toW(u + r * CX[c], v + r * CY[c]); };
-// a cell's outline in screen px: the hexagon of inradius F/2 with every corner filleted by rho
-function filletOutline(u, v, rho, a0) {
-  const a = F / 2, P = [], f = (a - rho) / COS30;
-  for (let c = 0; c < 6; c++) { const fx = f * CX[c], fy = f * CY[c]; for (let k = 0; k <= 6; k++) { const th = (c + k / 6) * Math.PI / 3; P.push(toW(u + fx + rho * Math.cos(th), v + fy + rho * Math.sin(th))); } }
+const cornerW = (i, j, c, r = RC) => { const [u, v] = ctrL(i, j), o = oriOf(i, j); return toW(u + r * OCX[o][c], v + r * OCY[o][c]); };
+// a cell's outline in screen px: the hexagon of inradius F/2 with every corner filleted by rho (o: the
+// cell's orientation, at another n)
+function filletOutline(u, v, rho, a0, o = 0) {
+  const a = F / 2, P = [], f = (a - rho) / COSN, CX = OCX[o], CY = OCY[o], off = Math.atan2(ONY[o][0], ONX[o][0]);
+  for (let c = 0; c < NS; c++) { const fx = f * CX[c], fy = f * CY[c]; for (let k = 0; k <= 6; k++) { const th = NS === 6 ? (c + k / 6) * Math.PI / 3 : off + (c + k / 6) * 2 * Math.PI / NS; P.push(toW(u + fx + rho * Math.cos(th), v + fy + rho * Math.sin(th))); } }
   const s0 = Math.floor(a0 * P.length), Q = P.slice(s0).concat(P.slice(0, s0)); return Q.concat(Q.slice(0, 3)); // a drawn outline closes a little past its start
 }
 function bakeConstruction() {
@@ -1424,16 +1483,17 @@ function bakeConstruction() {
   const GP = mk(64, 64), gpc = GP.getContext('2d'), gid = gpc.createImageData(64, 64), gr = rngFor('gap-grain');
   for (let q = 0; q < 64 * 64; q++) { const a = 0.58 + 0.34 * gr() * gr() + 0.08 * gr(); gid.data[q * 4] = 58; gid.data[q * 4 + 1] = 58; gid.data[q * 4 + 2] = 64; gid.data[q * 4 + 3] = a * 255; }
   gpc.putImageData(gid, 0, 0); const GPAT = CONS.getContext('2d').createPattern(GP, 'repeat');
-  const PC = { ...P, w: 1.7, tone: 1 }; // the circles, firm enough to read from across the room
+  const PC = { ...P, w: 1.7, tone: 1 }, GAPS = new Map(); // the circles, firm enough to read from across the room
   CELLS.forEach((c, ci) => {
     if (!fil(ci)) return;
     const t0 = tx(SL[ci]) + 0.04 * jr('bt' + c.i + ':' + c.j), rho = F / 2 * (1 - LMAXP[ci]);
-    cStroke(filletOutline(c.u, c.v, rho, jr('a0' + c.i + ':' + c.j)), t0, t0 + 0.1, { ...PC, seed: 'f' + c.i + ':' + c.j });
+    cStroke(filletOutline(c.u, c.v, rho, jr('a0' + c.i + ':' + c.j), ORI[ci]), t0, t0 + 0.1, { ...PC, seed: 'f' + c.i + ':' + c.j });
     // the gap where three circles meet, shaded solid: bounded by the three outlines' corner arcs
     if (rho < 2) return;
+    if (NS !== 6) { for (let k = 0; k < NS; k++) { const key = jkey(c.i, c.j, k); if (!GAPS.has(key)) GAPS.set(key, []); GAPS.get(key).push([ci, t0, c.u + RC * OCX[ORI[ci]][k], c.v + RC * OCY[ORI[ci]][k]]); } return; }
     for (const k of [0, 1]) {
       const tri = [ci, NBI[ci * 6 + k], NBI[ci * 6 + (k + 1) % 6]]; if (!tri.every(fil)) continue; // only where three circles meet
-      const ju = c.u + RC * CX[k], jv = c.v + RC * CY[k], r3 = tri.reduce((a, q) => a + F / 2 * (1 - LMAXP[q]), 0) / 3, f = (F / 2 - r3) / COS30;
+      const ju = c.u + RC * CX[k], jv = c.v + RC * CY[k], r3 = tri.reduce((a, q) => a + F / 2 * (1 - LMAXP[q]), 0) / 3, f = (F / 2 - r3) / COSN;
       const arcs = tri.map(q => { const pu = CELLS[q].u, pv = CELLS[q].v, th = Math.atan2(jv - pv, ju - pu), fu = pu + f * Math.cos(th), fv = pv + f * Math.sin(th), A = [];
         for (let m = 0; m <= 8; m++) { const ph = th - Math.PI / 6 + m * Math.PI / 24; A.push([fu + r3 * Math.cos(ph), fv + r3 * Math.sin(ph)]); } return { a: Math.atan2(pv - jv, pu - ju), A }; });
       arcs.sort((p, q) => p.a - q.a);
@@ -1444,6 +1504,20 @@ function bakeConstruction() {
       stampTime(S, tg, tg + 0.01);
     }
   });
+  // at another n a gap is ringed by 2n/(n - 2) circles: four for squares, six for triangles
+  const ring = 2 * NS / (NS - 2);
+  for (const list of GAPS.values()) {
+    if (list.length !== ring) continue; // only where the circles close all round
+    const [, , ju, jv] = list[0], r3 = list.reduce((a, q) => a + F / 2 * (1 - LMAXP[q[0]]), 0) / ring, f = (F / 2 - r3) / COSN, tg = Math.max(...list.map(q => q[1])) + 0.11;
+    const arcs = list.map(([q]) => { const pu = CELLS[q].u, pv = CELLS[q].v, th = Math.atan2(jv - pv, ju - pu), fu = pu + f * Math.cos(th), fv = pv + f * Math.sin(th), A = [];
+      for (let m = 0; m <= 8; m++) { const ph = th - Math.PI / NS + m * Math.PI / (4 * NS); A.push([fu + r3 * Math.cos(ph), fv + r3 * Math.sin(ph)]); } return { a: Math.atan2(pv - jv, pu - ju), A }; });
+    arcs.sort((p, q) => p.a - q.a);
+    let poly = arcs[0].A.slice();
+    for (let m = 1; m < ring; m++) { const e = poly[poly.length - 1], A = arcs[m].A, d0 = Math.hypot(A[0][0] - e[0], A[0][1] - e[1]), d1 = Math.hypot(A[8][0] - e[0], A[8][1] - e[1]); poly = poly.concat(d0 < d1 ? A : A.slice().reverse()); }
+    const S = poly.map(([u, v]) => toW(u, v)), g = CONS.getContext('2d');
+    g.save(); g.fillStyle = GPAT; g.beginPath(); S.forEach(([x, y], m) => m ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.fill(); g.restore();
+    stampTime(S, tg, tg + 0.01);
+  }
   // hexagons: each cell draws its three walls on one side in one movement, and the walls at the field's
   // edge; under the drawn-out comb only well inside its outline, so nothing of the grid shows round it
   const isH = (i, j) => { const ci = gridAt(i, j); return ci >= 0 && LMAXP[ci] >= 0.97 && fragSD(CELLS[ci].u, CELLS[ci].v) > (SL[ci] < 1 ? 0.35 : 0.55) * F; };
@@ -1451,6 +1525,13 @@ function bakeConstruction() {
     const { i, j } = c; if (!isH(i, j)) return;
     const t0 = (SL[ci] < 1 ? tx(SL[ci]) : 1.18 + 0.5 * frontOf(c.u, c.v)) + 0.05 * jr('ht' + i + ':' + j);
     const PH = SL[ci] < 0.5 ? { ...P, w: 1.7 } : P; // the band's hexagons as firm as its circles
+    if (NS !== 6) { // each wall once: drawn by the lower-numbered of its two cells, or by this one where nothing is drawn across it
+      const own = k => { const n = NBI[ci * 6 + k], [a, b] = NBR(i, j, k); return isH(a, b) ? ci < n : !fil(n); };
+      let k0 = 0; while (k0 < NS && own(k0)) k0++;
+      let run = []; const flush = q => { if (run.length > 1) cStroke(run, t0, t0 + 0.1, { ...PH, seed: 'h' + i + ':' + j + ':' + q }); run = []; };
+      for (let e = 1; e <= NS; e++) { const k = (k0 + e) % NS; if (!own(k)) { flush(k); continue; } if (!run.length) run.push(cornerW(i, j, (k + NS - 1) % NS)); run.push(cornerW(i, j, k)); }
+      flush('end'); return;
+    }
     cStroke([cornerW(i, j, 2), cornerW(i, j, 3), cornerW(i, j, 4), cornerW(i, j, 5)], t0, t0 + 0.1, { ...PH, seed: 'h' + i + ':' + j });
     for (const k of [0, 1, 2]) { const n = NBI[ci * 6 + k]; if (!isH(i + NB[k][0], j + NB[k][1]) && !fil(n)) cStroke([cornerW(i, j, (k + 5) % 6), cornerW(i, j, k)], t0 + 0.1, t0 + 0.13, { ...PH, seed: 'he' + k + ':' + i + ':' + j }); }
   });
@@ -1463,7 +1544,7 @@ function bakeConstruction() {
     let nb = -1, nd = 1e9; CELLS.forEach((c, ci) => { const d = (c.u - u) ** 2 + (c.v - v) ** 2; if (d < nd) { nd = d; nb = ci; } }); if (SL[nb] < 0.45) continue;
     HALO.push(toW(u, v));
     const [x] = toW(u, v), f = clamp(-sd / (2.8 * F)), t0 = 0.6 + 0.9 * clamp((x - X_L) / (X_R - X_L)) + 0.05 * jr('hh' + i + ':' + j);
-    cStroke(filletOutline(u, v, F / 2, jr('ha' + i + ':' + j)), t0, t0 + 0.1, { ...PC, w: 1.15, tone: 0.62 - 0.32 * f, seed: 'hc' + i + ':' + j });
+    cStroke(filletOutline(u, v, F / 2, jr('ha' + i + ':' + j), oriOf(i, j)), t0, t0 + 0.1, { ...PC, w: 1.15, tone: 0.62 - 0.32 * f, seed: 'hc' + i + ':' + j });
   }
   CONS_ID = CONS.getContext('2d').getImageData(0, 0, W, H); REV = mk(W, H); REV_ID = new ImageData(W, H);
   CB = [Math.max(0, CB[0]), Math.max(0, CB[1]), Math.min(W - 1, CB[2]), Math.min(H - 1, CB[3])];
@@ -1473,7 +1554,8 @@ function bakeConstruction() {
 // trials. Every number is computed.
 const NOTES = [];
 function bakeNotes() {
-  const L = [(F / MM).toFixed(1) + ' mm circles cover ' + (COVER * 100).toFixed(1) + ' %;', 'hexagons cover 100 %.', 'Warm wax is proposed to', 'flow from one to the other.'], LEAD = 23;
+  // the flow from circles is proposed for the hexagon's three-wall junctions alone: at another n it is not claimed
+  const L = [(F / MM).toFixed(1) + ' mm circles cover ' + (COVER * 100).toFixed(1) + ' %;', CELL_NAME + ' cover 100 %.', ...(NS === 6 ? ['Warm wax is proposed to', 'flow from one to the other.'] : [])], LEAD = 23;
   // the block sits beside the band of circles, as near the comb's middle as it can without touching the drawing
   const x0 = 118, w = Math.max(...L.map(l => measureText(l, 15))), clear = y => { for (let x = x0 - 4; x <= x0 + w + 6; x += 5) for (let yy = y - 18; yy <= y + 3 * LEAD + 8; yy += 6) {
     const [u, v] = toL(x, yy); if (fragSD(u, v) > -0.42 * F - RC - 12) return false; for (const [hx, hy] of HALO) if (Math.hypot(hx - x, hy - yy) < RC + 12) return false; } return true; };
@@ -1679,13 +1761,12 @@ function renderBee(o) {
 // The same rule at the other two regular tilings, each cell the area of a worker cell (24.3 mm²),
 // drawn by the routine that drew the comb's own lattice. Under each, the perimeter of a cell of unit
 // area, sqrt(4 n tan(π/n)): the hexagon is the least, and it is the comb's.
-const CELL_A = S3 / 2 * F * F;
 const TRIAL_Y = 1088, TRIAL_R = 62, TS = 1.5; // the row is drawn at 1.5 times true size, every cell the same area
 const TRIALS = [3, 4, 6].map((n, i) => ({ n, x: 176 + i * 178, y: TRIAL_Y, name: ['triangles', 'squares', 'hexagons'][i], P: perimUnit(n) }));
 function tilingEdges(n, R) { // unique edges of the regular n-gon tiling, cells of area CELL_A within R of the origin, lattice-turned
   const E = new Map(), add = (a, b) => { const ka = a[0].toFixed(1) + ',' + a[1].toFixed(1), kb = b[0].toFixed(1) + ',' + b[1].toFixed(1), k = ka < kb ? ka + '|' + kb : kb + '|' + ka; if (!E.has(k)) E.set(k, [a, b]); };
   const poly = (cx, cy, pts) => { if (Math.hypot(cx, cy) > R) return; for (let k = 0; k < pts.length; k++) add(pts[k], pts[(k + 1) % pts.length]); };
-  if (n === 6) for (let j = -9; j <= 9; j++) for (let i = -9; i <= 9; i++) { const [u, v] = ctrL(i, j); poly(u, v, [0, 1, 2, 3, 4, 5].map(c => [u + RC * CX[c], v + RC * CY[c]])); }
+  if (n === 6) for (let j = -9; j <= 9; j++) for (let i = -9; i <= 9; i++) { const [u, v] = ctrL6(i, j); poly(u, v, [0, 1, 2, 3, 4, 5].map(c => [u + RC6 * CX[c], v + RC6 * CY[c]])); }
   if (n === 4) { const s = Math.sqrt(CELL_A); for (let j = -9; j <= 9; j++) for (let i = -9; i <= 9; i++) { const u = (i + 0.5) * s, v = (j + 0.5) * s; poly(u, v, [[u - s / 2, v - s / 2], [u + s / 2, v - s / 2], [u + s / 2, v + s / 2], [u - s / 2, v + s / 2]]); } }
   if (n === 3) { const s = Math.sqrt(4 * CELL_A / S3), h = s * S3 / 2; for (let j = -6; j <= 6; j++) for (let i = -12; i <= 12; i++) {
     const x0 = (i + (j & 1) * 0.5) * s, y0 = j * h, up = [[x0, y0 + h / 2], [x0 + s / 2, y0 - h / 2], [x0 + s, y0 + h / 2]], dn = [[x0 + s / 2, y0 - h / 2], [x0 + s * 1.5, y0 - h / 2], [x0 + s, y0 + h / 2]];
@@ -1707,16 +1788,20 @@ function bakeTrials() {
 // Cells rise first as round wax cups along a front from the comb's top, young wax so thin the pencil
 // shows through; then each triple junction lets its wax flow, so the walls straighten one by one onto
 // the drawn hexagons; then the cells are drawn out to their full depth and the comb takes its colour.
-const AL0 = 0.84 * AL, ZT_CUP = 5 * MM, DA_CUP = 4.7 * MM, DA_FULL = Z_FULL - Z_APEX, KAP_FULL = CAP_DEPTH / RC;
-const RT = new Float32Array(NC), DT = new Float32Array(NC), JT = new Float32Array(NC * 6);
-for (let ci = 0; ci < NC; ci++) {
-  const c = CELLS[ci], f = frontOf(c.u, c.v), r = rngFor('bt' + ci);
-  RT[ci] = 1.35 + 0.6 * f + 0.05 * r(); DT[ci] = 2.6 + 0.75 * f + 0.06 * r();
-  for (let k = 0; k < 6; k++) { const ju = c.u + RC * CX[k], jv = c.v + RC * CY[k]; JT[ci * 6 + k] = 1.85 + 0.75 * frontOf(ju, jv) + 0.14 * rngFor('jt' + JK(c.i, c.j, k))(); }
-}
-const COMB_DONE = Math.max(...DT) + 0.76;
+const ZT_CUP = 5 * MM, DA_CUP = 4.7 * MM, DA_FULL = Z_FULL - Z_APEX;
+let AL0, KAP_FULL, RT, DT, JT, COMB_DONE, DONE, DONEN, FST = null; // DONE: which cells have reached their final state (DONEN: and their neighbours too)
+lay(() => {
+  AL0 = 0.84 * AL; KAP_FULL = CAP_DEPTH / RC;
+  RT = new Float32Array(NC); DT = new Float32Array(NC); JT = new Float32Array(NC * 6);
+  for (let ci = 0; ci < NC; ci++) {
+    const c = CELLS[ci], f = frontOf(c.u, c.v), r = rngFor('bt' + ci), CX = OCX[ORI[ci]], CY = OCY[ORI[ci]];
+    RT[ci] = 1.35 + 0.6 * f + 0.05 * r(); DT[ci] = 2.6 + 0.75 * f + 0.06 * r();
+    for (let k = 0; k < NS; k++) { const ju = c.u + RC * CX[k], jv = c.v + RC * CY[k]; JT[ci * 6 + k] = 1.85 + 0.75 * frontOf(ju, jv) + 0.14 * rngFor('jt' + jkey(c.i, c.j, k))(); }
+  }
+  COMB_DONE = Math.max(...DT) + 0.76;
+  DONE = new Uint8Array(NC); DONEN = new Uint8Array(NC); FST = null;
+});
 let OPAC = 1; // how opaque the comb is as a whole: young wax lets the light through and casts little shadow
-const DONE = new Uint8Array(NC), DONEN = new Uint8Array(NC); let FST = null; // which cells have reached their final state (and their neighbours too)
 function setState(t) {
   let zmax = 0, on = 0, op = 0;
   for (let ci = 0; ci < NC; ci++) {
@@ -1725,12 +1810,12 @@ function setState(t) {
     BA[ci] = lerp((SL[ci] < 1 ? 0.85 : 0.42) * rp, 1, dp); CA[ci] = smooth(0, 0.3, rp); WX[ci] = dp; CP[ci] = clamp((dp - 0.22) / 0.78);
     if (CA[ci] > 0 && SL[ci] >= 1) { on++; op += CA[ci] * lerp(0.25, 1, dp); }
     let lm = 0;
-    for (let k = 0; k < 6; k++) { const l = Math.min(LMAX[ci], ease5((t - JT[ci * 6 + k]) / 0.45)); lm += l / 6; RHO[ci * 6 + k] = lerp(AL, RHO_F, l); }
+    for (let k = 0; k < NS; k++) { const l = Math.min(LMAX[ci], ease5((t - JT[ci * 6 + k]) / 0.45)); lm += l / NS; RHO[ci * 6 + k] = lerp(AL, RHO_F, l); }
     ALC[ci] = lerp(AL0, AL, lm) * SJ[ci];
     if (CA[ci] > 0) zmax = Math.max(zmax, ZT[ci]);
     if (FST) { const o = ci * 14, f = [ZT[ci], DA[ci], KAP[ci], BA[ci], CA[ci], WX[ci], CP[ci], ALC[ci], ...RHO.subarray(ci * 6, ci * 6 + 6)]; let d = 1; for (let q = 0; q < 14; q++) if (f[q] !== FST[o + q]) { d = 0; break; } DONE[ci] = d; }
   }
-  if (FST) for (let ci = 0; ci < NC; ci++) { let d = DONE[ci]; const c = CELLS[ci]; for (let k = 0; k < 6 && d; k++) { const n = gridAt(c.i + NB[k][0], c.j + NB[k][1]); if (n >= 0 && !DONE[n]) d = 0; } DONEN[ci] = d; }
+  if (FST) for (let ci = 0; ci < NC; ci++) { let d = DONE[ci]; const c = CELLS[ci]; for (let k = 0; k < NS && d; k++) { const n = NBI[ci * 6 + k]; if (n >= 0 && !DONE[n]) d = 0; } DONEN[ci] = d; }
   OPAC = on ? op / on : 1;
   return zmax;
 }
@@ -1789,6 +1874,7 @@ function drawBees(t) {
 let CARD, FRAME, COMB_FINAL, COMB_FINAL_T, COMB_LIVE, COMB_LIVE_T, FIN = null, LIVE = null, BEES = [];
 function label(t) {
   const lines = [{ text: 'No. 1', size: 12.5 }, { text: '*{Apis mellifera} Linnaeus, 1758', size: 15 }, { text: 'western honeybee, worker comb', size: 12.5 }, { text: 'equal cells, least wall: hexagons (Hales, 1999)', size: 12.5 }];
+  if (NS !== N_BEES) lines.push({ text: 'grown here as ' + CELL_NAME + ', corners ' + ANGLE[NS] + '°, not 120°', size: 12.5 }); // grown at another angle, the label says so
   const w = Math.round(Math.max(...lines.map(l => measureText(l.text, l.size))) + 30);
   labelCard(X, { x: TX1 - 26 - w, y: 1092, w, lines, prog: span(t, 3.85, 4.5), rot: -0.005, pad: 14, seed: 'bee-label' });
 }
@@ -1805,10 +1891,13 @@ function trialText(t) {
 // own comb once from the same rules and is handed the final images; the page keeps the bands.
 let COMB_MW = false, PREP = false;
 function prepComb() { if (PREP) return; PREP = true; bakeTex(); setState(DUR); keepFinal(); }
+// The workers start from the page's script without its query, so each job carries n and a worker
+// lays the comb again for it before it renders.
+function relayComb(n) { if (n === NS) return; setLattice(n); for (const f of LAY) f(); PREP = false; }
 const MW_JOBS = {
-  final(band) { prepComb(); setState(DUR); return renderComb(3, null, null, null, band); },
-  setFinal(D, T) { prepComb(); FIN = { img: { data: D }, tall: { data: T } }; return {}; },
-  live(band, t) { setState(t); return renderComb(2, null, null, FIN, band); },
+  final(band, n) { relayComb(n); prepComb(); setState(DUR); return renderComb(3, null, null, null, band); },
+  setFinal(D, T, n) { relayComb(n); prepComb(); FIN = { img: { data: D }, tall: { data: T } }; return {}; },
+  live(band, t, n) { relayComb(n); setState(t); return renderComb(2, null, null, FIN, band); },
 };
 function putBands(out, parts) { MW.merge(out.img.data, parts, 'D', CBH); MW.merge(out.tall.data, parts, 'T', CBH); return out; }
 // A seek renders the comb before it draws, so each frame is drawn in one go; seeks run in turn.
@@ -1820,7 +1909,7 @@ async function seekNow(t) {
   if (t >= COMB_DONE) { comb = COMB_FINAL; tall = COMB_FINAL_T; }
   else if (t > Math.min(...RT)) {
     zt = setState(t);
-    const parts = COMB_MW ? await MW.bandsPer(3, 'live', t) : null;
+    const parts = COMB_MW ? await MW.bandsPer(3, 'live', t, NS) : null;
     if (parts) putBands(LIVE, parts); else renderComb(2, LIVE.img, LIVE.tall, FIN); // cells still changing at 2 x 2 samples; those done copied from the final
     COMB_LIVE.getContext('2d').putImageData(LIVE.img, 0, 0); COMB_LIVE_T.getContext('2d').putImageData(LIVE.tall, 0, 0); comb = COMB_LIVE; tall = COMB_LIVE_T;
   }
@@ -1839,8 +1928,48 @@ async function seekNow(t) {
   label(t);
   X.drawImage(FRAME, 0, 0); lightFalloff(X); glass(X, t);
 }
+// ---------- the site's control: the tiling at any corner angle ----------
+// The site's slider calls draw(v): cells of the worker cell's area with v° corners (60 triangles, 90
+// squares, 120 the bees' hexagons), at 1.5 x as the trials are, in the curator's pencil on the card:
+// each cell's walls and its compass circle, and the corners the circles leave shaded in graphite, as in
+// the drawing under the comb. Each cell keeps its seed at every v. value is the angle the comb grew at.
+window.__vary = {
+  key: 'angle', value: ANGLE[NS],
+  draw(v) {
+    const n = [3, 4, 6][Math.round((clamp(v, 60, 120) - 60) / 30)], w = 480, h = 160, ox = 300, oy = 600, S = 1.5, PI2 = 2 * Math.PI;
+    const a = S * (n === 6 ? F6 / 2 : n === 4 ? Math.sqrt(CELL_A) / 2 : Math.sqrt(4 * CELL_A / S3) / (2 * S3)), R = a / Math.cos(Math.PI / n); // inradius, corner radius
+    const c = mk(ox + w, oy + h), g = c.getContext('2d'), X0 = ox + w / 2, Y0 = oy + h / 2, cells = [];
+    g.drawImage(CARD, ox, oy, w, h, ox, oy, w, h);
+    for (let j = -12; j <= 12; j++) for (let i = -30; i <= 30; i++) { // centres laid as the comb's own lattice at this n
+      let x, y, off = 0;
+      if (n === 6) { x = X0 + (i + j / 2) * 2 * a; y = Y0 + j * a * S3; }
+      else if (n === 4) { x = X0 + i * 2 * a; y = Y0 + j * 2 * a; }
+      else { const up = !((i + j) & 1); x = X0 + i * S3 * a; y = Y0 + j * 3 * a + (up ? a / 2 : -a / 2); off = up ? Math.PI / 2 : -Math.PI / 2; }
+      if (x < ox - R || x > ox + w + R || y < oy - R || y > oy + h + R) continue;
+      cells.push({ x, y, i, j, P: Array.from({ length: n }, (_, k) => [x + R * Math.cos(off + (k + 0.5) * PI2 / n), y + R * Math.sin(off + (k + 0.5) * PI2 / n)]) });
+    }
+    g.save(); g.beginPath(); g.rect(ox, oy, w, h); g.clip();
+    // the corners outside the circles, in a light grain of graphite
+    const gp = mk(64, 64), gc = gp.getContext('2d'), gd = gc.createImageData(64, 64), gr = rngFor('gap-grain');
+    for (let q = 0; q < 64 * 64; q++) { gd.data[q * 4] = 58; gd.data[q * 4 + 1] = 58; gd.data[q * 4 + 2] = 64; gd.data[q * 4 + 3] = (0.58 + 0.34 * gr() * gr() + 0.08 * gr()) * 255 * 0.42; }
+    gc.putImageData(gd, 0, 0); g.fillStyle = g.createPattern(gp, 'repeat'); g.beginPath();
+    for (const q of cells) { q.P.forEach(([x, y], k) => k ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.moveTo(q.x + a, q.y); g.arc(q.x, q.y, a, 0, PI2); }
+    g.fill('evenodd');
+    // the circles and then the walls, each wall once
+    const trs = [], seen = new Set();
+    for (const q of cells) {
+      const a0 = rngFor('vc' + q.i + ':' + q.j)() * PI2, C = [];
+      for (let m = 0; m <= 48; m++) { const t = a0 + (PI2 + 0.1) * m / 48; C.push([q.x + a * Math.cos(t), q.y + a * Math.sin(t)]); }
+      trs.push(_trace(C, { tone: 0.72, tremor: 0.12, seed: 'vc' + q.i + ':' + q.j }, 1, 1.2));
+      q.P.forEach((p, k) => { const e = q.P[(k + 1) % n], key = Math.round((p[0] + e[0]) * 2) + ':' + Math.round((p[1] + e[1]) * 2); if (seen.has(key)) return; seen.add(key);
+        trs.push(_trace([p, e], { tone: 1, tremor: 0.12, seed: 'vw' + key }, 1, 1.7)); });
+    }
+    _graphite(g, trs, {}); g.restore();
+    return { w, h, data: g.getImageData(ox, oy, w, h).data };
+  },
+};
 kitStart(async () => {
-  const final = MW.bandsPer(3, 'final');
+  const final = MW.bandsPer(3, 'final', NS);
   CARD = renderCard({ tone: 'white' }); FRAME = renderFrame(); bakeTex();
   bakeConstruction(); bakeTrials(); bakeNotes();
   CONS_ID = CONS.getContext('2d').getImageData(0, 0, W, H);
@@ -1852,7 +1981,7 @@ kitStart(async () => {
   const tb = performance.now();
   BEES = BEE_SPEC.map(b => ({ ...b, img: renderBee(b) }));
   console.log('bees ms', performance.now() - tb);
-  COMB_MW = !!(fp && await MW.each('setFinal', FIN.img.data, FIN.tall.data));
+  COMB_MW = !!(fp && await MW.each('setFinal', FIN.img.data, FIN.tall.data, NS));
 }, seek);
 </script>
 </body></html>

@@ -972,9 +972,14 @@ const T = {
 };
 T.R = T.D / 2; T.ampI = 72 - T.ampA; T.H = T.zA + T.hUp;
 const RPX = T.R * MM, CX = 500, CY = 530, SS = 2; // the test's centre on the card; it is rendered at 2× and averaged
-const PERR = [0, 72, 144, 216, 288], PER_NAME = ['III', 'II', 'I', 'V', 'IV']; // perradii, bearing order
-const INTR = [36, 108, 180, 252, 324], INT_NAME = ['2', '1', '5', '4', '3'];  // interradii
-const TH0 = 324 - T.ampI / 2; // sector 0 = interambulacrum 3 + ambulacrum III, from bearing TH0 for 72°
+// n, the number of sectors: five in Echinus. ?n=4 grows the whole plate with n sectors (the site's
+// Apply button does this through self.__query); setFold(n) sets everything that follows from n.
+const N_ECHINUS = 5;
+let N_FOLD = N_ECHINUS;
+{ const v = Number(new URLSearchParams(self.__query ?? location.search).get('n')); if (v >= 3 && v <= 8) N_FOLD = Math.round(v); }
+let NF = 5, SEC = 72, PERR = [0, 72, 144, 216, 288], INTR = [36, 108, 180, 252, 324]; // sectors, the sector's angle, perradii and interradii in bearing order
+const PER_NAME = ['III', 'II', 'I', 'V', 'IV'], INT_NAME = ['2', '1', '5', '4', '3']; // Lovén's numbers, for the five-fold test only
+let TH0 = 324 - T.ampI / 2; // sector 0 = interambulacrum 3 + ambulacrum III, from bearing TH0 for 72°
 
 // ---------- the profile ----------
 // Parameter t: π/2 at the apex, 0 at the ambitus. ρ = R cos(t)^(2/p), z = zA + hUp sin(t)^(2/p).
@@ -1008,11 +1013,11 @@ const rhoLow = z => T.R * Math.pow(clamp(1 - Math.pow(clamp((T.zA - z) / T.zA), 
 // Dicyclic: five genital plates ring the periproct, five ocular plates sit in the notches between
 // them at the tops of the ambulacra. Genital 2, the madreporite, is larger and sieved with pores:
 // the one plate of the test that is not repeated five times.
-const nearestPer = th => { const q = Math.round(th / 72); return { i: mod(q, 5), psi: th - q * 72 }; };
-const nearestInt = th => { const q = Math.round((th - 36) / 72); return { i: mod(q, 5), om: th - 36 - q * 72 }; };
+const nearestPer = th => { const q = Math.round(th / SEC); return { i: mod(q, NF), psi: th - q * SEC }; };
+const nearestInt = th => { const q = Math.round((th - SEC / 2) / SEC); return { i: mod(q, NF), om: th - SEC / 2 - q * SEC }; };
 function discEdge(th) { // outer margin of the apical disc at bearing th, in mm
   const { psi } = nearestPer(th), { i, om } = nearestInt(th), rGk = i === 0 ? T.rMad : T.rG;
-  const rOut = rGk - (rGk - (T.rO - 0.15)) * clamp(Math.abs(om) / 23.5);
+  const rOut = rGk - (rGk - (T.rO - 0.15)) * clamp(Math.abs(om) / (23.5 * SEC / 72));
   const ax = Math.abs(T.rO * Math.sin(psi * DEG));
   return ax <= T.ocw ? Math.max(rOut, T.rO - 0.35 * (ax / T.ocw) ** 2) : rOut;
 }
@@ -1028,7 +1033,7 @@ function column(n, end, th0, th1) {
   const s0 = sOfRho(r0 - 0.05), L = S_AMB - s0;
   return { n, end, s0, L, hEnd: L / (n * T.gam) };
 }
-const COL_I = column(T.nI, T.endI, TH0, TH0 + T.ampI), COL_A = column(T.nA, T.endA, TH0 + T.ampI, TH0 + 72);
+let COL_I = column(T.nI, T.endI, TH0, TH0 + T.ampI), COL_A = column(T.nA, T.endA, TH0 + T.ampI, TH0 + 72);
 function kOf(s, C) {
   if (s >= S_AMB) return C.n + (s - S_AMB) / C.hEnd;
   const x = (s - C.s0) / C.L; return x <= 0 ? 0 : C.n * Math.pow(x, T.gam);
@@ -1053,7 +1058,7 @@ function wobAt(key, u) { // cached per suture: 33 samples across the column
 // compound plates carry an arc of three pore pairs at the adradial edge, a primary tubercle on two
 // plates in five (every second or third plate) and a smaller one on the rest. Positions are (u, v):
 // u from the median zigzag (0) to the adradial suture (1), v down the plate (0 to 1); r in mm.
-const _PL = new Map();
+let _PL = new Map();
 function plateData(j, isA, col, K) {
   const key = ((j * 2 + (isA ? 1 : 0)) * 2 + col) * 64 + K; let d = _PL.get(key); if (d) return d;
   const C = isA ? COL_A : COL_I, k0 = K - (col ? 0.5 : 0), sT = sOfK(k0, C), sB = sOfK(k0 + 1, C), sc = (sT + sB) / 2;
@@ -1079,6 +1084,18 @@ function plateData(j, isA, col, K) {
   d = { tub, pores, hP, hw, hue: r() - 0.5, tone: (r() - 0.5) * 0.12, ox: r() * 200, oy: r() * 200, prim: 0 };
   _PL.set(key, d); return d;
 }
+// setFold(n): the test with n sectors. Every angle above follows from n: each sector is 360°/n, its
+// ambulacrum 0.375 of it, sector 0 still ambulacrum and interambulacrum either side of bearing 0;
+// the columns are laid again and the plates' cache is new. foldState() and restoreFold() let the
+// site's preview lay a test at another n and put the plate's own back.
+function setFold(n) {
+  NF = n; SEC = 360 / n; T.ampA = SEC * 0.375; T.ampI = SEC - T.ampA;
+  PERR = Array.from({ length: n }, (_, i) => i * SEC); INTR = PERR.map(b => b + SEC / 2); TH0 = INTR[n - 1] - T.ampI / 2;
+  COL_I = column(T.nI, T.endI, TH0, TH0 + T.ampI); COL_A = column(T.nA, T.endA, TH0 + T.ampI, TH0 + SEC); _PL = new Map();
+}
+const foldState = () => ({ NF, SEC, ampA: T.ampA, ampI: T.ampI, PERR, INTR, TH0, COL_I, COL_A, _PL });
+function restoreFold(f) { ({ NF, SEC, PERR, INTR, TH0, COL_I, COL_A, _PL } = f); T.ampA = f.ampA; T.ampI = f.ampI; }
+if (N_FOLD !== N_ECHINUS) setFold(N_FOLD);
 
 // ---------- one point of the test ----------
 // evalAt(x, y, live) reads the plate code at a screen point (1× px) and leaves the surface in EV:
@@ -1161,7 +1178,7 @@ const _CH = new Map(); // a tint for each of the twenty columns, seeded
 function colHue(j, isA, col) { const k = j * 4 + (isA ? 2 : 0) + col; let v = _CH.get(k); if (v === undefined) { v = rngFor('urchin:col' + k)() - 0.5; _CH.set(k, v); } return v; }
 function evalSurf(rho, th, dx, dy, live, sOv, out) {
   if (rho < T.rMad + 0.3 && evalDisc(rho, th, dx / MM, dy / MM)) return;
-  const loc = mod(th - TH0, 360), j = Math.floor(loc / 72), phi = loc - j * 72;
+  const loc = mod(th - TH0, 360), j = Math.floor(loc / SEC), phi = loc - j * SEC;
   if (live && j !== 0) return;
   const s = sOv ?? sOfRho(rho), isA = phi >= T.ampI, C = isA ? COL_A : COL_I, half = (isA ? T.ampA : T.ampI) / 2, med = isA ? T.ampI + half : half;
   const xl = rho * (phi - med) * DEG, hw = rho * half * DEG, hs = hOf(s, C);
@@ -1254,7 +1271,7 @@ function markWedge() {
     const dx = BX0 + (i + 0.5) / SS - CX, dy = BY0 + (j + 0.5) / SS - CY, rho = Math.hypot(dx, dy) / MM;
     let th = Math.atan2(dx, -dy) / DEG; if (th < 0) th += 360;
     const loc = mod(th - TH0 + 2, 360);
-    INWEDGE[j * NW + i] = rho < T.rMad + 1 || loc < 76 ? 1 : 0;
+    INWEDGE[j * NW + i] = rho < T.rMad + 1 || loc < SEC + 4 ? 1 : 0;
   }
 }
 
@@ -1303,7 +1320,7 @@ function composeTest(mode) {
   const lstep = [LV[0] / Math.hypot(LV[0], LV[1]) * 1.0, LV[1] / Math.hypot(LV[0], LV[1]) * 1.0];
   const fan = mode.fan != null, e = mode.fan || 0, rot = [];
   const rotH = [], R = a => ({ c: Math.cos(a), s: Math.sin(a), lx: lstep[0] * Math.cos(a) - lstep[1] * Math.sin(a), ly: lstep[0] * Math.sin(a) + lstep[1] * Math.cos(a) });
-  for (let b = 0; b < 5; b++) { rot.push(R(-72 * b * (1 - e) * DEG)); rotH.push(R(72 * b * e * DEG)); }
+  for (let b = 0; b < NF; b++) { rot.push(R(-SEC * b * (1 - e) * DEG)); rotH.push(R(SEC * b * e * DEG)); }
   const C0 = CX - BX0, C1 = CY - BY0, [y0, y1] = MW.rows(BH, mode.band);
   for (let y = y0; y < y1; y++) for (let x = 0; x < BW; x++) {
     let r = 0, g = 0, b = 0, cov = 0, edge = 0;
@@ -1353,7 +1370,7 @@ function bakeMacro() {
 // lies on top and each later blade comes out from under the one before it.
 function bladeAt(px, py, e) {
   const loc = mod(Math.atan2(px, -py) / DEG - TH0, 360);
-  for (let bb = 0; bb <= 4; bb++) if (mod(loc + 72 * bb * e, 360) < 72) return bb;
+  for (let bb = 0; bb < NF; bb++) if (mod(loc + SEC * bb * e, 360) < SEC) return bb;
   return -1;
 }
 
@@ -1469,16 +1486,18 @@ function pencilBatch(ctx, list) {
 // The pencil changes weight with the job: the ambitus and the first sector pressed firm, its
 // repeats and the plate lines lighter, the mirror axes lightest.
 function buildConstruction() {
-  const B0 = TH0 + 36, rimAt = b => RPX * ambF(mod(b, 360));
+  const B0 = TH0 + SEC / 2, rimAt = b => RPX * ambF(mod(b, 360)), DEGS = String(+SEC.toFixed(1)), five = NF === N_ECHINUS;
   add(0.38, 0.5, (c, p) => pencilCross(c, CX, CY, 10, { prog: p, seed: 'centre', tone: tn(0.7) }));
   // the ambitus, on the soft pentagon the test will fill
   add(0.46, 0.92, (c, p) => { const pts = [], a = 17; for (let b = a; b <= a + 361.5; b += 1) pts.push(at(b, rimAt(b))); pencil(c, pts, { prog: p, w: 1.4, tone: tn(0.92), overshoot: 3, seed: 'ambitus' }); });
   // the five mirror axes, each one straight chain line passing under the test: down one ambulacrum's
-  // median seam and out along the median seam of the interambulacrum opposite
-  PERR.forEach((b, i) => add(0.94 + i * 0.07, 1.2 + i * 0.07, (c, p) => centreLine(c, at(b, RM), at(b + 180, RM), { prog: p, w: 1.0, tone: tn(0.56), seed: 'mir' + i })));
+  // median seam and out along the median seam of the interambulacrum opposite (with an even n, the
+  // n axes run through opposite ambulacra and through opposite interambulacra)
+  const MIR = NF % 2 ? PERR : [...PERR.slice(0, NF / 2), ...INTR.slice(0, NF / 2)];
+  MIR.forEach((b, i) => add(0.94 + i * 0.07, 1.2 + i * 0.07, (c, p) => centreLine(c, at(b, RM), at(b + 180, RM), { prog: p, w: 1.0, tone: tn(0.56), seed: 'mir' + i })));
   // the ten area boundaries from the disc, light; sector 0's two edges, the wedge, run out firm from
   // under the test along their sutures to the ring, the other sector edges to the ring too
-  areaBounds(5).forEach((b, i) => {
+  areaBounds(NF).forEach((b, i) => {
     const edge0 = i === 0 || i === 2;
     add(1.14 + i * 0.028, 1.32 + i * 0.028, (c, p) => pencil(c, [at(b, discEdge(mod(b, 360)) * MM), at(b, i % 2 ? RH + 2 : RA)], { prog: p, w: edge0 ? 1.35 : i % 2 ? 0.95 : 1.1, tone: tn(edge0 ? 0.96 : i % 2 ? 0.58 : 0.74), overshoot: edge0 ? 2 : 3, seed: 'ray' + i }));
   });
@@ -1487,21 +1506,21 @@ function buildConstruction() {
   add(1.3, 1.5, (c, p) => { const pts = []; for (let b = 0; b <= 360.01; b += 0.5) pts.push(at(b, discEdge(mod(b, 360)) * MM)); pencil(c, pts, { prog: p, w: 1.0, tone: tn(0.7), seed: 'disc' }); });
   // sector 0's plates, column by column, from the disc down to the ambitus
   [[0, 0], [0, 1], [1, 0], [1, 1]].forEach(([isA, col], ci) => {
-    const sut = columnSutures(5, MM, CX, CY, 0, !!isA, col), t0 = 1.34 + ci * 0.07;
+    const sut = columnSutures(NF, MM, CX, CY, 0, !!isA, col), t0 = 1.34 + ci * 0.07;
     sut.forEach((pts, i) => add(t0 + i * 0.016, t0 + i * 0.016 + 0.06, (c, p) => pencil(c, pts, { prog: p, w: 0.95, tone: tn(0.62), seed: `sut${ci}:${i}` })));
   });
-  [0, 1].forEach(isA => add(1.36 + isA * 0.1, 1.62 + isA * 0.1, (c, p) => pencil(c, zigPts(5, MM, CX, CY, 0, !!isA), { prog: p, w: 0.95, tone: tn(0.62), seed: 'zig' + isA })));
+  [0, 1].forEach(isA => add(1.36 + isA * 0.1, 1.62 + isA * 0.1, (c, p) => pencil(c, zigPts(NF, MM, CX, CY, 0, !!isA), { prog: p, w: 0.95, tone: tn(0.62), seed: 'zig' + isA })));
   // the wedge's outer edge on the ring, firm
-  add(1.46, 1.6, (c, p) => pencilArc(c, CX, CY, RA, (TH0 - 90) * DEG, (TH0 - 90 + 72 * p) * DEG, { prog: 1, w: 1.3, tone: tn(0.92), seed: 'wedge' }));
+  add(1.46, 1.6, (c, p) => pencilArc(c, CX, CY, RA, (TH0 - 90) * DEG, (TH0 - 90 + SEC * p) * DEG, { prog: 1, w: 1.3, tone: tn(0.92), seed: 'wedge' }));
   // and light diagonal hatching in the wedge between the ring and the rim: each stroke runs at 45° to
   // the radius, out from under the test to the ring, so nothing stands on the rim like a spine
   add(1.5, 1.76, (c, p) => {
     const r = rngFor('urchin:hatch'), list = [], rOut = RA - 2.5, dB = (rOut - RPX) / ((rOut + RPX) / 2) / DEG;
-    for (let b = TH0 - dB; b < TH0 + 72; b += 2.5 + 0.6 * r()) {
+    for (let b = TH0 - dB; b < TH0 + SEC; b += 2.5 + 0.6 * r()) {
       const A = at(b, RPX * ambF(mod(b, 360)) - 3), B = at(b + dB, rOut + 3), run = [];
       for (let i = 0; i <= 80; i++) {
         const f = i / 80, x = A[0] + (B[0] - A[0]) * f, y = A[1] + (B[1] - A[1]) * f, ba = bearing(x - CX, y - CY), rr = Math.hypot(x - CX, y - CY), lb = mod(ba - TH0, 360);
-        if (rr >= RPX * ambF(ba) + 0.6 && rr <= rOut && lb > 1.0 && lb < 71.0) { if (!run.length) run.push([x, y], [x, y]); else run[1] = [x, y]; } else if (run.length) break;
+        if (rr >= RPX * ambF(ba) + 0.6 && rr <= rOut && lb > 1.0 && lb < SEC - 1) { if (!run.length) run.push([x, y], [x, y]); else run[1] = [x, y]; } else if (run.length) break;
       }
       if (run.length && Math.hypot(run[1][0] - run[0][0], run[1][1] - run[0][1]) > 4) list.push([run, tn(0.52 + 0.2 * r()), 0.95 + 0.2 * r()]);
     }
@@ -1509,23 +1528,25 @@ function buildConstruction() {
     pencilBatch(c, list.slice(0, n).map(([sg, tone, w], i) => [sg, { w, tone, overshoot: false, seed: 'hatch' + i }]));
   });
   // lettered on the sector's own arc, along it
-  add(1.72, 1.9, (c, p) => { const q = at(B0, RA + 7); c.save(); c.translate(q[0], q[1]); c.rotate(B0 * DEG); letterText(c, 'one sector, 72°', 0, 0, { size: 15, medium: 'pencil', align: 'center', prog: p, seed: 'one', tone: tn(0.84) }); c.restore(); });
+  add(1.72, 1.9, (c, p) => { const q = at(B0, RA + 7); c.save(); c.translate(q[0], q[1]); c.rotate(B0 * DEG); letterText(c, 'one sector, ' + DEGS + '°', 0, 0, { size: 15, medium: 'pencil', align: 'center', prog: p, seed: 'one', tone: tn(0.84) }); c.restore(); });
   // its four turns through 72°: four faint arrows round the ring, each from one sector edge to the next,
   // round from the hatched sector
-  for (let j = 1; j <= 4; j++) {
-    const a0 = TH0 - 72 * (j - 1) - 1.8, a1 = TH0 - 72 * j + 2.4, t0 = 1.62 + (j - 1) * 0.1;
+  for (let j = 1; j < NF; j++) {
+    const a0 = TH0 - SEC * (j - 1) - 1.8, a1 = TH0 - SEC * j + 2.4, t0 = 1.62 + (j - 1) * 0.1;
     add(t0, t0 + 0.24, (c, p) => {
       pencilArc(c, CX, CY, RA, (a0 - 90) * DEG, (a0 - 90 - (a0 - a1) * p) * DEG, { prog: 1, w: 1.0, tone: tn(0.6), seed: 'rot' + j });
       if (p > 0.97) { const e = a1 * DEG; arrowHead(c, at(a1, RA), [-Math.cos(e), -Math.sin(e)], 6.5, { w: 1.0, tone: tn(0.62), seed: 'arr' + j }); }
     });
   }
-  // Lovén's numbers, ambulacra I-V and interambulacra 1-5; Roman numerals spaced wide, so III reads as three strokes
-  PERR.forEach((b, i) => add(1.86 + i * 0.04, 1.98 + i * 0.04, (c, p) => { const q = at(b, RM + 22); letterText(c, PER_NAME[i], q[0], q[1] + 9, { size: 18, tracking: 4.6, medium: 'pencil', align: 'center', prog: p, seed: 'pn' + i, tone: tn(0.9) }); }));
-  INTR.forEach((b, i) => add(1.9 + i * 0.04, 2.02 + i * 0.04, (c, p) => { const q = at(b, RM + 20); letterText(c, INT_NAME[i], q[0], q[1] + 9, { size: 18, medium: 'pencil', align: 'center', prog: p, seed: 'in' + i, tone: tn(0.9) }); }));
+  // Lovén's numbers, ambulacra I-V and interambulacra 1-5; Roman numerals spaced wide, so III reads as three strokes.
+  // They number a five-fold test only: at another n the areas of sector 0 are named without them
+  if (five) PERR.forEach((b, i) => add(1.86 + i * 0.04, 1.98 + i * 0.04, (c, p) => { const q = at(b, RM + 22); letterText(c, PER_NAME[i], q[0], q[1] + 9, { size: 18, tracking: 4.6, medium: 'pencil', align: 'center', prog: p, seed: 'pn' + i, tone: tn(0.9) }); }));
+  if (five) INTR.forEach((b, i) => add(1.9 + i * 0.04, 2.02 + i * 0.04, (c, p) => { const q = at(b, RM + 20); letterText(c, INT_NAME[i], q[0], q[1] + 9, { size: 18, medium: 'pencil', align: 'center', prog: p, seed: 'in' + i, tone: tn(0.9) }); }));
   // the areas of sector 0 named beside their numbers, and the one plate that is not repeated
-  const notes = [[0, 'III', 'ambulacrum', 1, 22], [324, '3', 'interambulacrum', -1, 20], [36, '2', 'madreporite', 1, 20]];
+  const notes = [[0, 'III', 'ambulacrum', 1, 22], [360 - SEC / 2, '3', 'interambulacrum', -1, 20], [SEC / 2, '2', 'madreporite', 1, 20]];
   notes.forEach(([b, num, s, sd, ro], i) => add(2.08 + i * 0.07, 2.26 + i * 0.07, (c, p) => {
-    const q = at(b, RM + ro), x = q[0] + sd * (measureText(num, 18, { tracking: num.length > 1 ? 4.6 : 0 }) / 2 + 12);
+    const q = at(b, RM + ro), x = five ? q[0] + sd * (measureText(num, 18, { tracking: num.length > 1 ? 4.6 : 0 }) / 2 + 12)
+      : sd > 0 ? Math.min(q[0] + 4, TX1 - 12 - measureText(s, 15)) : Math.max(q[0] - 4, TX0 + 12 + measureText(s, 15)); // kept on the card
     letterText(c, s, x, q[1] + 8, { size: 15, medium: 'pencil', align: sd > 0 ? 'left' : 'right', prog: p, seed: 'nt' + i, tone: tn(0.78) });
   }));
   // the scale bar, centred under the specimen: 50 mm in 10 mm steps
@@ -1537,8 +1558,11 @@ function buildConstruction() {
 }
 
 // ---------- the label, and the trials on its baseline ----------
+const TURNS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'][NF - 1] + ' turn' + (NF > 2 ? 's' : '') + ' of ' + (+SEC.toFixed(1)) + '°';
 const LABEL = [{ text: 'No. 2', size: 12.5 }, { text: '*{Echinus esculentus} Linnaeus, 1758', size: 15 },
-  { text: 'edible sea urchin, test 140 mm', size: 12.5 }, { text: 'one sector, four turns of 72°', size: 12.5 }];
+  { text: 'edible sea urchin, test 140 mm', size: 12.5 }, { text: 'one sector, ' + TURNS, size: 12.5 }];
+// grown with another n, the label says so
+if (NF !== N_ECHINUS) LABEL.push({ text: 'grown here at n = ' + NF + ', not 5', size: 12.5 });
 // labelCard types every line at 13 px if the slip is wide enough for its longest line; its lines run
 // from pad + 1.05·13 to the last line's baseline: these are its metrics
 const LAB_PAD = 14, LAB_W = Math.ceil(Math.max(...LABEL.map(l => _marks(l.text).length)) * TYPE_PITCH * 13 + 2 * LAB_PAD + 6);
@@ -1610,17 +1634,19 @@ function frontRho(E) { const r = C => rhoOfS(sOfK(C.end * E, C)); return (r(COL_
 // do both in row bands: each marks its own wedge, and is handed the finished field once at load.
 let URCHIN_MW = false, WEDGE = false;
 function wedge() { if (!WEDGE) { markWedge(); LIVE = fieldSet(); WEDGE = true; } }
+// the workers start from the page's script without its query, so each job carries n and sets it first
+function foldTo(n) { if (n !== NF) { setFold(n); WEDGE = false; } }
 const MW_JOBS = {
-  grow(band, live) { wedge(); return bake(LIVE, live, band); },
-  setFan(F, D, M) { FIN = F; DISCQ = D; MN = M; wedge(); return {}; },
-  fan(band, e) { return composeTest({ fan: e, band }); },
+  grow(band, live, n) { foldTo(n); wedge(); return bake(LIVE, live, band); },
+  setFan(F, D, M, n) { foldTo(n); FIN = F; DISCQ = D; MN = M; wedge(); return {}; },
+  fan(band, e, n) { foldTo(n); return composeTest({ fan: e, band }); },
 };
 async function growLive(live) {
-  const parts = URCHIN_MW ? await MW.bandsPer(3, 'grow', live) : null;
+  const parts = URCHIN_MW ? await MW.bandsPer(3, 'grow', live, NF) : null;
   if (parts) for (const k of FIELDS) MW.merge(LIVE[k], parts, k, NH); else bake(LIVE, live);
 }
 async function fanTest(e) {
-  const parts = URCHIN_MW ? await MW.bandsPer(3, 'fan', e) : null;
+  const parts = URCHIN_MW ? await MW.bandsPer(3, 'fan', e, NF) : null;
   if (!parts) return composeTest({ fan: e });
   MW.merge(TEST_IMG.img.data, parts, 'D', BH); TEST_IMG.can.getContext('2d').putImageData(TEST_IMG.img, 0, 0);
   return TEST_IMG.can;
@@ -1640,10 +1666,10 @@ async function seekNow(t) {
     if (t >= S.t1) X.drawImage(S.cache, 0, 0);
     else for (const [a, b, f] of S.items) { const p = span(t, a, b); if (p > 0) f(X, p); }
   }
-  if (pf > 0) testShadow(X, [[TH0 - 288 * e, TH0 + 72, T.R]], true);
+  if (pf > 0) testShadow(X, [[TH0 - SEC * (NF - 1) * e, TH0 + SEC, T.R]], true);
   else if (pd > 0) {
     const parts = [[0, 360, T.rMad]];
-    if (E > 0) parts.push([TH0, TH0 + 72, frontRho(E)]);
+    if (E > 0) parts.push([TH0, TH0 + SEC, frontRho(E)]);
     testShadow(X, parts, E >= 1, alpha);
   }
   if (img) { X.globalAlpha = alpha; X.drawImage(img, BX0, BY0); X.globalAlpha = 1; }
@@ -1665,8 +1691,35 @@ async function init() {
   LIVE = fieldSet(); markWedge(); bakeMacro();
   TEST_FIN = mk(BW, BH); TEST_FIN.getContext('2d').drawImage(composeTest({ src: FIN }), 0, 0);
   MW.limit(6);
-  URCHIN_MW = !!(await MW.each('setFan', FIN, DISCQ, MN));
+  URCHIN_MW = !!(await MW.each('setFan', FIN, DISCQ, MN, NF));
 }
+// ---------- the site's control: the test at any n ----------
+// The site's slider calls draw(v): the plate code laid again with n = v sectors and every other value
+// as on the specimen, its colour peeled flat. Each row is one circle of latitude, from under the apical
+// disc to the ambitus, drawn as long as that circle is, so the n pale ambulacra run down the strip and
+// meet toward the top. Every plate keeps its own seed at every n. value is the plate's n.
+window.__vary = {
+  key: 'n', value: NF,
+  draw(v) {
+    const n = Math.round(clamp(v, 3, 8)), keep = foldState(), w = 440, h = 110, img = new Uint8ClampedArray(w * h * 4);
+    try {
+      setFold(n);
+      const s0 = sOfRho(T.rMad + 0.6), sc = (w - 8) / (TAU * T.R), y0 = Math.round((h - (S_AMB - s0) * sc) / 2), cx = w / 2;
+      for (let y = 0; y < h; y++) for (const [ox, oy] of [[0.25, 0.25], [0.75, 0.75]]) { // two samples a pixel
+        const s = s0 + (y + oy - y0) / sc; if (s < s0 || s > S_AMB) continue;
+        const rho = rhoOfS(s), half = Math.PI * rho * sc;
+        for (let x = Math.max(0, Math.floor(cx - half)); x < Math.min(w, Math.ceil(cx + half)); x++) {
+          const dx = x + ox - cx; if (Math.abs(dx) > half) continue;
+          EV.mat = 0; evalSurf(rho, mod(dx / (rho * sc * DEG), 360), 0, 0, null, s, 0); if (!EV.mat) continue;
+          const L = 0.3 * EV.r + 0.59 * EV.g + 0.11 * EV.b, q = (y * w + x) * 4; // chalk: a fifth of the saturation out, as on the test
+          img[q] += (L + (EV.r - L) * 0.8) / 2; img[q + 1] += (L + (EV.g - L) * 0.8) / 2; img[q + 2] += (L + (EV.b - L) * 0.8) / 2; img[q + 3] += 127.5;
+        }
+      }
+      for (let q = 0; q < img.length; q += 4) if (img[q + 3] && img[q + 3] < 255) { const k = 255 / img[q + 3]; img[q] *= k; img[q + 1] *= k; img[q + 2] *= k; } // unpremultiply the edge
+    } finally { restoreFold(keep); }
+    return { w, h, data: img };
+  },
+};
 kitStart(init, seek);
 </script>
 </body></html>

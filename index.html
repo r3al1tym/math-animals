@@ -303,41 +303,48 @@ const grainTile = () => {
 grainTile();
 const GH = 'https://github.com/r3al1tym/math-animals/blob/main/', HERO = 5.2;
 const P = [
-  { d: '01-honeybee', ms: 2400, run: 'Relaxing wax circles into hexagons', nm: 'Honeybee comb', bin: 'Apis mellifera Linnaeus, 1758', tx: 'Hymenoptera',
+  { d: '01-honeybee', ms: 2400, run: "Ray-casting the wax cells", nm: 'Honeybee comb', bin: 'Apis mellifera Linnaeus, 1758', tx: 'Hymenoptera',
     paper: ['T. C. Hales', 'The honeycomb conjecture', '<i>Discrete &amp; Computational Geometry</i> 25 (2001)'],
     finding: 'Of all the ways to divide a plane into cells of equal area, the regular hexagon uses the least wall.',
     f: 'P<sub>n</sub> = √(4n · tan(π/n))', f2: 'wall per unit cell: triangle 4.559, square 4.000, hexagon 3.722',
-    built: 'A band of 5.3 mm circles relaxes into hexagons, as warm wax is proposed to flow (Karihaloo, Zhang and Wang, 2013). Each cell is then ray-cast as a prism of wax under a 0.3 mm coping, on a base of three rhombi.' },
-  { d: '02-sea-urchin', ms: 3200, run: 'Laying 20 columns of plates', nm: 'Edible sea urchin', bin: 'Echinus esculentus Linnaeus, 1758', tx: 'Echinoidea',
+    built: 'A band of 5.3 mm circles relaxes into hexagons, as warm wax is proposed to flow (Karihaloo, Zhang and Wang, 2013). Each cell is then ray-cast as a prism of wax under a 0.3 mm coping, on a base of three rhombi.',
+    vary: {"key": "angle", "sym": "<i>α</i>", "value": 120, "real": 120, "min": 60, "max": 120, "step": 30, "scale": "lin", "w": 480, "h": 160, "marks": [[60, "triangles"], [90, "squares"], [120, "hexagons"]], "noun": "comb", "idle": "Move <i>α</i>, the cell’s corner angle in degrees, to tile the plane with other cells.", "cap": "Cells of the worker cell’s area with corners of <i>α</i> = {v}°{real}, at 1.5 x: walls in pencil, and in grey the corners their circles leave.", "realNote": ", the bees’ hexagons", "unit": "°"} },
+  { d: '02-sea-urchin', ms: 3200, run: "Laying plates down each column", nm: 'Edible sea urchin', bin: 'Echinus esculentus Linnaeus, 1758', tx: 'Echinoidea',
     anatomy: 'From the anatomy of the Echinidae test',
     finding: 'The test is twenty columns of plates in ten double areas: five narrow ambulacra, pierced for the tube feet, alternating with five broad interambulacra.',
     f: 'φ<sub>j</sub> = θ − j · 72°', f2: 'five-fold symmetry: one sector, turned four times, j = 0 … 4',
-    built: 'One sector of plates is laid by arc length down a superellipse dome 140 mm across and 108 mm tall, then turned four times about the apex.' },
-  { d: '03-dragonfly', ms: 2300, run: 'Dividing the wing into 2,611 cells', nm: 'Emperor dragonfly', bin: 'Anax imperator Leach, 1815', tx: 'Odonata',
+    built: 'One sector of plates is laid by arc length down a superellipse dome 140 mm across and 108 mm tall, then turned four times about the apex.',
+    vary: {"key": "n", "sym": "<i>n</i>", "value": 5, "real": 5, "min": 3, "max": 8, "step": 1, "scale": "lin", "w": 440, "h": 110, "marks": [[4, "four"], [5, "five"], [6, "six"], [7, "seven"]], "noun": "test", "idle": "Move <i>n</i> to lay the plates in another number of sectors.", "cap": "The test peeled flat at <i>n</i> = {v}: each row a circle of latitude, from under the apical disc to the ambitus, as long as that circle is.", "realNote": ", as in <i>Echinus</i>"} },
+  { d: '03-dragonfly', ms: 2300, run: "Scattering the wings' seeds", nm: 'Emperor dragonfly', bin: 'Anax imperator Leach, 1815', tx: 'Odonata',
     paper: ['J. Hoffmann, S. Donoughe, K. Li, M. K. Salcedo and C. H. Rycroft', 'A simple developmental model recapitulates complex insect wing venation patterns', '<i>PNAS</i> 115 (2018)'],
     finding: 'Measuring wing cells across 232 species of dragonflies and damselflies, they found that inhibitory centres spaced evenly between the main veins, with the small veins set where those signals are weakest, reproduce the wings.',
     f: 'p ∈ V<sub>s</sub>  ⇔  |p − s| ≤ |p − o|', f2: 'a point belongs to the cell of its nearest centre s, against every other centre o',
-    built: 'The wing divides into <b>2,611 cells</b>, each wall midway between two centres. It is the only plate of the ten that passed blind review.' },
-  { d: '04-orb-weaver', ms: 2300, run: 'Solving Rayleigh’s growth rate', nm: 'Garden orb-weaver', bin: 'Araneus diadematus Clerck, 1757', tx: 'Araneae',
+    built: 'The wing divides into <b>2,611 cells</b>, each wall midway between two centres. It is the only plate of the ten that passed blind review.',
+    vary: {"key": "ex", "sym": "<i>d</i><sub>min</sub>/<i>d</i>", "value": 1, "real": 1, "min": 0, "max": 1, "step": 0.05, "scale": "lin", "w": 480, "h": 160, "marks": [[0, "random"], [1, "spaced"]], "noun": "wings", "idle": "Move <i>d</i><sub>min</sub> to run the model.", "cap": "A 16 mm patch of membrane whose cells shrink from root to tip, its seeds kept at least {v} <i>d</i> apart{real}, at the wing’s own density; each cell is the region nearest its seed.", "realNote": ", the minimum spacing of Hoffmann et al.’s model"} },
+  { d: '04-orb-weaver', ms: 2300, run: "Beading every capture turn", nm: 'Garden orb-weaver', bin: 'Araneus diadematus Clerck, 1757', tx: 'Araneae',
     paper: ['Lord Rayleigh', 'On the instability of jets', '<i>Proc. London Math. Soc.</i> 10 (1878)'],
     finding: 'A cylinder of liquid is unstable: it breaks into drops, and the fastest-growing disturbance has a wavelength of about nine radii.',
     f: 'σ² ∝ x(1 − x²) I<sub>1</sub>(x) / I<sub>0</sub>(x)', f2: 'growth rate of a disturbance of wavenumber k on a thread of radius r, x = kr; fastest at x = 0.697',
-    built: 'The page solves Rayleigh’s growth rate itself and beads the glue every <b>9.01 radii</b>, 144 µm on a 16 µm coat, along an Archimedean spiral with 31 rays (web geometry from Zschokke, 1993 and 2011).' },
-  { d: '05-nautilus', ms: 2600, run: 'Laying 35 septa on the spiral', nm: 'Chambered nautilus', bin: 'Nautilus pompilius Linnaeus, 1758', tx: 'Cephalopoda',
+    built: 'The page solves Rayleigh’s growth rate itself and beads the glue every <b>9.01 radii</b>, 144 µm on a 16 µm coat, along an Archimedean spiral with 31 rays (web geometry from Zschokke, 1993 and 2011).',
+    vary: {"key": "lam", "sym": "<i>λ</i>/<i>r</i>", "value": 9.01, "real": 9.01, "min": 4, "max": 30, "step": 0.01, "scale": "log", "w": 480, "h": 120, "marks": [[5, "stable"], [9.01, "fastest"], [18, "long"]], "noun": "web", "idle": "Move <i>λ</i> to run the model.", "cap": "1.3 mm of the glue coat at ×100, <i>r</i> = 16 µm, broken into beads every {v} <i>r</i>{real}; below 2π <i>r</i> it stays smooth.", "realNote": ", the fastest-growing ripple of the Rayleigh–Plateau instability"} },
+  { d: '05-nautilus', ms: 2600, run: "Sealing septa along the spiral", nm: 'Chambered nautilus', bin: 'Nautilus pompilius Linnaeus, 1758', tx: 'Cephalopoda',
     paper: ['H. Moseley', 'On the geometrical forms of turbinated and discoid shells', '<i>Phil. Trans. R. Soc.</i> 128 (1838)'],
     finding: 'Measured shells widen by the same ratio every whorl, 2.83 to 3.02: the shell is a logarithmic spiral.',
     f: 'r = a e<sup>bθ</sup>', f2: 'b = 0.175, so each whorl widens by W = e<sup>2πb</sup> = 3.00',
-    built: 'Thirty-five septa, each the last one scaled and turned 25°. The trial spirals below the shell compare W = 3.00 with the golden spiral’s W = φ⁴ = 6.85; 80 measured shells average <b>2.9</b> (Bartlett, 2018), so the nautilus is not a golden spiral.' },
-  { d: '06-camp-pitar', ms: 1900, run: 'Running the reaction along the margin', nm: 'Camp pitar', bin: 'Lioconcha castrensis (Linnaeus, 1758)', tx: 'Bivalvia',
+    built: 'Thirty-five septa, each the last one scaled and turned 25°. The trial spirals below the shell compare W = 3.00 with the golden spiral’s W = φ⁴ = 6.85; 80 measured shells average <b>2.9</b> (Bartlett, 2018), so the nautilus is not a golden spiral.',
+    vary: {"key": "W", "sym": "<i>W</i>", "value": 3, "real": 3, "min": 1.8, "max": 8, "step": 0.01, "scale": "log", "w": 440, "h": 220, "marks": [[2, "overlap"], [3, "touch"], [5, "open"], [6.85, "golden"]], "noun": "shell", "idle": "Move <i>W</i> to run the model.", "cap": "The half shell in section at <i>W</i> = {v}: the same first chamber grown to the same adult aperture, septa every 25°, only <i>W</i> changed.", "realNote": ", the rate measured on real shells"} },
+  { d: '06-camp-pitar', ms: 1900, run: "Writing tents along the margin", nm: 'Camp pitar', bin: 'Lioconcha castrensis (Linnaeus, 1758)', tx: 'Bivalvia',
     paper: ['H. Meinhardt', 'The Algorithmic Beauty of Sea Shells', 'Springer (1995)'],
     finding: 'The pigment pattern on a shell is the record of a reaction–diffusion system running along the growing edge, one row for each step of growth.',
     f: 'r = r<sub>0</sub> + (1 − r<sub>0</sub>) (1 − e<sup>−ke</sup>) / (1 − e<sup>−kE</sup>)', f2: 'von Bertalanffy growth: the margin r at age e, less any pauses',
-    built: 'The valve grows by accretion on that von Bertalanffy curve, fastest while young, with two growth checks. An activator–inhibitor reaction run along the lengthening mantle edge lays down its rows of <b>brown tents</b>.' },
-  { d: '07-sea-fan', ms: 2300, run: 'Growing toward 4,526 attractors', nm: 'Common sea fan', bin: 'Gorgonia ventalina Linnaeus, 1758', tx: 'Octocorallia',
+    built: 'The valve grows by accretion on that von Bertalanffy curve, fastest while young, with two growth checks. An activator–inhibitor reaction run along the lengthening mantle edge lays down its rows of <b>brown tents</b>.',
+    vary: {"key": "k", "sym": "<i>k</i>", "value": 0.92, "real": 0.92, "min": 0.1, "max": 3, "step": 0.01, "scale": "log", "w": 440, "h": 200, "marks": [[0.1, "steady"], [0.92, "plate"], [3, "crowded"]], "noun": "valve", "idle": "Move <i>k</i> to run the model.", "cap": "The valve at <i>k</i> = {v}, a growth line every twelfth of its life and the two checks heavier, beside its growth curve, r against age.", "realNote": ", the curve this valve was grown on"} },
+  { d: '07-sea-fan', ms: 2300, run: "Growing 156 steps of branches", nm: 'Common sea fan', bin: 'Gorgonia ventalina Linnaeus, 1758', tx: 'Octocorallia',
     paper: ['A. Runions, B. Lane and P. Prusinkiewicz', 'Modeling trees with a space colonization algorithm', '<i>Eurographics Workshop on Natural Phenomena</i> (2007)'],
     finding: 'A branching network grows when every tip advances toward the free space near it, and each point of space is used up once a branch reaches it.',
     f: 'v′ = v + D n̂,   n̂ ∝ Σ (s − v) / |s − v|', f2: 'each tip v steps a distance D toward the attractors s nearest it',
-    built: '<b>4,526 attractor points</b> spaced 1.9 mm apart fill the fan’s outline. A fusion rule, which is not in Runions et al., joins branches where they meet and closes the mesh.' },
+    built: '<b>4,526 attractor points</b> spaced 1.9 mm apart fill the fan’s outline. A fusion rule, which is not in Runions et al., joins branches where they meet and closes the mesh.',
+    vary: {"key": "a", "sym": "<i>a</i>", "value": 1.9, "real": 1.9, "min": 0.8, "max": 7, "step": 0.1, "scale": "log", "w": 320, "h": 130, "marks": [[0.8, "blade"], [1.9, "net"], [7, "tree"]], "noun": "fan", "idle": "Move <i>a</i> to run the model.", "cap": "A small half-fan grown by the same rule with attractors <i>a</i> = {v} mm apart{real}, pencilled at true size and thickness.", "realNote": ", the spacing the specimen on the plate is grown at", "unit": " mm"} },
   { d: '08-cone-shell', ms: 2900, run: 'Running 8,521 growth lines of the lip', nm: 'Textile cone', bin: 'Conus textile Linnaeus, 1758', tx: 'Gastropoda',
     paper: ['H. Meinhardt and M. Klingler', 'A model for pattern formation on the shells of molluscs', '<i>J. Theor. Biol.</i> 126 (1987)'],
     finding: 'An activator–inhibitor reaction along the shell’s lip, with a hormone that spreads through the whole animal, produces the cone’s cascades of triangles.',
@@ -347,16 +354,18 @@ const P = [
       marks: [[0.05, 'zigzags'], [0.1, 'triangles'], [0.22, 'beads'], [0.3, 'stripes'], [0.6, 'blank']],
       idle: 'Move <i>s</i><sub>b</sub> to run the model along the lip.', noun: 'shell',
       cap: 'The lip at <i>s</i><sub>b</sub> = {v}. One row per growth line, the newest at the foot.', realNote: ', Meinhardt’s value for <i>C. textile</i>' } },
-  { d: '09-angelfish', ms: 4200, run: 'Growing the skin from 3 to 13 stripes', nm: 'Semicircle angelfish', bin: 'Pomacanthus semicirculatus (Cuvier, 1831)', tx: 'Pomacanthidae',
+  { d: '09-angelfish', ms: 4200, run: "Growing the skin to 120 mm", nm: 'Semicircle angelfish', bin: 'Pomacanthus semicirculatus (Cuvier, 1831)', tx: 'Pomacanthidae',
     paper: ['S. Kondo and R. Asai', 'A reaction–diffusion wave on the skin of the marine angelfish <i>Pomacanthus</i>', '<i>Nature</i> 376 (1995)'],
     finding: 'As the juvenile grows, new stripes open between the old ones, as a Turing pattern on a growing skin predicts.',
     f: '∂u/∂t = f(u, v) + D<sub>u</sub> ∇²u', f2: 'two substances, u and v, react and diffuse on a skin that grows; with ∂v/∂t = g(u, v) + D<sub>v</sub> ∇²v',
-    built: 'The page solves the model once, in the fish’s own outline, and shows the same fish at 20, 40, 60 and 80 mm as the stripe count goes from <b>3 to 13</b>.' },
-  { d: '10-tortoise', ms: 4300, run: 'Growing nine rings on each scute', nm: 'Radiated tortoise', bin: 'Astrochelys radiata (Shaw, 1802)', tx: 'Testudines',
+    built: 'The page solves the model once, in the fish’s own outline, and shows the same fish at 20, 40, 60 and 80 mm as the stripe count goes from <b>3 to 13</b>.',
+    vary: {"key": "alpha", "sym": "<i>α</i>", "value": 3, "real": 3, "min": 1, "max": 6, "step": 0.1, "scale": "lin", "w": 516, "h": 180, "marks": [[1, "labyrinth"], [3, "semicircles"]], "noun": "fish", "idle": "Move <i>α</i> to run the model.", "cap": "The same reaction at <i>α</i> = {v} on the fish grown from 20 to 60 mm, shown at 29, 42 and 60 mm at true size{real}.", "realNote": ", the page’s own assumption, which gives the juvenile’s semicircles"} },
+  { d: '10-tortoise', ms: 4300, run: "Growing nine rings per scute", nm: 'Radiated tortoise', bin: 'Astrochelys radiata (Shaw, 1802)', tx: 'Testudines',
     anatomy: 'From how a scute grows',
     finding: 'Keratin is added only at a scute’s edges and never stretches, so every season’s outline stays on the shell as a ring around the hatchling’s own scute.',
     f: 'r<sub>k</sub> = r<sub>0</sub> (1 + 0.352 k)', f2: 'ring k is the areola r<sub>0</sub> scaled about its growth centre',
-    built: 'Each ring is the areola scaled about its growth centre: <b>nine rings</b> on a 36 mm hatchling’s scutes, with the radiating star pattern laid over them.' },
+    built: 'Each ring is the areola scaled about its growth centre: <b>nine rings</b> on a 36 mm hatchling’s scutes, with the radiating star pattern laid over them.',
+    vary: {"key": "l0", "sym": "<i>L</i><sub>0</sub>", "value": 36, "real": 36, "min": 12, "max": 150, "step": 1, "scale": "log", "w": 389, "h": 166, "marks": [[36, "accretion"], [150, "whole"]], "noun": "shell", "idle": "Move <i>L</i><sub>0</sub> to run the model.", "cap": "The keratin laid flat down the spine of a 150 mm shell grown from a hatchling of {v} mm{real}: each yellow areola is the hatchling’s scute, ringed by nine equal years of growth.", "realNote": ", the size radiated tortoises hatch at (32 to 40 mm)", "unit": " mm"} },
 ];
 const $ = id => document.getElementById(id), slug = d => d.slice(3);
 
@@ -526,14 +535,16 @@ function fmtV(v, step) { const d = Math.max(0, Math.ceil(-Math.log10(step) - 1e-
 function varyHTML(p) {
   const c = p.vary;
   return `<div class="vary wait">
-        <div class="vrow"><label class="eq" for="v-${slug(p.d)}">${c.sym} = <output class="val">${fmtV(c.value, c.step)}</output></label>
+        <div class="vrow"><label class="eq" for="v-${slug(p.d)}">${c.sym} = <output class="val">${fmtV(c.value, c.step)}${c.unit || ''}</output></label>
           <div class="track"><input id="v-${slug(p.d)}" type="range" min="0" max="1" step="0.001"><div class="marks">${c.marks.map(([v, w]) => `<button type="button" data-v="${v}" tabindex="-1"${v === c.real ? ' class="real"' : ''}>${w}</button>`).join('')}</div></div></div>
         <figure><canvas width="${c.w}" height="${c.h}"></canvas><figcaption><span class="cap">${c.idle}</span><button type="button" class="btn ghost apply"></button></figcaption></figure>
       </div>`;
 }
 function bindVary(i, el, box, run) {
   const c = P[i].vary, ap = box.querySelector('.apply'), inp = box.querySelector('input'), cv = box.querySelector('canvas'), out = box.querySelector('.val'), cap = box.querySelector('.cap');
-  const log = c.scale === 'log', f = log ? Math.log : x => x, lo = f(c.min), hi = f(c.max), fmt = v => fmtV(v, c.step);
+  const log = c.scale === 'log', f = log ? Math.log : x => x, lo = f(c.min), hi = f(c.max), fmt = v => fmtV(v, c.step), unit = c.unit || '';
+  // the caption: the value at {v}; the note on the published value at {real}, or straight after the value
+  const capOf = v => { const r = Math.abs(v - c.real) < c.step / 2 ? c.realNote : ''; return c.cap.includes('{real}') ? c.cap.replace('{v}', fmt(v)).replace('{real}', r) : c.cap.replace('{v}', fmt(v) + r); };
   const toV = u => { const x = lo + (hi - lo) * u; return Math.min(c.max, Math.max(c.min, Math.round((log ? Math.exp(x) : x) / c.step) * c.step)); }, toU = v => (f(v) - lo) / (hi - lo);
   box.querySelectorAll('.marks button').forEach(b => { b.style.left = (toU(+b.dataset.v) * 100).toFixed(2) + '%'; b.onclick = () => set(+b.dataset.v); });
   let grown = c.value, cur = c.value, busy = false, want = null;
@@ -543,14 +554,14 @@ function bindVary(i, el, box, run) {
     while (want !== null && live()) {
       const v = want; want = null; const s = await live().vary(v); if (!s) break;
       cv.getContext('2d').putImageData(new ImageData(s.data, s.w, s.h), 0, 0);
-      cap.innerHTML = c.cap.replace('{v}', fmt(v) + (Math.abs(v - c.real) < c.step / 2 ? c.realNote : '')); box.classList.remove('wait');
+      cap.innerHTML = capOf(v); box.classList.remove('wait');
     }
     busy = false;
   };
   const sync = () => { const off = Math.abs(cur - grown) > 1e-9 && !box.classList.contains('held') && !el.classList.contains('busy');
-    ap.classList.toggle('show', off); ap.disabled = !off; if (off) ap.innerHTML = `<span>Grow the ${c.noun || 'plate'} at ${c.sym} = ${fmt(cur)}</span>`; };
+    ap.classList.toggle('show', off); ap.disabled = !off; if (off) ap.innerHTML = `<span>Grow the ${c.noun || 'plate'} at ${c.sym} = ${fmt(cur)}${unit}</span>`; };
   const set = v => {
-    cur = v; inp.value = toU(v); out.textContent = fmt(v); want = v;
+    cur = v; inp.value = toU(v); out.textContent = fmt(v) + unit; want = v;
     if (!el.classList.contains('on') && !el.classList.contains('busy')) run('');
     sync();
     if (!busy) draw();

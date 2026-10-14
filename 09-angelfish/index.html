@@ -1102,7 +1102,7 @@ function rdModel(o) {
   }
   const snaps = [];
   const snap = (s, phase) => { const f = new Float32Array(BW * BH), fv = new Float32Array(BW * BH); sampleTo(G, f, 'u'); sampleTo(G, fv, 'v'); snaps.push({ s, L: s * TL, phase, u: f, v: fv }); };
-  const dtk = o.dtk ?? 0.2, rf = o.refine ?? 1.4; const dtFor = (s) => Math.min(1, dtk * (G.hc * s) * (G.hc * s) / Dv);
+  const dtk = o.dtk ?? 0.2, rf = o.refine ?? 1.4, dtM = o.dtMax ?? 1; const dtFor = (s) => Math.min(dtM, dtk * (G.hc * s) * (G.hc * s) / Dv);
   let s = L0 / TL, upd = 0;
   // phase A: the small fish holds its size while the reaction spreads forward from the tail
   for (let q = 0; q < nSnapA; q++) { const dt = dtFor(s), n = Math.round(TA / nSnapA / dt); steps(G, n, s, 0, dt); upd += n * G.list.length; snap(s, 'A'); }
@@ -1126,6 +1126,9 @@ function rdModel(o) {
 // basal activator production c = 0.05, doubling time 3000, the 20 mm fish held 900 while the
 // reaction spreads from its tail, then grown by similarity to 120 mm.
 const REAL = { TL: TL_MM, L0: L0_MM, L1: TL_MM, Du: 0.0075, Dv: 0.1875, e: 2, c: 0.05, T2: 3000, TA: 900, box: BOX, tail: TAIL, inside: (x, y) => inPoly(RDOM, x, y), dtk: 0.33 };
+// ?alpha=2 grows the fish at another anisotropy (the site's Apply button does this through
+// self.__query); the trials keep their settings and the tick stays on alpha = 3
+const ALPHA = (() => { const v = Number(new URLSearchParams(self.__query ?? location.search).get('alpha')); return v >= 1 && v <= 6 ? Math.round(v * 10) / 10 : 1 + REAL.e; })();
 // The trials are the same solver on the same outline at a coarser grid (0.8 mm), each changing one
 // setting (the spots change two: the anisotropy and the basal production). alpha = 1 + e.
 // c = 0.26 raises the activator's basal production until the dark skin breaks into dots.
@@ -1602,7 +1605,8 @@ function buildConstruction(TR) {
   // the row's common midline
   group('rax', 1.4, 1.7, (g, p) => { const a = rowPt(-0.05, 0, 20), b = rowPt(1.04, 0, 80); pencilLine(g, a[0], a[1], b[0], b[1], { prog: p, tone: 0.7, w: 1.1, dash: [6, 5], seed: 'rax' }); });
   // the stripes carried on past the body: whole arcs round the tail, short runs past the head's edge
-  ARCS = stripeArcs();
+  // at another alpha the stripes are not shown to be arcs about the tail: none is carried on or dimensioned
+  ARCS = ALPHA === 1 + REAL.e ? stripeArcs() : { full: [], ext: [] };
   group('arcs', 3.95, 4.3, (g, p) => {
     ARCS.full.forEach((A, i) => pencil(g, arcPts(A.a.th, A.b.th, A.a.r, A.b.r), { prog: stag(p, i, ARCS.full.length, 0.06), w: 1.35, seed: 'arc' + i, tremor: 0.2 }));
     ARCS.ext.forEach((c, i) => { const d = 0.075 / c.r * c.dir; pencil(g, arcPts(c.th, c.th + d, c.r, c.r), { prog: p, w: 1.3, tone: 0.9, seed: 'ext' + i, tremor: 0.2, taper: 1 }); });
@@ -1634,7 +1638,10 @@ function buildConstruction(TR) {
 }
 let DIM = null, MEAN = 8;
 function buildNotes() {
-  const N = [['Turing (1952) on a growing skin', 16], ['D_{v}/D_{u} = 25,  α = 3 round the tail', 15], ['stripes stay ≈ ' + MEAN.toFixed(1) + ' mm apart; new ones insert', 15]];
+  // at another alpha only what the code measured on that fish: the spacing at 120 mm, and insertions if any
+  const born = SOL.tracks.tracks.some(t => t.start > 0), sp = isFinite(MEAN) ? MEAN.toFixed(1) : null;
+  const N = [['Turing (1952) on a growing skin', 16], ['D_{v}/D_{u} = 25,  α = ' + ALPHA + ' round the tail', 15],
+    ALPHA === 1 + REAL.e ? ['stripes stay ≈ ' + MEAN.toFixed(1) + ' mm apart; new ones insert', 15] : [(sp ? 'stripes ≈ ' + sp + ' mm apart at 120 mm' : 'no stripes on the midline') + (born ? '; new ones insert' : ''), 15]];
   group('notes', 1.36, 2.0, (g, p) => N.forEach(([s, z], i) => letterText(g, s, 120, 166 + i * 25 + (i ? 3 : 0), { size: z, medium: 'pencil', prog: stag(p, i, N.length, 0.12), seed: 'nt' + i })));
 }
 // The insertion at X 0.51, Y 0.34 of the 120 mm fish: a new stripe opening between two old ones,
@@ -1690,6 +1697,8 @@ function buildTrials() {
 // ---------- the label ----------
 const LABEL = [{ text: 'No. 9', size: 12.5 }, { text: '*{Pomacanthus semicirculatus}', size: 15 }, { text: '(Cuvier, 1831)', size: 12.5 },
   { text: 'semicircle angelfish, juvenile, 120 mm', size: 12.5 }, { text: 'Turing pattern on a growing skin', size: 12.5 }];
+// grown at another alpha, the label says so
+if (ALPHA !== 1 + REAL.e) LABEL.push({ text: 'grown here at α = ' + ALPHA + ', not 3', size: 12.5 });
 let LAB = null;
 function label(t) { labelCard(X, { x: LAB.x, y: LAB.y, w: LAB.w, lines: LABEL, prog: span(t, 3.86, 4.5), rot: -0.005, pad: 14, seed: 'label10' }); }
 
@@ -1738,12 +1747,12 @@ function seek(t) {
 const TIMES = {};
 // The four solves (the fish and its three trials) are independent, so they run at once on the
 // workers while the page bakes its card. Each solve is one explicit time march and stays whole.
-const SOLVE = { real: { ...REAL, h: 0.5, refine: 1.6, snapA: 10, snapB: 64 } };
+const SOLVE = { real: { ...REAL, e: ALPHA - 1, h: 0.5, refine: 1.6, snapA: 10, snapB: 64 } };
 TRIALS.forEach((tr, i) => { SOLVE[i] = { ...REAL, ...tr.o, h: 0.8, refine: 1.3, snapA: 1, snapB: 1 }; });
-const MW_JOBS = { rd: which => rdModel(SOLVE[which]) };
+const MW_JOBS = { rd(which, alpha) { if (which === 'real') SOLVE.real.e = alpha - 1; return rdModel(SOLVE[which]); } }; // a worker does not see the query: the fish's alpha comes with the job
 async function init() {
   let t0 = performance.now(); const tick = k => { const n = performance.now(); TIMES[k] = Math.round(n - t0); t0 = n; };
-  const solves = MW.all([['rd', 'real'], ...TRIALS.map((tr, i) => ['rd', i])]);
+  const solves = MW.all([['rd', 'real', ALPHA], ...TRIALS.map((tr, i) => ['rd', i])]);
   CARD = renderCard({ tone: 'white' }); FRAME = renderFrame(); tick('card');
   const rs = await solves; MW.done();
   SOL = rs ? rs[0] : rdModel(SOLVE.real); NA = SOL.snaps.filter(q => q.phase === 'A').length; tick('solve');
@@ -1756,9 +1765,36 @@ async function init() {
   const lw = Math.round(Math.max(...LABEL.map(l => measureText(l.text, l.size))) + 34); LAB = { w: lw, x: 122, y: 1068 };
   const xa = LAB.x + lw + 56 + TT / 2, xb = TX1 - 40 - TT / 2; TRX = TRIALS.map((q, i) => lerp(xa, xb, i / (TRIALS.length - 1)));
   TRI.forEach((q, i) => { q.tone = bakeTrialTone(i, q.sol, TRIALS[i].th); });
-  buildConstruction(TR); buildNotes(); buildFork(); buildTrials(); for (const gp of GROUPS) bakeGroup(gp); tick('pencil');
+  // the fork is ringed where it opens at alpha = 3; at another alpha it is left out
+  buildConstruction(TR); buildNotes(); if (ALPHA === 1 + REAL.e) buildFork(); buildTrials(); for (const gp of GROUPS) bakeGroup(gp); tick('pencil');
   window.__angelfish = { TIMES, counts: TR.counts, tracks: TR.tracks.length, births: TR.tracks.filter(t => t.start > 0).length };
 }
+// ---------- the site's control: the same reaction at any anisotropy alpha ----------
+// The site's slider calls draw(v): the same solver, outline and start at the tail with alpha = v and
+// every other value as on the fish, grown from 20 to 60 mm on a coarser grid (0.65 to 1.3 mm of skin)
+// in steps of up to 2, so only alpha changes. The fish at 29, 42 and 60 mm lie on one midline at true
+// size, coloured by the fish's own threshold rule. value is the plate's alpha.
+window.__vary = {
+  key: 'alpha', value: ALPHA,
+  draw(v) {
+    const sol = rdModel({ ...REAL, e: v - 1, L1: 60, h: 2, refine: 0.65, snapA: 1, snapB: 3, dtMax: 2 }), U0 = sol.U0, BW = sol.BW, BH = sol.BH;
+    const k = MM, gap = 14, w = 516, h = 180, x0 = 300, y0 = 300, Ls = sol.snaps.slice(1); // 28.8, 41.6 and 60 mm
+    const c = mk(w, h), g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(CARD, x0, y0, w, h, 0, 0, w, h);
+    const D = g.getImageData(0, 0, w, h).data, fr = []; g.clearRect(0, 0, w, h);
+    let x = (w - Ls.reduce((a, s) => a + 1.02 * s.L * k, 0) - 2 * gap) / 2;
+    for (const s of Ls) { const S = s.L * k; g.beginPath(); RDOM.forEach((p, i) => g[i ? 'lineTo' : 'moveTo'](x + (p[0] + 0.01) * S, h / 2 - p[1] * S)); g.closePath(); g.fill(); fr.push({ x, S, u: s.u }); x += 1.02 * S + gap; }
+    const A = g.getImageData(0, 0, w, h).data; // the outline's antialiased coverage
+    for (const f of fr) for (let j = 0; j < h; j++) for (let i = Math.max(0, Math.floor(f.x)); i < Math.min(w, Math.ceil(f.x + 1.02 * f.S)); i++) {
+      const o = (j * w + i) * 4, al = A[o + 3] / 255; if (!al) continue;
+      const tx = (i + 0.5 - f.x) / f.S - 0.01, ty = (h / 2 - j - 0.5) / f.S, F = f.u;
+      const gx = clamp((tx - BOX[0]) * TL_MM / sol.hb - 0.5, 0, BW - 1.001), gy = clamp((BOX[1] - ty) * TL_MM / sol.hb - 0.5, 0, BH - 1.001), q = Math.floor(gy) * BW + Math.floor(gx), fx = gx % 1, fy = gy % 1;
+      const u = F[q] * (1 - fx) * (1 - fy) + F[q + 1] * fx * (1 - fy) + F[q + BW] * (1 - fx) * fy + F[q + BW + 1] * fx * fy - U0;
+      let col = mix(NAVY_B, NAVY_T, clamp(0.5 + 1.2 * ty)); col = mix(col, BLUE, smooth(0.7, 1.65, u) * 0.85); col = mix(col, WHITE, smooth(1.75, 2.1, u));
+      for (let z = 0; z < 3; z++) D[o + z] += (col[z] - D[o + z]) * al;
+    }
+    return { w, h, data: D };
+  },
+};
 kitStart(init, seek);
 </script>
 </body></html>

@@ -957,7 +957,12 @@ importScripts(...${JSON.stringify(urls)});`], { type: 'text/javascript' }));
 // scutes are grown on it ring by ring, and then the carapace stands up into its dome.
 const X = document.getElementById('c').getContext('2d');
 const TAU = Math.PI * 2;
-const SCL = 150, L0 = 36, NR = 9, SA = SCL / L0; // specimen and hatchling carapace length (mm), annuli, areola → scute scale
+const SCL = 150, L0_HATCH = 36, NR = 9, SA_HATCH = SCL / L0_HATCH; // specimen and hatchling carapace length (mm), annuli, areola → scute scale
+let L0 = L0_HATCH;
+// ?l0=80 grows the whole plate from another hatchling (the site's control does this through self.__query);
+// at l0 = 150 the hatchling is already the specimen's size and the nine rings close on the seam
+{ const v = Number(new URLSearchParams(self.__query ?? location.search).get('l0')); if (v >= 12 && v <= 150) L0 = Math.round(v); }
+let SA = SCL / Math.min(L0, SCL * 0.999); // the bake workers take it from the page with the layout
 const DOME = { H: 66, front: 72, back: 78, half: 58, P: 2.7 }; // juvenile radiated tortoise, plan semi-axes and height (mm)
 const NB = 1440, DS = 0.25, ZF = 30; // … and the fold: below 30 mm the construction lays the flank out flat // azimuth bins for the dome's meridians; arc step (mm)
 const binOf = th => { let b = Math.round((th + Math.PI) / TAU * NB) % NB; return b < 0 ? b + NB : b; };
@@ -1125,7 +1130,7 @@ function finishScutes() {
       for (const cA of angs) { const d = Math.atan2(Math.sin(a - cA), Math.cos(a - cA)); if (Math.abs(d) < 0.12) a = cA + Math.sign(d || 1) * 0.12; }
       list.push(a);
     }
-    s.rays = list.map(a => ({ a, end: snapEnd(small ? 0.8 + 0.12 * (r() - 0.5) : 0.45 + 0.48 * Math.sqrt(r())), sm: small, fk: -1 + 0 * r(), fd: 0.06 + 0.05 * r(), w: small ? 2 * (0.85 + 0.3 * r()) : (0.55 + 0.55 * rw) * (0.85 + 0.3 * r()), jog: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(() => r() - 0.5), tint: r() }));
+    s.rays = list.map(a => { const e0 = small ? 0.8 + 0.12 * (r() - 0.5) : 0.45 + 0.48 * Math.sqrt(r()); return { a, e0, end: snapEnd(e0), sm: small, fk: -1 + 0 * r(), fd: 0.06 + 0.05 * r(), w: small ? 2 * (0.85 + 0.3 * r()) : (0.55 + 0.55 * rw) * (0.85 + 0.3 * r()), jog: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(() => r() - 0.5), tint: r() }; });
     s.tone = rngFor('tone:' + s.name)();
   }
 }
@@ -1133,25 +1138,26 @@ function finishScutes() {
 function Dat(s, a) { const f = (a + Math.PI) / TAU * NPH - 0.5, k0 = Math.floor(f), t = f - k0, A = s.D; return lerp(A[((k0 % NPH) + NPH) % NPH], A[(((k0 + 1) % NPH) + NPH) % NPH], t); }
 
 // a ray stops where a year stops: its end snapped to the growth line nearest
-const snapEnd = e => { const kk = clamp(Math.round((e * SA - 1) / (SA - 1) * NR), 1, NR); return (1 + kk * (SA - 1) / NR) / SA - 0.004; };
+const snapEnd = (e, sa = SA) => { const kk = clamp(Math.round((e * sa - 1) / (sa - 1) * NR), 1, NR); return (1 + kk * (sa - 1) / NR) / sa - 0.004; };
 // ---------- the keratin: colour and relief at any point of the chart ----------
 const desat = (c, f) => { const l = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]; return mix(c, [l, l, l], f); };
 const COL = { yel: desat(hex('#d2b46c'), 0.2), yelHi: desat(hex('#dcc68c'), 0.2), cream: desat(hex('#dccb98'), 0.2), ochre: desat(hex('#b0874a'), 0.2), dark: hex('#110a05'), dark2: hex('#2c1a0e'), amber: hex('#6c4628'), seam: hex('#120c08'), worn: hex('#a88c5c') };
 // pattern(s, x, y): the scute's colour and its relief (mm) at chart point (x, y) mm, and the gauge g
 // (0 at the growth centre, 1 on the seam): g·SA is the size, in hatchling scutes, of the ring there.
 const PAT = { col: [0, 0, 0], B: 0, g: 0, D: 1, gl: 1 }, CORE = 0.86; // the hatchling scute's pale core, as a fraction of it
-function pattern(s, x, y) {
+function pattern(s, x, y, sa = SA) {
   const dx = x - s.c[0], dy = y - s.c[1], d = Math.hypot(dx, dy), ph = Math.atan2(dy, dx), D = Math.max(0.05, Dat(s, ph));
-  const n1 = nzc('ker:1'), n2 = nzc('ker:2'), g = d / D, u = g * SA, rp = (u - 1) / (SA - 1) * NR + (u > 1.05 ? 0.1 * n1(x * 0.22 + 11, y * 0.22) : 0), bw = D / SA * (SA - 1) / NR;
+  const n1 = nzc('ker:1'), n2 = nzc('ker:2'), g = d / D, u = g * sa, rp = (u - 1) / (sa - 1) * NR + (u > 1.05 ? 0.1 * n1(x * 0.22 + 11, y * 0.22) : 0), bw = D / sa * (sa - 1) / NR;
   const k = rp < 0 ? -1 : Math.min(NR - 1, Math.floor(rp)), f = rp - Math.floor(rp), dl = (rp < 0 ? -rp : Math.min(f, 1 - f)) * bw; // dl: mm to the nearest growth line
   const groove = rp > -0.5 ? Math.exp(-Math.pow(dl / 0.13, 2)) : 0; // a fine incised line
   const drift = rngFor('drift:' + s.name)() - 0.5; // each scute's keratin a little lighter or darker than the next
   // the rays: each tapers from the areola's edge to a point, laid down by the growing edge
   let ray = 0, tint = 0, redge = 0, rs = 0;
-  const wob = 0.07 * n1(x * 0.6, y * 0.6) + 0.02 * n2(x * 2.2, y * 2.2), g0 = 1 / SA;
+  const wob = 0.07 * n1(x * 0.6, y * 0.6) + 0.02 * n2(x * 2.2, y * 2.2), g0 = 1 / sa;
   for (const r of s.rays) {
     let a = ph - r.a; a -= TAU * Math.round(a / TAU); if (Math.abs(a) > 1.3 || g >= r.end) continue;
-    const ps = d * Math.sin(a), perp = Math.abs(ps) + wob + 0.13 * n2(d * 1.1 + r.a * 17, r.a * 3) + 0.04 * n1(d * 4.5 + r.a * 7, r.a * 11); // an uneven edge
+    const ps = d * Math.sin(a); if (Math.abs(ps) + wob - 0.18 > r.w * 1.09 + 0.11) continue; // too far out for any edge noise (|n| < 1) to reach
+    const perp = Math.abs(ps) + wob + 0.13 * n2(d * 1.1 + r.a * 17, r.a * 3) + 0.04 * n1(d * 4.5 + r.a * 7, r.a * 11); // an uneven edge
     const w = r.w * Math.pow(clamp((r.end - g) / (r.end - g0 * (r.sm ? 0.3 : 1))), 0.85) * (1 + 0.08 * n2(d * 0.5 + r.a * 9, r.a * 5));
     const v = 1 - smooth(w - 0.11, w + 0.11, perp); if (v > ray) { ray = v; tint = r.tint; redge = smooth(w * 0.35, w, perp); rs = ps + 9 * r.a; }
   }
@@ -1494,17 +1500,20 @@ function detail() {
   for (let k = 0; k <= NR; k++) { const q = scalePoly(s.poly, s.c, (1 + k * (SA - 1) / NR) / SA).map(toS); mark(1.76 + k * 0.022, 1.9 + k * 0.022, (ctx, prog) => pencil(ctx, [...q, q[0]], { w: k === NR ? 2 : 1.6, tone: 1, prog, seed: 'det:r' + k, tremor: 0.12 })); }
   const c = toS(s.c), bwt = Dt * (SA - 1) / (SA * NR);
   mark(1.9, 1.96, (ctx, prog) => pencilCross(ctx, c[0], c[1], 6, { prog, seed: 'det:c', tone: 0.9 }));
-  for (let k = 0; k <= NR; k++) { const d = Dt * (1 + k * (SA - 1) / NR) / SA + (k < NR ? 0.5 * bwt : 2.2), sd = (k % 2 ? 7.5 : -7.5), p = [c[0] + ux * d * MM - uy * sd, c[1] + uy * d * MM + ux * sd]; mark(2.0 + k * 0.025, 2.06 + k * 0.025, (ctx, prog) => letterText(ctx, String(k), p[0], p[1] + 5.8, { ...o('det:k' + k, 11.5), prog })); }
+  // the numbers stand in the bands they count: grown from a hatchling so large that the bands are
+  // too narrow to letter, the rings are left unnumbered
+  if (bwt * MM >= 9.5) for (let k = 0; k <= NR; k++) { const d = Dt * (1 + k * (SA - 1) / NR) / SA + (k < NR ? 0.5 * bwt : 2.2), sd = (k % 2 ? 7.5 : -7.5), p = [c[0] + ux * d * MM - uy * sd, c[1] + uy * d * MM + ux * sd]; mark(2.0 + k * 0.025, 2.06 + k * 0.025, (ctx, prog) => letterText(ctx, String(k), p[0], p[1] + 5.8, { ...o('det:k' + k, 11.5), prog })); }
   // block two, beneath it: the rule
-  [['ring k = areola', 17], ['× (1 + 0.352 k)', 17], ['a costal, life size', 15.5]].forEach(([l, sz], i) => mark(2.25 + i * 0.12, 2.45 + i * 0.12, (ctx, prog) => letterText(ctx, l, DET.x, DET.y + (y1 - Pm[1]) * MM + 34 + i * 25, { ...o('det:f' + i, sz), prog })));
+  [['ring k = areola', 17], ['× (1 + ' + ((SA - 1) / NR).toFixed(3) + ' k)', 17], ['a costal, life size', 15.5]].forEach(([l, sz], i) => mark(2.25 + i * 0.12, 2.45 + i * 0.12, (ctx, prog) => letterText(ctx, l, DET.x, DET.y + (y1 - Pm[1]) * MM + 34 + i * 25, { ...o('det:f' + i, sz), prog })));
 }
 
 // ---------- the trials along the foot ----------
 // The same scutes and the same dome, drawn in plan at half size, the hatchling's keratin hatched: the
 // hatchling; the hatchling scaled up whole to this length (all areola, no rings, impossible for a
-// shell that grows only at its edges); and growth by accretion, this specimen, ticked.
+// shell that grows only at its edges); and growth by accretion, this specimen, ticked. They stay at
+// the measured 36 mm hatchling when the plate is grown from another (?l0=), and the tick with them.
 const TRS = 0.5, TRY = 924;
-const TRIALS = [{ key: 'whole', x: 216, k: 1, lab: ['× 4.17 whole, no rings'] }, { key: 'hatch', x: 480, k: 1 / SA, life: 1, lab: ['36 mm hatchling', 'life size'] }, { key: 'accr', x: 750, k: 1, lab: ['+ 9 rings, by accretion'], real: 1 }];
+const TRIALS = [{ key: 'whole', x: 216, k: 1, lab: ['× 4.17 whole, no rings'] }, { key: 'hatch', x: 480, k: 1 / SA_HATCH, life: 1, lab: ['36 mm hatchling', 'life size'] }, { key: 'accr', x: 750, k: 1, lab: ['+ 9 rings, by accretion'], real: 1 }];
 function trialLines(mode) {
   // polylines in chart mm. The hatchling's keratin, the areola, is shaded solid: in the hatchling and
   // in the hatchling scaled up whole it fills every scute; grown by accretion it is a small core inside
@@ -1513,9 +1522,9 @@ function trialLines(mode) {
   const dense = P => { const out = []; for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 1.5)); for (let k = 0; k < n; k++) out.push([lerp(a[0], b[0], k / n), lerp(a[1], b[1], k / n)]); } out.push(P[P.length - 1]); return out; };
   for (const s of SCUTES) {
     L.push({ pts: dense([...s.poly, s.poly[0]]), w: real ? 1.05 : 0.9, tone: real ? 1 : 0.62, g: 0 });
-    const ar = real ? scalePoly(s.poly, s.c, 1 / SA) : s.poly;
+    const ar = real ? scalePoly(s.poly, s.c, 1 / SA_HATCH) : s.poly;
     L.push({ pts: dense([...ar, ar[0]]), fill: 1, tone: real ? 1 : 0.4, g: 1 });
-    if (real) for (let k = 1; k < NR; k++) { const q = scalePoly(s.poly, s.c, (1 + k * (SA - 1) / NR) / SA); L.push({ pts: dense([...q, q[0]]), w: 0.75, tone: 0.82, g: 2 }); }
+    if (real) for (let k = 1; k < NR; k++) { const q = scalePoly(s.poly, s.c, (1 + k * (SA_HATCH - 1) / NR) / SA_HATCH); L.push({ pts: dense([...q, q[0]]), w: 0.75, tone: 0.82, g: 2 }); }
   }
   return L;
 }
@@ -1572,6 +1581,8 @@ function trials() {
 
 // ---------- the label ----------
 const LABEL = [{ text: 'No. 10', size: 12.5 }, { text: '*{Astrochelys radiata} (Shaw, 1802)', size: 15 }, { text: 'radiated tortoise, juvenile carapace, 150 mm', size: 12.5 }, { text: 'a scute grows only at its edges, ring by ring', size: 12.5 }];
+// grown from another hatchling, the label says so
+if (L0 !== L0_HATCH) LABEL.push({ text: 'grown here at L_{0} = ' + L0 + ' mm, not 36', size: 12.5 });
 function label(t) {
   const w = Math.round(Math.max(...LABEL.map(l => measureText(l.text, l.size, l))) + 30);
   labelCard(X, { x: TX1 - 36 - w, y: 1120, w, lines: LABEL, prog: clamp((t - 3.95) / 0.55), rot: -0.005, pad: 14, seed: 'label:06' });
@@ -1609,7 +1620,7 @@ const Q = new URLSearchParams(location.search);
 // The pencil needs only the layout, so the page draws it while the workers bake.
 function layout() { buildProfiles(); AY = FY0 + 104 + rE(PROF[binOf(-Math.PI / 2)], PROF[binOf(-Math.PI / 2)].M - 1, 0) * MM; buildScutes(); finishScutes(); }
 const MW_JOBS = {
-  setLayout(L) { PROF.length = 0; PROF.push(...L.PROF); NOTCH = L.NOTCH; SCUTES = L.SCUTES; SEAMS = L.SEAMS; AY = L.AY; return {}; },
+  setLayout(L) { PROF.length = 0; PROF.push(...L.PROF); NOTCH = L.NOTCH; SCUTES = L.SCUTES; SEAMS = L.SEAMS; AY = L.AY; SA = L.SA; return {}; },
   chart(band) { return bakeChart(band); },
   setChart(ch) { CH = ch; return {}; },
   flat(band) { return bakeFlat(band); },
@@ -1617,7 +1628,7 @@ const MW_JOBS = {
 };
 async function init() {
   layout();
-  const chart = MW.each('setLayout', { PROF, NOTCH, SCUTES, SEAMS, AY }).then(ok => ok && MW.bandsPer(2, 'chart'));
+  const chart = MW.each('setLayout', { PROF, NOTCH, SCUTES, SEAMS, AY, SA }).then(ok => ok && MW.bandsPer(2, 'chart'));
   CARD = renderCard({ tone: 'white', seed: 'card:06' }); FRAME = renderFrame();
   bakeConstruction();
   const cp = await chart;
@@ -1630,6 +1641,33 @@ async function init() {
     HERO_DOME = { d: dp ? renderDome(1, true, null, dp) : renderDome(1, true), sh: domeShadow(1) };
   }
 }
+// ---------- the site's control: the same carapace from any hatchling ----------
+// The site's slider calls draw(v): the keratin laid flat in a band 92 mm wide down the spine, head
+// to the left, coloured by pattern() with the areola at v/150 of each scute and every ray's end
+// snapped to that shell's growth lines; the same scutes, rays and noise at every v, so only the
+// hatchling changes. value is the plate's hatchling, L0 mm.
+window.__vary = {
+  key: 'l0', value: L0,
+  draw(v) {
+    const sa = SCL / Math.min(v, SCL * 0.999), res = 1.8, Y0 = -smaxAt(-Math.PI / 2) - 1, Y1 = smaxAt(Math.PI / 2) + 1, XH = 46;
+    const w = Math.round((Y1 - Y0) * res), h = Math.round(2 * XH * res), data = new Uint8ClampedArray(w * h * 4), id = new Int8Array(w).fill(-1);
+    const SC = SCUTES.map(s => ({ ...s, rays: s.rays.map(r => ({ ...r, end: snapEnd(r.e0, sa) })) })), GROUND = [226, 219, 204];
+    for (let j = 0; j < h; j++) {
+      const x = XH - (j + 0.5) / res; id.fill(-1); // the row is the line of constant x on the chart: up the band is the right side
+      SC.forEach((s, si) => {
+        const P = s.poly, ys = [];
+        for (let i = 0; i < P.length; i++) { const p = P[i], q = P[(i + 1) % P.length]; if ((p[0] <= x) !== (q[0] <= x)) ys.push(p[1] + (x - p[0]) / (q[0] - p[0]) * (q[1] - p[1])); }
+        ys.sort((a, b) => a - b);
+        for (let k = 0; k + 1 < ys.length; k += 2) for (let i = Math.max(0, Math.ceil((ys[k] - Y0) * res - 0.5)); i < Math.min(w, Math.ceil((ys[k + 1] - Y0) * res - 0.5)); i++) id[i] = si;
+      });
+      for (let i = 0; i < w; i++) {
+        const q = (j * w + i) * 4, c = id[i] < 0 ? GROUND : pattern(SC[id[i]], x, Y0 + (i + 0.5) / res, sa).col;
+        data[q] = c[0]; data[q + 1] = c[1]; data[q + 2] = c[2]; data[q + 3] = 255;
+      }
+    }
+    return { w, h, data };
+  },
+};
 kitStart(init, seek);
 </script>
 </body></html>

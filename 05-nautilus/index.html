@@ -866,17 +866,29 @@ const span = (t, a, b) => clamp((t - a) / (b - a));
 // ---------- the rule ----------
 // b = 0.175 (Moseley's nautilus measured 2.94 per whorl; a fit to a cut shell gives b = 0.176), so a
 // whorl grows by W = e^(2πb) = 3.00 and the curve crosses every radius at α = arccot b = 80.1°.
-const B = 0.175, WHORL = Math.exp(TAU * B), ALPHA = Math.atan(1 / B), SINA = Math.sin(ALPHA);
+const B_REAL = 0.175, W_REAL = Math.exp(TAU * B_REAL);
+// ?W=5 grows the whole plate at another whorl expansion rate (the site's Apply button does this through
+// self.__query); W rounds to 0.01, and 3.00 is the nautilus's own b
+const W_Q = (() => { const v = Math.round(Number(new URLSearchParams(self.__query ?? location.search).get('W')) * 100) / 100; return v >= 1.8 && v <= 8 && v !== +W_REAL.toFixed(2) ? v : null; })();
+const B = W_Q ? Math.log(W_Q) / TAU : B_REAL, WHORL = Math.exp(TAU * B), ALPHA = Math.atan(1 / B), SINA = Math.sin(ALPHA);
+// Above 3 the whorl keeps the nautilus's own section, its dorsum a third of the way out from the
+// pole (at W_REAL), so the whorls part and the coil opens; at or below 3 each whorl lies on the last.
+const OPEN = WHORL > W_REAL, WD = OPEN ? W_REAL : WHORL, LWD = Math.log(WD);
 // Septa every 25° (the mean spacing in Nautilus), 35 of them, the last two crowded as in an adult;
 // the living chamber runs 110° from the last septum to the aperture (85° to 110° in growing shells).
-const DSEP = 25 * DEG, NSEP = 35, BODY = 110 * DEG, CROWD = [0.72, 0.5];
+const DSEP = 25 * DEG, BODY = 110 * DEG, CROWD = [0.72, 0.5];
 const R_AP = 113 * MM;                       // the venter at the aperture: a 178 mm shell, natural size
+function septa(n) {                          // TH[k]: where septum k meets the outer wall
+  const TH = new Float64Array(n + 2);
+  TH[n] = -BODY; TH[n - 1] = TH[n] - CROWD[1] * DSEP; TH[n - 2] = TH[n - 1] - CROWD[0] * DSEP;
+  for (let k = n - 3; k >= 1; k--) TH[k] = TH[k + 1] - DSEP;
+  TH[0] = TH[1] - 1.5 * DSEP; TH[n + 1] = 1e9; return TH; // TH[0]: the cap of the first chamber
+}
+const R_CAP = R_AP * Math.exp(B_REAL * septa(35)[0]); // the first chamber, 5.7 mm out from the pole
+// at another W the same first chamber grows to the same adult, so the count of septa follows from W
+const NSEP = W_Q ? 3 + Math.max(1, Math.round((-Math.log(R_CAP / R_AP) / B - BODY) / DSEP - CROWD[0] - CROWD[1] - 1.5)) : 35;
 const ro = th => R_AP * Math.exp(B * th);    // θ = 0 at the aperture, negative toward the pole
-const TH = new Float64Array(NSEP + 2);       // TH[k]: where septum k meets the outer wall
-TH[NSEP] = -BODY; TH[NSEP - 1] = TH[NSEP] - CROWD[1] * DSEP; TH[NSEP - 2] = TH[NSEP - 1] - CROWD[0] * DSEP;
-for (let k = NSEP - 3; k >= 1; k--) TH[k] = TH[k + 1] - DSEP;
-const TH_CAP = TH[1] - 1.5 * DSEP;           // the cap of the first chamber
-TH[0] = TH_CAP; TH[NSEP + 1] = 1e9;
+const TH = septa(NSEP), TH_CAP = TH[0];
 const LIP = 9 * DEG;                         // the aperture's lateral salient runs ahead of the venter
 const SEP_SCALE = Math.exp(B * DSEP);        // one septum to the next: × 1.079, turned 25°
 
@@ -936,22 +948,24 @@ function cavityDepth(th, q, rho, ver) {
     const u = Math.min(1, dr / sag); d *= Math.pow(Math.sin(Math.PI / 2 * u), 0.55); // the dish meets the floor without a crease
   }
   if (ver === 2 && k < NSEP) { // the siphuncle: a half tube lying in the cut, its groove shallow
-    const rs = 0.0085 * ro(th), ds = Math.abs(rho - ro(th) * Math.pow(WHORL, -Q_S)) * SINA;
+    const rs = 0.0085 * ro(th), ds = Math.abs(rho - ro(th) * Math.pow(WD, -Q_S)) * SINA;
     if (ds < rs) d = Math.min(d, rs - Math.sqrt(rs * rs - ds * ds) + 0.4 * rs);
   }
   return d;
 }
 function point(x, y, ver) {
-  const [th, q, rho] = geo(x, y), out = { th, q, rho, cf: 0, cc: NAC, dep: 0, cav: CAV_W, reg: 0, k: 0, a: 1 };
+  const G = geo(x, y), th = G[0], rho = G[2], q = OPEN ? G[1] * TAU * B / LWD : G[1]; // q across the whorl's own section
+  const out = { th, q, rho, cf: 0, cc: NAC, dep: 0, cav: CAV_W, reg: 0, k: 0, a: 1 };
   if (th > lipAt(q) + 0.02) { out.reg = -1; return out; }                     // beyond the aperture
   if (th < TH_CAP - capBulge(q)) { // inside the first whorl: the thick embryonic shell around a small umbilical perforation
     const rp = 0.9 * MM; out.reg = 1; out.k = 0; out.th = TH_START; out.q = 0.5;
     out.cf = out.cfh = smooth(rp - 0.6, rp + 0.6, rho); out.cc = mix(PORC, NAC, 0.4); out.dep = 0.3 * H_TOP; out.cav = hex('#4a423c'); out.center = 1;
     return out;
   }
+  if (q > 1) { out.reg = -1; return out; }                                   // an open coil: between one whorl's dorsum and the last
   const psi = th - gS(q), k = septAt(psi), ro0 = ro(th); out.k = k;
-  const d0 = (ro0 - rho) * SINA, d1 = (rho - ro0 / WHORL) * SINA;
-  const outerW = th > 0.02 - TAU, tW = outerW ? 4.2 : Math.max(1.15, 0.0125 * ro0), free = th - TAU < TH_CAP, tD = free ? 0.6 * tW : Math.max(0.4, 0.004 * ro0);
+  const d0 = (ro0 - rho) * SINA, d1 = (rho - ro0 / WD) * SINA;
+  const outerW = th > 0.02 - TAU, tW = outerW ? 4.2 : Math.max(1.15, 0.0125 * ro0), free = OPEN || th - TAU < TH_CAP, tD = free ? 0.6 * tW : Math.max(0.4, 0.004 * ro0);
   let cf = 0, cc = NAC, cfh = 0;
   const cover = (d, half) => 1 - smooth(half - 0.55, half + 0.55, d);
   // the outer wall: porcelain outside with the flames' rust in it, nacre within
@@ -964,8 +978,8 @@ function point(x, y, ver) {
   const cd = cover(d1, tD);
   if (cd > cf) { cf = cd; cc = free ? PORC : mix(DORS, BLACK, smooth(-1.0, -0.2, th) * 0.8); }
   // the septa: the rear one from state 1, the front one only when sealed
-  const grad = Math.hypot(1 - gSd(q) / TAU, gSd(q) / (TAU * B)) / rho;
-  const rs = 0.0085 * ro0, dsp = Math.abs(rho - ro0 * Math.pow(WHORL, -Q_S)) * SINA, foramen = smooth(rs - 0.5, rs + 0.5, dsp);
+  const grad = (OPEN ? Math.hypot(1 - gSd(q) * B / LWD, gSd(q) / LWD) : Math.hypot(1 - gSd(q) / TAU, gSd(q) / (TAU * B))) / rho;
+  const rs = 0.0085 * ro0, dsp = Math.abs(rho - ro0 * Math.pow(WD, -Q_S)) * SINA, foramen = smooth(rs - 0.5, rs + 0.5, dsp);
   // (for the shadows a septum is never thinner than 1.6 px, so a sub-pixel septum still casts a clean one)
   const thk = 1 + 1.1 * (1 - smooth(0, 0.22, q)); // each septum thickens where it meets the outer wall
   if (k >= 1 && ver >= 1) { const d = (psi - TH[k]) / grad, c = cover(d, tSep(k) * thk / 2) * foramen; cfh = Math.max(cfh, cover(d, Math.max(1.6, tSep(k) * thk) / 2) * foramen); if (c > cf) { cf = c; cc = mix(NAC, NAC_W, smooth(0.3, 0.95, d / (tSep(k) * thk / 2))); out.wall = 1; } }
@@ -991,7 +1005,7 @@ function point(x, y, ver) {
   if (ver === 2 && k < NSEP && dsp < rs) cav = mix(TUBE, RING, dsp / rs * 0.5);
   if (th > -1.0) cav = mix(cav, BLACK, smooth(0.86, 0.99, q) * smooth(-1.0, -0.3, th) * 0.35);
   if (k === NSEP) { // the body chamber's growth lines, about 2.5 px apart at the venter and closing toward the dorsum, faded where they would alias
-    const n = nzc('growth:bc'), sp = 2.95 * Math.pow(WHORL, -q), ph = ro(th - lipAt(q)) * Math.hypot(1, B) / B / 3.0 + 2.5 * n(th * 4, 1.5);
+    const n = nzc('growth:bc'), sp = 2.95 * Math.pow(WD, -q), ph = ro(th - lipAt(q)) * Math.hypot(1, B) / B / 3.0 + 2.5 * n(th * 4, 1.5);
     const st = (0.45 + 0.55 * smooth(-0.3, 0.5, n(th * 14, 3.5))) * smooth(1.3, 2.1, sp);
     const line = Math.pow(0.5 + 0.5 * Math.cos(TAU * ph), 3), major = 1 + 0.8 * smooth(0.6, 0.95, Math.cos(TAU * ph / 6));
     cav = shade(cav, 1 - 0.1 * line * major * st);
@@ -1010,7 +1024,7 @@ function point(x, y, ver) {
   }
   out.cav = cav; out.reg = 1;
   // the silhouette's own edge: the venter of the outermost whorl, and the aperture margin
-  out.a = (th > 0.02 - TAU ? clamp(0.5 + d0) : 1) * clamp(0.5 + (lipAt(q) + 0.02 - th) * rho);
+  out.a = (th > 0.02 - TAU ? clamp(0.5 + d0) : 1) * clamp(0.5 + (lipAt(q) + 0.02 - th) * rho) * (OPEN ? clamp(0.5 + d1) : 1); // an open coil's dorsum is an edge too
   return out;
 }
 
@@ -1205,7 +1219,9 @@ function silhouette() { // the grown shell, flat in the shadow colour
 // measured to show the whorl's ratio, and the constant angle where it meets the curve again.
 const ARC = th => (ro(th) - ro(TH_S)) * Math.hypot(1, B) / B; // arc length of the spiral from its start
 const TH_S = Math.log(1.5 * MM / R_AP) / B;                   // the pencil starts 1.5 mm from the pole
-const K_Q = 25, TH_Q = TH[K_Q] + TAU, TH_DASH = 82 * DEG;     // the measured ray runs through septum 25; the curve runs on a quarter turn
+const K_Q = NSEP - 10, TH_Q = TH[K_Q] + TAU; // the measured ray runs through septum 25 (of 35)
+// the curve runs on a quarter turn; at a larger W it runs on only as far as the card has room for its rays
+const TH_DASH = !W_Q ? 82 * DEG : (() => { let th = TH_Q + 10 * DEG; while (th < 82 * DEG) { const [x, y] = at(th + DEG, ro(th + DEG) + 70); if (x < TX0 + 20 || x > TX1 - 20 || y < TY0 + 20) break; th += DEG; } return Math.min(82 * DEG, th); })();
 const K_RAY = NSEP - 14, PHI_SH = Math.atan2(SH.y, SH.x);                                        // rays through septa 21 to 35, one whorl of them
 const SPIRAL_T = [0.55, 1.6];
 const spiralProg = t => { const u = span(t, SPIRAL_T[0], SPIRAL_T[1]); return 0.45 * u + 0.55 * ease5(u); };
@@ -1216,7 +1232,9 @@ function spiralPts(th0, th1) { const pts = []; for (let th = th0; th < th1; th +
 // how far out the shell (or the pencil curve beyond it) reaches along septum k's ray
 const rayFoot = k => TH[k] + TAU <= 0.02 ? ro(TH[k] + TAU) + 2 : TH[k] + TAU <= TH_DASH ? ro(TH[k] + TAU) : ro(TH[k]) + 2;
 const NUMBERED = k => k === 1 || k % 5 === 0 || k >= K_RAY;
-const SEP_NOTE = [31, 32], SEP_NOTE_R = rayFoot(32) + 9; // the septum's step is marked between rays 31 and 32, just off the shell
+// the septum's step is marked between rays 31 and 32 (of 35), just off the shell; a wider shell (W
+// below 3) fills the card to the left, so there it is marked a quarter turn on, where the card is open
+const SEP_NOTE = W_Q && WHORL < W_REAL ? [NSEP - 6, NSEP - 5] : [NSEP - 4, NSEP - 3], SEP_NOTE_R = rayFoot(SEP_NOTE[1]) + 9;
 let CON = [];
 function buildConstruction() {
   const P = (pts, o, t0, t1) => CON.push({ pts, o, t0, t1 }), T = (str, x, y, o, t0, t1) => CON.push({ str, x, y, o, t0, t1 });
@@ -1244,7 +1262,12 @@ function buildConstruction() {
   const phq = phiOf(TH_Q), qx = Math.cos(phq), qy = Math.sin(phq), r1 = ro(TH[K_Q]), r2 = ro(TH_Q), Q = [PX + qx * r2, PY + qy * r2];
   P([[PX + qx * r1 - qy * 6, PY + qy * r1 + qx * 6], [PX + qx * r1 + qy * 6, PY + qy * r1 - qx * 6]], { seed: 'r1tick', w: 1.8, tone: 1.0 }, 1.66, 1.7);
   CON.push({ dot: Q, t0: 1.7, t1: 1.74 });
-  { const m = r1 + (r2 - r1) * 0.5; CON.push({ str: '× ' + (r2 / r1).toFixed(2) + ' a whorl:  ' + (r1 / MM).toFixed(0) + ' to ' + (r2 / MM).toFixed(0) + ' mm', x: PX + qx * m, y: PY + qy * m, rot: phq, o: { size: 15, medium: 'pencil', seed: 'ratio', tone: 1.0, align: 'center' }, t0: 1.74, t1: 1.98 }); }
+  { const m = r1 + (r2 - r1) * 0.5, s1 = '× ' + (r2 / r1).toFixed(2) + ' a whorl:', s2 = (r1 / MM).toFixed(0) + ' to ' + (r2 / MM).toFixed(0) + ' mm', o = { size: 15, medium: 'pencil', seed: 'ratio', tone: 1.0, align: 'center' };
+    if (W_Q && measureText(s1 + '  ' + s2, 15) > r2 - r1 - 30) { // a short ray at a small W: the note takes two lines over it, clear of the angle
+      const m2 = r1 + 12 + Math.max(measureText(s1, 15), measureText(s2, 15)) / 2;
+      CON.push({ str: s1, x: PX + qx * m2, y: PY + qy * m2, rot: phq, dy: -27, o, t0: 1.74, t1: 1.86 });
+      CON.push({ str: s2, x: PX + qx * m2, y: PY + qy * m2, rot: phq, o: { ...o, seed: 'ratio2' }, t0: 1.86, t1: 1.98 });
+    } else CON.push({ str: s1 + '  ' + s2, x: PX + qx * m, y: PY + qy * m, rot: phq, o, t0: 1.74, t1: 1.98 }); }
   // the constant angle: the curve crosses the radius at α = arccot b wherever it is met
   const tdir = (() => { const dx = B * Math.cos(phq) + Math.sin(phq), dy = B * Math.sin(phq) - Math.cos(phq), l = Math.hypot(dx, dy); return [dx / l, dy / l]; })();
   P([[Q[0] - tdir[0] * 50, Q[1] - tdir[1] * 50], [Q[0] + tdir[0] * 56, Q[1] + tdir[1] * 56]], { seed: 'tangent', w: 1.5, tone: 1.0, overshoot: 4 }, 1.98, 2.12);
@@ -1255,7 +1278,9 @@ function buildConstruction() {
   // the curator's notes, each beside what it measures: one septum's step, marked between two rays
   { const ka = SEP_NOTE[0], kb = SEP_NOTE[1], pa = phiOf(TH[ka]), pb = phiOf(TH[kb]), rA = SEP_NOTE_R; let d = pb - pa; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU;
     CON.push({ arc: [PX, PY, rA, pa, pa + d], t0: 2.25, t1: 2.35 });
-    const pm = pa + d / 2, xm = PX + Math.cos(pm) * (rA + 30), ym = PY + Math.sin(pm) * (rA + 30);
+    const pm = pa + d / 2, ym = PY + Math.sin(pm) * (rA + 30);
+    let xm = PX + Math.cos(pm) * (rA + 30);
+    if (W_Q) xm = Math.max(xm, TX0 + 16 + Math.max(measureText('a septum, 25°:', 14.5), measureText('× e^{25°·b} = 1.000', 14.5))); // a larger shell keeps the note on the card
     T('a septum, 25°:', xm, ym - 4, { size: 14.5, medium: 'pencil', seed: 'note:sep', tone: 1.0, align: 'right' }, 2.33, 2.48);
     T('× e^{25°·b} = ' + SEP_SCALE.toFixed(3), xm, ym + 21, { size: 14.5, medium: 'pencil', seed: 'note:sep2', tone: 1.0, align: 'right' }, 2.45, 2.6); }
 }
@@ -1263,7 +1288,7 @@ function drawConstruction(t) {
   for (const c of CON) {
     const p = span(t, c.t0, c.t1); if (p <= 0) continue;
     if (c.pts) pencil(X, c.pts, { ...c.o, prog: c.o.seed === 'spiral' ? spiralProg(t) : p });
-    else if (c.str && c.rot !== undefined) { X.save(); X.translate(c.x, c.y); X.rotate(c.rot); letterText(X, c.str, 0, -7, { ...c.o, prog: p }); X.restore(); }
+    else if (c.str && c.rot !== undefined) { X.save(); X.translate(c.x, c.y); X.rotate(c.rot); letterText(X, c.str, 0, c.dy ?? -7, { ...c.o, prog: p }); X.restore(); }
     else if (c.str) letterText(X, c.str, c.x, c.y, { ...c.o, prog: p });
     else if (c.dot) pencilDot(X, c.dot[0], c.dot[1], { r: 1.2, seed: 'Q' });
     else if (c.arc) pencilArc(X, ...c.arc, { prog: p, tone: 1.0, w: 1.5, seed: 'arc' });
@@ -1277,20 +1302,20 @@ function drawConstruction(t) {
 // whorls would cut into each other, so each lies deep in the last; at 3 the dorsum just meets the
 // last venter; above 3 the whorls part and the coil opens. φ^4 = 6.85 is the golden spiral's.
 const PHI4 = Math.pow((1 + Math.sqrt(5)) / 2, 4);
-const TRIAL_W = [2, WHORL, 5, PHI4];
-function trialStrokes(Wt, cx, cy, rap) {
-  const b = Math.log(Wt) / TAU, thCap = -Math.log(R_AP / ro(TH_CAP)) / b, r = th => rap * Math.exp(b * th);
+const TRIAL_W = [2, W_REAL, 5, PHI4]; // the published W stays the plate's own, whatever W the shell grew at
+function trialStrokes(Wt, cx, cy, rap, seed = 'trial:' + Wt.toFixed(3)) {
+  const b = Math.log(Wt) / TAU, thCap = -Math.log(R_AP / R_CAP) / b, r = th => rap * Math.exp(b * th);
   const raw = (th, rr) => [rr * Math.cos(phiOf(th)), rr * Math.sin(phiOf(th))];
   const inner = th => Math.max(r(th) / 3, th - TAU >= thCap ? r(th - TAU) : 0);
   const along = (th, s) => Math.exp(lerp(Math.log(r(th)), Math.log(inner(th)), s));
   const L = [], step = th => Math.min(0.05, 1.2 / r(th));
   // drawn as a hand draws a long curve: in a few overlapping strokes, each landing and lifting at its own weight
-  const rr = rngFor('trial:' + Wt.toFixed(3));
+  const rr = rngFor(seed);
   for (let a = thCap; a < -0.05;) { const b = Math.min(0, a + 1.5 + 0.7 * rr()), pts = []; for (let th = Math.max(thCap, a - 0.12); th < b; th += step(th)) pts.push(raw(th, r(th))); pts.push(raw(b, r(b))); L.push({ pts, w: 1.6, tone: 0.88 + 0.12 * rr() }); a = b; }
   let dor = []; // the dorsum, where it stands free of the last whorl
   for (let th = thCap; th <= 0; th += step(th)) { const free = th - TAU < thCap || r(th) / 3 > r(th - TAU) + 0.3; if (free) dor.push(raw(th, r(th) / 3)); else if (dor.length) { L.push({ pts: dor, w: 1.5, tone: 0.86 + 0.12 * rr() }); dor = []; } }
   if (dor.length > 1) L.push({ pts: dor, w: 1.5, tone: 0.86 + 0.12 * rr() });
-  if (Wt < WHORL - 0.2) { // the whorls overlap: the dorsum runs on inside the last whorl, and the band they share is hatched
+  if (Wt < W_REAL - 0.2) { // the whorls overlap: the dorsum runs on inside the last whorl, and the band they share is hatched
     const hid = []; for (let th = -TAU; th <= 0; th += step(th)) if (th - TAU >= thCap && r(th) / 3 < r(th - TAU) - 0.3) hid.push(raw(th, r(th) / 3));
     if (hid.length > 1) L.push({ pts: hid, w: 1.3, tone: 0.95 });
     for (let th = -TAU + 0.1; th < -0.04;) { const lo = r(th) / 3, hi = r(th - TAU), m = (lo + hi) / 2; if (hi > lo + 1.5) L.push({ pts: [raw(th, lo + 0.4), raw(th + (hi - lo) * 0.8 / m, hi - 0.4)], w: 1.05, tone: 0.85 + 0.15 * rr() }); th += 2.0 / m; }
@@ -1318,7 +1343,7 @@ function drawTrials(t) {
   TRIALS.forEach((tr, i) => {
     const p = span(t, tr.t0, tr.t0 + 0.42); if (p <= 0) return;
     tr.strokes.forEach((l, j) => pencil(X, l.pts, { w: l.w, tone: l.tone, tremor: 0.4, seed: 'trial' + i + ':' + j, prog: clamp(p * 1.6 - j / tr.strokes.length * 0.6) }));
-    const real = tr.Wt === WHORL, v = real ? 'W = 3.00' : tr.Wt === PHI4 ? 'W = φ^{4} = 6.85' : 'W = ' + tr.Wt;
+    const real = tr.Wt === W_REAL, v = real ? 'W = 3.00' : tr.Wt === PHI4 ? 'W = φ^{4} = 6.85' : 'W = ' + tr.Wt;
     const words = ['whorls overlap', 'whorls touch', 'the coil opens', 'the golden spiral'][i];
     letterText(X, v, TRIAL_X[i], TRIAL_Y + 102, { size: 14, medium: 'pencil', align: 'center', prog: span(t, tr.t0 + 0.3, tr.t0 + 0.45), seed: 'tv' + i, tone: 1.0 });
     letterText(X, words, TRIAL_X[i], TRIAL_Y + 125, { size: 12.5, medium: 'pencil', align: 'center', prog: span(t, tr.t0 + 0.38, tr.t0 + 0.52), seed: 'tw' + i, tone: 1.0 });
@@ -1329,10 +1354,11 @@ function drawTrials(t) {
 function drawTrialNote(t) {
   const x = TX1 - 30, y = 1046;
   letterText(X, 'the nautilus is not golden:', x, y, { size: 14.5, medium: 'pencil', align: 'right', prog: span(t, 4.45, 4.7), seed: 'note:gold', tone: 1.0 });
-  letterText(X, '× ' + WHORL.toFixed(2) + ' a whorl, against φ^{4} = ' + PHI4.toFixed(2), x, y + 25, { size: 14.5, medium: 'pencil', align: 'right', prog: span(t, 4.6, 4.9), seed: 'note:gold2', tone: 1.0 });
+  letterText(X, '× ' + W_REAL.toFixed(2) + ' a whorl, against φ^{4} = ' + PHI4.toFixed(2), x, y + 25, { size: 14.5, medium: 'pencil', align: 'right', prog: span(t, 4.6, 4.9), seed: 'note:gold2', tone: 1.0 });
 }
 function drawLabel(t) {
   const lines = [{ text: 'No. 5', size: 12.5 }, { text: '*{Nautilus pompilius} Linnaeus, 1758', size: 15 }, { text: 'chambered nautilus, half shell', size: 12.5 }, { text: 'r = a·e^{bθ},  b = 0.175', size: 12.5 }];
+  if (W_Q) lines.push({ text: 'grown here at W = ' + W_Q.toFixed(2) + ', not ' + W_REAL.toFixed(2), size: 12.5 }); // grown at another W, the label says so
   const w = Math.round(Math.max(...lines.map(l => measureText(l.text, l.size))) + 30);
   labelCard(X, { x: TX1 - 30 - w, y: 1104, w, lines, prog: span(t, 3.95, 4.5), rot: -0.005, pad: 14, seed: 'n01-label' });
 }
@@ -1353,6 +1379,21 @@ function seek(t) {
   lightFalloff(X);
   glass(X, t);
 }
+// ---------- the site's control: the same rule at any W ----------
+// The site's slider calls draw(v): the trials' own figure at W = v, pencil on a stretch of this card,
+// the same first chamber grown to the same adult venter with the same whorl and septa, one seed at
+// every v so only W changes. The plate itself is untouched. value is the W the plate grew at.
+window.__vary = {
+  key: 'W', value: +WHORL.toFixed(2),
+  draw(v) {
+    v = clamp(v, 1.8, 8); // the slider's range; below 1 the rule would not grow at all
+    const w = 440, h = 220, ox = 300, oy = 520, c = mk(ox + w, oy + h), x = c.getContext('2d');
+    x.drawImage(CARD, ox, oy, w, h, ox, oy, w, h);
+    const L = trialStrokes(v, ox + w / 2, oy + h / 2, 104, 'vary');
+    _graphite(x, L.map((l, j) => _trace(l.pts, { w: l.w, tone: l.tone, tremor: 0.4, seed: 'vary:' + j }, 1, l.w)), {});
+    return { w, h, data: x.getImageData(ox, oy, w, h).data };
+  },
+};
 kitStart(async () => {
   CARD = renderCard({ seed: 'n01' }); FRAME = renderFrame();
   const t0 = performance.now(); bakeShell(); console.log('bake ' + (performance.now() - t0).toFixed(0) + ' ms');

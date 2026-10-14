@@ -1032,10 +1032,15 @@ function besselI(nu, x) { let s = 0, t = Math.pow(x / 2, nu) / (nu === 0 ? 1 : 1
 const rpGrowth = x => x <= 0 || x >= 1 ? 0 : Math.sqrt(x * (1 - x * x) * besselI(1, x) / besselI(0, x));
 const RP = (() => { let a = 0.05, b = 0.99; for (let i = 0; i < 80; i++) { const m1 = a + (b - a) / 3, m2 = b - (b - a) / 3; if (rpGrowth(m1) < rpGrowth(m2)) a = m1; else b = m2; } const x = (a + b) / 2; return { x, ratio: TAU / x, sMax: rpGrowth(x) }; })();
 const GLUE_R = 16;                          // um: radius of the glue coat as it is laid
-const LAMBDA = RP.ratio * GLUE_R;           // um between beads
+// ?lam=5 lays the web's beads at another wavelength, in r (the site's Apply button does this through
+// self.__query); the trials' tick stays on the fastest-growing RP.ratio. Below 2π the coat stays smooth.
+let BEAD_RATIO = RP.ratio;
+{ const v = Number(new URLSearchParams(self.__query ?? location.search).get('lam')); if (v >= 4 && v <= 30 && v.toFixed(2) !== RP.ratio.toFixed(2)) BEAD_RATIO = +v.toFixed(2); }
+const GROWN = BEAD_RATIO !== RP.ratio, STABLE = BEAD_RATIO < TAU;
+const LAMBDA = BEAD_RATIO * GLUE_R;         // um between beads
 const BEAD_R = Math.cbrt(0.75 * GLUE_R * GLUE_R * LAMBDA); // um: each bead holds one wavelength of coat
 // the beads and their satellites along a length of thread (um), seeded per thread
-function beadsAlong(key, Lum, ratio = RP.ratio, r0 = GLUE_R) {
+function beadsAlong(key, Lum, ratio = BEAD_RATIO, r0 = GLUE_R) {
   const r = rngFor('beads:' + key), lam = ratio * r0, out = [];
   if (ratio < TAU) return out; // shorter than the circumference: the coat is stable and stays smooth
   const R = Math.cbrt(0.75 * r0 * r0 * lam);
@@ -1074,7 +1079,7 @@ for (const t of THREADS) {
   const n = Math.max(1, Math.round(t.len / 9)); t.pc = [];
   for (let k = 0; k < n; k++) { const f0 = k / n, f1 = (k + 1) / n, m = [t.a[0] + dx * (f0 + f1) / 2, t.a[1] + dy * (f0 + f1) / 2]; t.pc.push([f0, f1, cylGlint(m, tx, ty)]); }
 }
-const beadQ = t => ease5((t - T.bead[0]) / (T.bead[1] - T.bead[0])); // how far the coat has beaded
+const beadQ = t => STABLE ? 0 : ease5((t - T.bead[0]) / (T.bead[1] - T.bead[0])); // how far the coat has beaded
 
 // The beads at drawer scale: about seven to the millimetre, so two to a pixel. Each one's catch of the
 // window is splatted into a light buffer at its true position; the sum is the thread's glitter.
@@ -1090,7 +1095,7 @@ function bakeGlints() {
     // a bead is prolate along its thread (length 1.3 times width), so it sends the most light where the
     // thread lies square to the window: reflected power ~ e^2 / (e^2 cos^2 a + sin^2 a)^2, a from H to the thread
     const ux = (t.b[0] - t.a[0]) / t.len, uy = (t.b[1] - t.a[1]) / t.len, ca = (ux * HN[0] + uy * HN[1]), el = 1.32, pw = el * el / (el * el * ca * ca + 1 - ca * ca) ** 2 / (el * el);
-    for (const b of beadsAlong('s' + k, t.len * umPx, RP.ratio, GLUE_R * glueF(t) / f0)) {
+    for (const b of beadsAlong('s' + k, t.len * umPx, BEAD_RATIO, GLUE_R * glueF(t) / f0)) {
       const f = b.s / (t.len * umPx), bo = t.bw * 4 * f * (1 - f), x = lerp(t.a[0], t.b[0], f) - (t.b[1] - t.a[1]) / t.len * bo - 0.5, y = lerp(t.a[1], t.b[1], f) + (t.b[0] - t.a[0]) / t.len * bo - 0.5, e = (b.R / BEAD_R) ** 2 * pw;
       const sh = u0 => clamp((u0 - 0.5) * 1.8 + 0.5), i = Math.floor(x), j = Math.floor(y), u = sh(x - i), v = sh(y - j); if (i < 0 || j < 0 || i >= W - 1 || j >= H - 1) continue;
       E[j * W + i] += e * (1 - u) * (1 - v); E[j * W + i + 1] += e * u * (1 - v); E[(j + 1) * W + i] += e * (1 - u) * v; E[(j + 1) * W + i + 1] += e * u * v;
@@ -1305,10 +1310,10 @@ const inCard = p => p[0] > TX0 + 22 && p[0] < TX1 - 22 && p[1] > TY0 + 22 && p[1
   const CX = INS.c[0] - INS.R - 16, lam = Math.round(LAMBDA);
   penText(2.2, 2.4, `×${INS.M}`, CX, INS.c[1] - 32, { size: 24, align: 'right', seed: 'cap1' });
   penText(4.0, 4.25, `glue coat r = ${GLUE_R} μm`, CX, INS.c[1] + 8, { size: 20, align: 'right', seed: 'cap2' });
-  penText(4.12, 4.4, `beads every ${RP.ratio.toFixed(2)} r = ${lam} μm`, CX, INS.c[1] + 44, { size: 20, align: 'right', seed: 'cap3' });
+  if (!STABLE) penText(4.12, 4.4, `beads every ${+BEAD_RATIO.toFixed(2)} r = ${lam} μm`, CX, INS.c[1] + 44, { size: 20, align: 'right', seed: 'cap3' });
   { const k = 1 / INS.umPx, rx = INS.rad.ux, ry = INS.rad.uy, sv = 92 * INS.umPx, P = [INS.c[0] + rx * sv * k + 10, INS.c[1] + ry * sv * k]; penText(4.2, 4.42, 'dry radius', P[0], P[1], { size: 17, seed: 'cap4' }); }
-  // lambda marked between two bead centres, beside the thread
-  { const k = 1 / INS.umPx, inside = (h, q) => q.s * k < INS.R - 14, pick = h => { const b = h.beads.filter(q => !q.sat && inside(h, q)); return b.length > 1 ? b : null; };
+  // lambda marked between two bead centres, beside the thread (left out when no two lie in the circle)
+  if (!GROWN || INS.ch.some(h => h.beads.filter(q => !q.sat && q.s / INS.umPx < INS.R - 14).length > 1)) { const k = 1 / INS.umPx, inside = (h, q) => q.s * k < INS.R - 14, pick = h => { const b = h.beads.filter(q => !q.sat && inside(h, q)); return b.length > 1 ? b : null; };
     const h = [...INS.ch].sort((p, q) => q.ux - p.ux).find(pick) || INS.ch[0], b = pick(h) || h.beads.filter(q => !q.sat), b0 = b[0], b1 = b[1], sn = h.ux >= 0 ? 1 : -1, o = -24, nx = -h.uy * sn, ny = h.ux * sn;
     const P = (sv, ov) => [INS.c[0] + h.ux * sv * k + nx * ov, INS.c[1] + h.uy * sv * k + ny * ov];
     const A = P(b0.s, o), B = P(b1.s, o);
@@ -1548,6 +1553,8 @@ const LABEL = { x: 645, y: 1130, lines: [
   { text: 'garden orb-weaver and her web, life size', size: 12.5 },
   { text: `spiral r = a + bθ, beads at λ = ${RP.ratio.toFixed(2)} r`, size: 12.5 },
 ] };
+// grown at another wavelength, the label says so (and the spiral's line no longer claims 9.01 r)
+if (GROWN) { LABEL.lines[3] = { text: 'spiral r = a + bθ', size: 12.5 }; LABEL.lines.push({ text: `grown here at λ = ${+BEAD_RATIO.toFixed(2)} r, not ${RP.ratio.toFixed(2)} r`, size: 12.5 }); }
 const drawLabel = (ctx, t) => { const p = clamp((t - 3.95) / 0.55); if (p <= 0) return; labelCard(ctx, { x: LABEL.x, y: LABEL.y, lines: LABEL.lines, prog: ease(p), rot: -0.006, seed: 'label03' }); };
 // ---------- the pins the anchor threads are tied to ----------
 // Stainless entomological pins stand 8.5 mm proud of the card; each anchor is tied round its shaft
@@ -1592,6 +1599,22 @@ function seek(t) {
   X.drawImage(FRAMEC, 0, 0);
   lightFalloff(X); glass(X, t);
 }
+// ---------- the site's control: the glue coat at any wavelength ----------
+// The site's slider calls draw(v): 1.3 mm of coat at x100 as in the trials, broken at λ = v r with
+// r = 16 um, its beads from the same beadsAlong as the web's, one seed at every v so only λ changes,
+// in white pencil on the card. Below 2π r it stays smooth. value is the λ the web was beaded at.
+window.__vary = {
+  key: 'lam', value: +BEAD_RATIO.toFixed(2),
+  draw(v) {
+    // drawn where it would lie on the card, at x 300 to 780, so the pencil takes the card's own tooth and light there
+    const w = 480, h = 120, ox = 300, oy = 120, c = mk(ox + w, oy + h), g = c.getContext('2d'), umPx = 1000 / MM / TRY.M, Lum = w * umPx;
+    g.drawImage(CARD, 0, 0);
+    const beads = v < TAU ? [] : beadsAlong('vary', Lum + 400, v).map(b => ({ ...b, s: b.s - 200 }));
+    const prof = sv => { if (v < TAU) return GLUE_R; let r = FIB; for (const b of beads) { const ds = Math.abs(sv - b.s), Lh = b.R * (b.sat ? 1.15 : 1.32); if (ds < Lh) r = Math.max(r, b.R * Math.sqrt(1 - (ds / Lh) ** 2)); } return r; };
+    for (const sg of [-1, 1]) { const pts = []; for (let x = 0; x <= w; x += 0.5) pts.push([ox + x, oy + h / 2 + sg * prof(x * umPx) / umPx]); pencil(g, pts, { w: 1.2, tone: 0.88, seed: 'vary' + sg, tremor: 0.15 }); }
+    return { w, h, data: g.getImageData(ox, oy, w, h).data };
+  },
+};
 kitStart(init, seek);
 
 </script>

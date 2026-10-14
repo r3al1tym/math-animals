@@ -1055,7 +1055,14 @@ const LADDERS = {
 };
 // Elsewhere, dart throwing: centres are tried in a seeded random order and kept when no kept centre
 // of the same region lies nearer than the local spacing. The build scatters them in a shuffled order.
-function seedWing(F, key) {
+// ?ex=0.5 lays every wing with the minimum spacing at that fraction of d (the site's Apply button does
+// this through self.__query), at the wing's own density: each region keeps as many centres as at 1,
+// the darts thinned by (0.4 / d)^2 so the cells still shrink toward the tip; the ladders' gaps are
+// ex·d·(0.9 to 1.1) plus (1 − ex)·d times an exponential. At 0 the centres are random.
+const EX_REAL = 1;
+let EX = EX_REAL;
+{ const q = new URLSearchParams(self.__query ?? location.search).get('ex'), v = Number(q); if (q !== null && q !== '' && v >= 0 && v < 1) EX = Math.round(v * 20) / 20; }
+function seedWing(F, key, ex = 1, cap = null) {
   const r = rngFor(key), Rs = F.ras, cs = 0.4, gw = Math.ceil(Rs.w / RES / cs) + 1, gh = Math.ceil(Rs.h / RES / cs) + 1, grid = new Map(), S = [], zones = {};
   const dCache = new Float32Array(Rs.w * Rs.h).fill(-1);
   const dAt = (u, v) => { const k = Rs.at(u, v); if (k < 0) return 1; if (dCache[k] < 0) dCache[k] = spacing(F, u, v); return dCache[k]; };
@@ -1063,12 +1070,14 @@ function seedWing(F, key) {
   const ok = (u, v) => {
     const k = Rs.at(u, v); if (k < 0) return null; const reg = Rs.lab[k]; if (reg <= 0 || reg === F.ptReg) return null;
     if (zones[reg] && zones[reg].some(z => u > z[0] - 0.25 && u < z[1] + 0.25)) return null;
-    const d = dAt(u, v), cl = Rs.D[k]; if (cl < Math.min(0.42 * d, 0.9 * Rs.LM[k])) return null;
+    const d = dAt(u, v), cl = Rs.D[k]; if (cl < (ex === 1 ? Math.min(0.42 * d, 0.9 * Rs.LM[k]) : Math.max(0.02, ex * Math.min(0.42 * d, 0.9 * Rs.LM[k])))) return null;
+    if (cap && (cnt[reg] || 0) >= (cap[reg] || 0)) return null;
     const gx = Math.floor((u - Rs.u0) / cs), gy = Math.floor((v - Rs.v0) / cs);
-    for (let j = gy - 4; j <= gy + 4; j++) for (let i = gx - 4; i <= gx + 4; i++) { const L = grid.get(i + j * gw); if (!L) continue; for (const s of L) if (s.reg === reg && Math.hypot(s.u - u, s.v - v) < 0.5 * (d + s.d)) return null; }
+    for (let j = gy - 4; j <= gy + 4; j++) for (let i = gx - 4; i <= gx + 4; i++) { const L = grid.get(i + j * gw); if (!L) continue; for (const s of L) if (s.reg === reg && Math.hypot(s.u - u, s.v - v) < ex * 0.5 * (d + s.d)) return null; }
     return { u, v, d, reg };
   };
-  const add = s => { s.i = S.length; S.push(s); const k = cellK(s.u, s.v); (grid.get(k) || grid.set(k, []).get(k)).push(s); };
+  const cnt = {}, add = s => { s.i = S.length; S.push(s); const k = cellK(s.u, s.v); (grid.get(k) || grid.set(k, []).get(k)).push(s); if (!s.lad) cnt[s.reg] = (cnt[s.reg] || 0) + 1; };
+  const thin = s => s && (ex === 1 || r() < (0.4 / s.d) ** 2) ? s : null;
   // the ladders first: a centre every local spacing down the middle of each narrow field
   for (const [A, B, ua, ub] of LADDERS[F.key]) {
     const mid = u => { const a = atU(F.V[A].P, u), b = atU(F.V[B].P, u); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; };
@@ -1076,18 +1085,18 @@ function seedWing(F, key) {
     while (u < ub) {
       const m = mid(u), k = Rs.at(m[0], m[1]), reg = k < 0 ? -1 : Rs.lab[k], d = dAt(m[0], m[1]);
       if (reg > 0 && reg !== F.ptReg && Rs.D[k] > 0.12) { add({ u: m[0], v: m[1], d, reg, lad: 1 }); (zones[reg] || (zones[reg] = [])).push([ua, ub]); }
-      u += d * (0.9 + 0.2 * r());
+      u += ex === 1 ? d * (0.9 + 0.2 * r()) : d * (ex * (0.9 + 0.2 * r()) - (1 - ex) * Math.log(1 - r()));
     }
   }
   let area = 0; for (let k = 0; k < Rs.lab.length; k++) if (Rs.lab[k] > 0) area++; area /= RES * RES;
   const N = Math.round(area * 70);
-  for (let n = 0; n < N; n++) { const u = Rs.u0 + r() * Rs.w / RES, v = Rs.v0 + r() * Rs.h / RES, s = ok(u, v); if (s) add(s); }
+  for (let n = 0; n < N; n++) { const u = Rs.u0 + r() * Rs.w / RES, v = Rs.v0 + r() * Rs.h / RES, s = thin(ok(u, v)); if (s) add(s); }
   for (let i = 0; i < S.length; i++) for (let k = 0; k < 14; k++) { // fill what the darts missed
-    const a = r() * Math.PI * 2, rr = S[i].d * (1 + r() * 0.5), s = ok(S[i].u + Math.cos(a) * rr, S[i].v + Math.sin(a) * rr); if (s) add(s);
+    const a = r() * Math.PI * 2, rr = S[i].d * (1 + r() * 0.5), s = thin(ok(S[i].u + Math.cos(a) * rr, S[i].v + Math.sin(a) * rr)); if (s) add(s);
   }
   for (let i = S.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [S[i], S[j]] = [S[j], S[i]]; } // the scatter's order
   S.forEach((s, i) => s.i = i);
-  return { S, grid, cs, gw, cellK, u0: Rs.u0, v0: Rs.v0 };
+  return { S, grid, cs, gw, cellK, u0: Rs.u0, v0: Rs.v0, cnt };
 }
 // nearest centre of a seed set to (u, v), any region; returns [distance mm, index]
 function nearest(SD, u, v, reg = 0) {
@@ -1132,7 +1141,9 @@ function trimWall(Rs, reg, a, b, keep) {
   return runs.map(([t0, t1]) => [lerp(a[0], b[0], t0), lerp(a[1], b[1], t0), lerp(a[0], b[0], t1), lerp(a[1], b[1], t1)]);
 }
 function buildWing(Wg) {
-  const F = Wg.F, Rs = F.ras, SD = seedWing(F, 'seeds:' + Wg.id), S = SD.S;
+  // at another ex the wing's own seeds are laid first, for each region's count (and the trials' own patch)
+  const F = Wg.F, Rs = F.ras, SD0 = EX === 1 ? null : seedWing(F, 'seeds:' + Wg.id), SD = seedWing(F, 'seeds:' + Wg.id, EX, SD0 && SD0.cnt), S = SD.S;
+  if (SD0) Wg.S0 = SD0.S;
   const nbrs = s => { const out = [], gx = Math.floor((s.u - SD.u0) / SD.cs), gy = Math.floor((s.v - SD.v0) / SD.cs), R = Math.ceil(2.6 * s.d / SD.cs);
     for (let j = gy - R; j <= gy + R; j++) for (let i = gx - R; i <= gx + R; i++) { const L = SD.grid.get(i + j * SD.gw); if (L) for (const o of L) if (o !== s && o.reg === s.reg) out.push(o); } return out; };
   const cells = voronoi(S, nbrs, s => 2.4 * s.d), walls = [];
@@ -1627,7 +1638,7 @@ function drawFigWalls(ctx, t) {
 const TR = 62, TY = 1096, TXS = [300, 460, 620, 780];
 const TRIAL_RULES = [['square grid', 'grid', [30.0, 8.0], 3.0], ['hexagonal', 'hex', [24.6, 10.5], 2.4], ['min. spacing', 'real', [45.4, 2.8], 2.2], ['random', 'rand', [30.6, 5.3], 2.5]];
 function trialSeeds(kind, TP, TPR) {
-  const F = PWG.F, Rs = F.ras, R = TPR + 1.6, real = PWG.S.filter(s => Math.hypot(s.u - TP[0], s.v - TP[1]) < R);
+  const F = PWG.F, Rs = F.ras, R = TPR + 1.6, real = (PWG.S0 || PWG.S).filter(s => Math.hypot(s.u - TP[0], s.v - TP[1]) < R);
   if (kind === 'real') return real.map((s, i) => ({ u: s.u, v: s.v, reg: s.reg, d: s.d, i }));
   let A = 0, n = 0; for (let v = TP[1] - R; v < TP[1] + R; v += 0.05) for (let u = TP[0] - R; u < TP[0] + R; u += 0.05) { if (Math.hypot(u - TP[0], v - TP[1]) >= R) continue; n++; if (Rs.region(u, v) > 0) A++; }
   const area = A * 0.0025, N = real.length, out = [], r = rngFor('trial:' + kind), keep = (u, v, cl) => { if (Math.hypot(u - TP[0], v - TP[1]) >= R) return; const reg = Rs.region(u, v); if (reg > 0 && Rs.clear(u, v) >= cl) out.push({ u, v, reg, i: out.length }); };
@@ -1667,6 +1678,7 @@ function planTrials() {
 }
 function label(t) {
   const lines = [{ text: 'No. 3', size: 12.5 }, { text: '*{Anax imperator} Leach, 1815', size: 15 }, { text: 'emperor dragonfly, male', size: 12.5 }, { text: 'each cell is the region nearest its seed', size: 12.5 }];
+  if (EX !== EX_REAL) lines.push({ text: EX ? `grown here at min. spacing ${EX} d, not d` : 'grown here at random, not min. spacing d', size: 12.5 }); // grown at another spacing, the label says so
   // the slip sized for the typed lines (13 px type), with room after the longest
   const w = Math.round(Math.max(...lines.map(l => measureText(l.text, 13, { face: 'type' }))) + 2 * 15 + 16);
   labelCard(X, { x: Math.min(FX1 - 40, TX1 - 21) - w, y: 140, w, lines, prog: span(t, ...TM.label), rot: -0.005, pad: 15, seed: 'label:05' });
@@ -1710,6 +1722,41 @@ function seek(t) {
   lightFalloff(X);
   glass(X, t);
 }
+// ---------- the site's control: the same rule at any minimum spacing ----------
+// The site's slider calls draw(v): a 16 by 5.3 mm patch of membrane whose spacing falls from 0.9 mm
+// to 0.5 mm along it, as from the wing's root to its tip, seeded by seedWing's rule at ex = v (its
+// darts, fill, (0.4 / d)^2 thinning and the count at 1) and cut by the wing's voronoi, in pencil at
+// 30 px per mm. One seed at every v, so only the spacing rule changes. value is the plate's ex.
+window.__vary = {
+  key: 'ex', value: EX,
+  draw(v) {
+    const w = 480, h = 160, ox = 200, oy = 240, PX = 30, L = w / PX, Hm = h / PX, m = 1.5, cs = 0.4;
+    const dOf = u => lerp(0.9, 0.5, clamp(u / L)), gw = Math.ceil((L + 2 * m) / cs) + 1;
+    const lay = (ex, cap) => {
+      const r = rngFor('vary'), S = [], grid = new Map(), cell = (u, v) => Math.floor((u + m) / cs) + Math.floor((v + m) / cs) * gw;
+      const ok = (u, v) => {
+        if (u < -m || u > L + m || v < -m || v > Hm + m || (cap && S.length >= cap)) return null; const d = dOf(u), gx = Math.floor((u + m) / cs), gy = Math.floor((v + m) / cs);
+        for (let j = gy - 3; j <= gy + 3; j++) for (let i = gx - 3; i <= gx + 3; i++) { const G = grid.get(i + j * gw); if (G) for (const s of G) if (Math.hypot(s.u - u, s.v - v) < ex * 0.5 * (d + s.d)) return null; } // 0.9 mm at most: three cells
+        return { u, v, d };
+      };
+      const add = s => { if (!s || (ex !== 1 && r() >= (0.4 / s.d) ** 2)) return; s.i = S.length; S.push(s); const k = cell(s.u, s.v); (grid.get(k) || grid.set(k, []).get(k)).push(s); };
+      const N = Math.round((L + 2 * m) * (Hm + 2 * m) * 70);
+      for (let n = 0; n < N && !(cap && S.length >= cap); n++) add(ok(-m + r() * (L + 2 * m), -m + r() * (Hm + 2 * m)));
+      for (let i = 0; i < S.length && !(cap && S.length >= cap); i++) for (let k = 0; k < 14; k++) { const a = r() * Math.PI * 2, rr = S[i].d * (1 + r() * 0.5); add(ok(S[i].u + Math.cos(a) * rr, S[i].v + Math.sin(a) * rr)); }
+      return { S, grid };
+    };
+    const { S, grid } = lay(v, v === 1 ? 0 : lay(1, 0).S.length);
+    const nbrs = s => { const out = [], gx = Math.floor((s.u + m) / cs), gy = Math.floor((s.v + m) / cs), R = Math.ceil(2.6 * s.d / cs); for (let j = gy - R; j <= gy + R; j++) for (let i = gx - R; i <= gx + R; i++) { const G = grid.get(i + j * gw); if (G) for (const o of G) if (o !== s) out.push(o); } return out; };
+    const cells = voronoi(S, nbrs, s => 2.4 * s.d), at = (u, q) => [ox + u * PX, oy + q * PX], walls = [], dots = [];
+    cells.forEach((poly, i) => { for (let k = 0; k < poly.length; k++) { const p = poly[k], q = poly[(k + 1) % poly.length]; if (p[2] >= 0 && p[2] > i) walls.push([at(p[0], p[1]), at(q[0], q[1])]); } });
+    const c = mk(ox + w, oy + h), g = c.getContext('2d'); g.drawImage(CARD, 0, 0); g.save(); g.beginPath(); g.rect(ox, oy, w, h); g.clip();
+    _graphite(g, walls.map((P, k) => _trace(P, { tone: 0.78, tremor: 0.12, seed: 'vw' + k }, 1, 1.6)), {});
+    for (const s of S) { const p = at(s.u, s.v); if (p[0] > ox - 2 && p[0] < ox + w + 2 && p[1] > oy - 2 && p[1] < oy + h + 2) dots.push(p); }
+    _graphite(g, dots.map((p, k) => { const P = []; for (let a = 0; a <= 12; a++) P.push([p[0] + 0.9 * Math.cos(a / 12 * Math.PI * 2.2), p[1] + 0.9 * Math.sin(a / 12 * Math.PI * 2.2)]); return _trace(P, { tone: 1, tremor: 0, taper: 0, seed: 'vd' + k }, 1, 1.7); }), {});
+    g.restore();
+    return { w, h, data: g.getImageData(ox, oy, w, h).data };
+  },
+};
 kitStart(init, seek);
 </script>
 </body></html>

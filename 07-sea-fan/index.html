@@ -1222,6 +1222,9 @@ function fanEnvelope(seed) {
 // grain of the free space; along the trial row only a changes.
 const RULE = { a: 1.9, reach: 2.5, dk: 0.6, D: 1, df: 4, touch: 0.9, cone: 0, bend: 0.3, kc: 2, stiff: 0.6, up: 0.1, pipe: 3.6, rTip: 0.36, ribs: [-0.95, -0.2, 0.55] }; // ribs: the stem's division, radians from the vertical (negative to the left)
 const ruleAt = a => ({ ...RULE, a, di: RULE.reach * a });
+// ?a=1.2 grows the whole specimen at another spacing (the site's Apply button does this through
+// self.__query); the trials keep their three spacings and the tick stays on 1.9 mm
+const A_FAN = (() => { const v = Number(new URLSearchParams(self.__query ?? location.search).get('a')); return v >= 0.8 && v <= 7 ? Math.round(v * 10) / 10 : RULE.a; })();
 const FAN = { root: [8, -16], stop: 156, cx: 553, by: 727 }; // by: page y of the blade's foot (model y = 0)
 const TRIAL = { values: [7, 1.9, 0.8], y: 1103, xs: [192, 385, 578] }; // y: page y of each trial's foot; the row stays left of the glass band
 const fx = x => FAN.cx + x * MM, fy = y => FAN.by - y * MM;
@@ -1597,7 +1600,7 @@ let TRI = [];
 function growTrials() {
   const env = fanEnvelope('env'), side = WIN.s * MM;
   TRI = TRIAL.values.map((a, i) => {
-    const g = a === RULE.a ? G0 : growFan({ ...ruleAt(a), env, root: FAN.root, seed: 'fan', iters: FAN.stop });
+    const g = a === A_FAN ? G0 : growFan({ ...ruleAt(a), env, root: FAN.root, seed: 'fan', iters: FAN.stop });
     // the trial's own page frame: the window's centre lands on the slot's centre
     const cx = TRIAL.xs[i], cy = TRIAL.y - side / 2, ox = cx - WIN.x * MM, oy = cy + WIN.y * MM;
     const N = buildNet(g, ox, oy), R = radiiAt(N, 1e9), box = { x0: Math.round(cx - side / 2), y0: Math.round(cy - side / 2), w: Math.round(side), h: Math.round(side) };
@@ -1721,8 +1724,12 @@ function measureColony() {
   // clear of each other, and each with most of its ring on clear card, since the pencil lies under the colony
   rasterColony(FAN.stop, stemR(radiiAt(NET, FAN.stop)), 1);
   const clear = (x, y, r) => { let n = 0; for (let i = 0; i < 60; i++) { const a = i / 60 * Math.PI * 2, X0 = Math.round(x + r * Math.cos(a)) - FB.x0, Y0 = Math.round(y + r * Math.sin(a)) - FB.y0; if (COV[Y0 * FB.w + X0] < 0.05) n++; } return n / 60; };
+  // nor buried in the attractors still free: at small a they lie so dense round the front that a ring among them is lost
+  const free = new Uint8Array(W * H); for (let s = 0; s < g.A.length; s++) { if (!g.alive[s]) continue; const X0 = Math.round(fx(g.A[s][0])), Y0 = Math.round(fy(g.A[s][1]));
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) if (dx * dx + dy * dy < 16 && X0 + dx >= 0 && X0 + dx < W && Y0 + dy >= 0 && Y0 + dy < H) free[(Y0 + dy) * W + X0 + dx] = 1; }
+  const unburied = (x, y, r) => { let n = 0; for (let i = 0; i < 60; i++) { const a = i / 60 * Math.PI * 2; if (!free[Math.round(y + r * Math.sin(a)) * W + Math.round(x + r * Math.cos(a))]) n++; } return n / 60; };
   const cand = g.bridges.filter(b => b[2] >= FAN.stop - 30).map(b => ({ b, x: (NET.PX[b[0]] + NET.PX[b[1]]) / 2, y: (NET.PY[b[0]] + NET.PY[b[1]]) / 2 }))
-    .filter(c => c.x > 300 && c.x < 800).map(c => ({ ...c, sc: clear(c.x, c.y, RING_R - 2) + clear(c.x, c.y, RING_R + 2) })).filter(c => c.sc > 1.2);
+    .filter(c => c.x > 300 && c.x < 800).map(c => ({ ...c, sc: clear(c.x, c.y, RING_R - 2) + clear(c.x, c.y, RING_R + 2) })).filter(c => c.sc > 1.2 && unburied(c.x, c.y, RING_R) > 0.75);
   cand.sort((p, q) => q.sc - p.sc);
   RINGS = [];
   for (const c of cand) { if (RINGS.length >= 3) break; if (RINGS.every(r => Math.hypot(r.x - c.x, r.y - c.y) > 80)) RINGS.push(c); }
@@ -1754,11 +1761,12 @@ function drawAnnotations(ctx, t) {
 function drawNotes(ctx, t) {
   const S = STATS, x = LABEL_X(), y = TRIAL.y + 30, t0 = TL.notes[0], L = [
     `a model, ${fmt(S.n)} attractors`,
-    `a = ${RULE.a} mm, openings ${S.wopen.toFixed(1)} mm`];
+    `a = ${A_FAN} mm, ` + (S.holes ? `openings ${S.wopen.toFixed(1)} mm` : 'no openings')]; // an open tree encloses none
   L.forEach((s, i) => letterText(ctx, s, x + 2, y + i * 24, { size: 15, medium: 'pencil', prog: span(t, t0 + 0.2 + i * 0.1, t0 + 0.42 + i * 0.1), seed: 'note' + i, tone: 1.15 }));
 }
 // the label at the right of the foot, level with the trials, its notes under it
-const LABEL_LINES = () => [{ text: 'No. 7' }, { text: '*{Gorgonia ventalina} Linnaeus, 1758' }, { text: 'common sea fan' }, { text: LABEL_RULE }];
+const LABEL_LINES = () => [{ text: 'No. 7' }, { text: '*{Gorgonia ventalina} Linnaeus, 1758' }, { text: 'common sea fan' }, { text: LABEL_RULE },
+  ...(A_FAN !== RULE.a ? [{ text: 'grown here at a = ' + A_FAN + ' mm, not ' + RULE.a }] : [])]; // grown at another spacing, the label says so
 const LABEL_WD = () => Math.round(Math.max(...LABEL_LINES().map(l => measureText(l.text, 13, { face: 'type' }))) + 34);
 const LABEL_X = () => TX1 - 25 - LABEL_WD();
 function drawLabel(ctx, t) {
@@ -1835,7 +1843,7 @@ async function seekNow(t) {
 async function init() {
   CARD = renderCard({ tone: 'white', seed: 'card7' }); FRAME = renderFrame();
   const env = fanEnvelope('env');
-  G0 = growFan({ ...ruleAt(RULE.a), env, root: FAN.root, seed: 'fan', iters: FAN.stop });
+  G0 = growFan({ ...ruleAt(A_FAN), env, root: FAN.root, seed: 'fan', iters: FAN.stop });
   NET = buildNet(G0, FAN.cx, FAN.by); planeField(NET, radiiAt(NET, FAN.stop)); bakeHoldfast(); prepNet(NET);
   ENV = env.concat([env[0]]).map(p => [fx(p[0]), fy(p[1])]);
   growTrials(); measureColony(); leadStarts();
@@ -1846,6 +1854,25 @@ async function init() {
   pencilMany(dg, G0.A.map((p, s) => { DOTT[s] = TL.dots[0] + (TL.dots[1] - TL.dots[0] - 0.1) * (p[1] - y0) / (y1 - y0) + (jr() - 0.5) * 0.08; return [dotPts(fx(p[0]), fy(p[1]), 0.62), { seed: 'a' + s, tone: 1.15, w: 2.2, tremor: 0, taper: 0 }]; }));
   FAN_MW = !!(await MW.each('setNet', { NET: { ...NET, g: null }, HB, ZAX, U0, PH, TRUNK, GV }));
 }
+// ---------- the site's control: the same rule at any spacing a ----------
+// The site's slider calls draw(v): the rule grown with a = v and every other value as on the plate,
+// in a small half-fan field 80 mm across and 31 mm high, one seed at every v so only a changes,
+// pencilled at true size and thickness on the plate's own card, as the trials are. value is the plate's a.
+window.__vary = {
+  key: 'a', value: A_FAN,
+  draw(v) {
+    const w = 320, h = 130, x0 = 380, y0 = 340, env = [];
+    for (let i = 0; i <= 48; i++) { const th = Math.PI * i / 48; env.push([40 * Math.cos(th), 1 + 30 * Math.sin(th)]); }
+    const g = growFan({ ...ruleAt(v), env, root: [0, -3], seed: 'vary', iters: 80 });
+    const N = buildNet(g, x0 + w / 2, y0 + h - 5), R = radiiAt(N, 1e9), chains = new Map(), strokes = [];
+    for (let k = 1; k < N.n; k++) { const ch = N.CH[k]; if (!chains.has(ch)) chains.set(ch, [N.PAR[k]]); chains.get(ch).push(k); }
+    for (const [ch, nodes] of chains) { let r = 0; for (const k of nodes) r += R[k]; strokes.push([nodes.map(k => [N.PX[k], N.PY[k]]), { seed: 'vy:' + ch, w: Math.max(1.5, 2 * r / nodes.length), tone: 1.6, tremor: 0.03, taper: 0 }]); }
+    for (const [p0, p1] of N.bridges) strokes.push([[[N.PX[p0], N.PY[p0]], [N.PX[p1], N.PY[p1]]], { seed: 'vyb:' + p0, w: Math.max(1.5, 2 * Math.min(R[p0], R[p1])), tone: 1.6, tremor: 0.03, taper: 0 }]);
+    const c = mk(x0 + w, y0 + h), cg = c.getContext('2d');
+    cg.drawImage(CARD, x0, y0, w, h, x0, y0, w, h); pencilMany(cg, strokes);
+    return { w, h, data: cg.getImageData(x0, y0, w, h).data };
+  },
+};
 kitStart(init, seek);
 </script>
 </body></html>

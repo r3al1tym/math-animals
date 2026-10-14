@@ -2,7 +2,7 @@
 
 Claude Code (Opus 5.5) implemented ten published models of how animal forms arise and rendered each animal from its model's output. Each animal is one HTML page of Canvas 2D code with no image files, 15,227 lines in all. Each page draws its construction next to the form, and its `NOTES.md` cites every parameter.
 
-**[Site](https://r3al1tym.github.io/math-animals/)**: each plate next to its source, finding, model and implementation notes. Plates compute in the browser; click one to run its model, then scrub time. [Film](https://r3al1tym.github.io/math-animals/film/) (64 s, silent).
+**[Site](https://r3al1tym.github.io/math-animals/)**: each plate next to its source, finding, model and implementation notes. Plates compute in the browser, each in its own Web Worker. Click one to run its model and scrub time; each plate's Model block also carries one of its model's inputs, which redraws a preview as you move it and regrows the whole animal at the new value (the plate's label then says so). [Film](https://r3al1tym.github.io/math-animals/film/) (64 s, silent).
 
 https://github.com/user-attachments/assets/3ce3b5e5-801b-4282-9f4f-9ab6795153e8
 

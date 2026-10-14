@@ -944,6 +944,12 @@ const toScreen = (lx, ly) => [VAL.bx + (lx * VC - ly * VS) * VAL.L, VAL.by + (lx
 const GROW = { TT: 330, r0: 0.022, slow: 2.5, checks: [[102, 13], [220, 11]] }; // [effective age, pause]
 GROW.E = GROW.TT - GROW.checks.reduce((s, c) => s + c[1], 0);
 GROW.k = Math.log(GROW.slow) / GROW.E;
+// The site's k is von Bertalanffy's k with age counted in lifetimes (kE): here ln 2.5 = 0.92, so the
+// margin ends its growth 2.5 times slower than it began. ?k=2 grows the whole plate at another k (the
+// site's Apply button does this through self.__query); k rounds to 0.01.
+const K_PLATE = +(GROW.k * GROW.E).toFixed(2);
+const K_Q = (() => { const v = Math.round(Number(new URLSearchParams(self.__query ?? location.search).get('k')) * 100) / 100; return v >= 0.1 && v <= 3 && v !== K_PLATE ? v : null; })();
+if (K_Q) GROW.k = K_Q / GROW.E;
 function effAge(tau) { let e = tau; for (const [at, p] of GROW.checks) { if (e > at) e = Math.max(at, e - p); } return e; }
 function rOfAge(tau) { const e = effAge(tau); return GROW.r0 + (1 - GROW.r0) * (1 - Math.exp(-GROW.k * e)) / (1 - Math.exp(-GROW.k * GROW.E)); }
 
@@ -1413,7 +1419,10 @@ function strip(t, rt) {
   pencil(X, edge(-1), { w: 1.4, prog: span(t, 0.9, 1.4), seed: 'stL' });
   pencil(X, edge(1), { w: 1.4, prog: span(t, 0.95, 1.45), seed: 'stR' });
   pencil(X, [[S.x - 4, S.y + S.h], [S.x + S.w + 4, S.y + S.h]], { w: 1.4, prog: span(t, 1.3, 1.55), seed: 'stB' });
-  letterText(X, 'the record, unrolled', cx + 26, S.y + 6, { size: 15, medium: 'pencil', align: 'left', prog: span(t, 0.95, 1.3), seed: 'stcap' });
+  // at a larger k the wedge widens at once below its apex: the caption is lifted clear of its edge
+  let capY = S.y + 6;
+  if (K_Q) { let lo = 0, hi = ROWS - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S.w * rowR(m) / 2 >= 26) hi = m; else lo = m; } capY = Math.min(capY, stripY(hi) - 8); }
+  letterText(X, 'the record, unrolled', cx + 26, capY, { size: 15, medium: 'pencil', align: 'left', prog: span(t, 0.95, 1.3), seed: 'stcap' });
   letterText(X, 'σ = 0', S.x, S.y + S.h + 24, { size: 13, medium: 'pencil', align: 'left', prog: span(t, 1.4, 1.52), seed: 'sg0' });
   letterText(X, 'σ = 1', S.x + S.w, S.y + S.h + 24, { size: 13, medium: 'pencil', align: 'right', prog: span(t, 1.46, 1.58), seed: 'sg1' });
   letterText(X, 'along the mantle edge', cx, S.y + S.h + 24, { size: 13, medium: 'pencil', align: 'center', prog: span(t, 1.5, 1.75), seed: 'stax' });
@@ -1501,6 +1510,8 @@ const LABEL = [
   { text: 'activator–inhibitor along the margin,', size: 12.5 },
   { text: 'one row per growth step', size: 12.5 },
 ];
+// grown at another k, the label says so
+if (K_Q) LABEL.push({ text: 'grown here at k = ' + K_Q.toFixed(2) + ', not ' + K_PLATE.toFixed(2), size: 12.5 });
 function label(t) {
   const w = Math.round(Math.max(...LABEL.map(l => measureText(l.text, l.size, l))) + 30);
   labelCard(X, { x: TX1 - 28 - w, y: 1126, w, lines: LABEL, prog: span(t, 3.9, 4.5), rot: -0.005, pad: 14, seed: 'label-06' });
@@ -1519,6 +1530,33 @@ function seek(t) {
   lightFalloff(X);
   glass(X, t);
 }
+// ---------- the site's control: the trials' figure at any k ----------
+// The site's slider calls draw(v): the trials' valve and growth curve at k = v, pencil on a stretch of
+// this card. The valve carries a growth line every twelfth of its life and the two checks heavier, so
+// the lines crowd toward the margin as k rises; beside it, r against age. value is the plate's k.
+window.__vary = {
+  key: 'k', value: K_Q ?? K_PLATE,
+  draw(v) {
+    v = clamp(v, 0.1, 3); // the slider's range
+    const w = 440, h = 200, ox = 300, oy = 560, c = mk(ox + w, oy + h), x = c.getContext('2d');
+    x.drawImage(CARD, ox, oy, w, h, ox, oy, w, h);
+    const k = v / GROW.E, rA = tau => { const e = effAge(tau); return GROW.r0 + (1 - GROW.r0) * (1 - Math.exp(-k * e)) / (1 - Math.exp(-k * GROW.E)); };
+    const b = bboxAt(1), L = Math.min(180 / (b[2] - b[0]), 176 / (b[3] - b[1])), bx = ox + 116 - (b[0] + b[2]) / 2 * L, by = oy + h / 2 - (b[1] + b[3]) / 2 * L;
+    const ring = q => POLY.map(p => [bx + (p[0] * VC - p[1] * VS) * L * q, by + (p[0] * VS + p[1] * VC) * L * q]);
+    const G = { x: ox + 262, y: oy + 26, w: 156, h: 136 }, gx = tau => G.x + tau / GROW.TT * G.w, gy = r => G.y + G.h - r * G.h;
+    const tr = [_trace(ring(1), { tone: 1, tremor: 0.2, seed: 'vary:out' }, 1, 1.45)];
+    for (let j = 1; j < 12; j++) { let tau = j / 12 * GROW.E; for (const [at, pa] of GROW.checks) if (tau > at) tau += pa; tr.push(_trace(ring(rA(tau)), { tone: 0.7, seed: 'vary:g' + j }, 1, 1.05)); }
+    GROW.checks.forEach(([at], j) => tr.push(_trace(ring(rA(at + 1e-6)), { tone: 1, seed: 'vary:c' + j }, 1, 1.6)));
+    tr.push(_trace([[G.x, G.y - 6], [G.x, G.y + G.h], [G.x + G.w + 6, G.y + G.h]], { seed: 'vary:ax' }, 1, 1.3));
+    const curve = []; for (let j = 0; j <= 160; j++) { const tau = j / 160 * GROW.TT; curve.push([gx(tau), gy(rA(tau))]); }
+    tr.push(_trace(curve, { tremor: 0.15, seed: 'vary:vb' }, 1, 1.6));
+    _graphite(x, tr, {});
+    pencilCross(x, bx, by, 7, { seed: 'vary:b' });
+    let prev = 0;
+    GROW.checks.forEach(([at, pause], j) => { const tm = at + prev + pause / 2; prev += pause; pencilTick(x, gx(tm), gy(rA(tm)) - 14, 11, { seed: 'vary:t' + j }); });
+    return { w, h, data: x.getImageData(ox, oy, w, h).data };
+  },
+};
 kitStart(async () => {
   const t0 = performance.now();
   CARD = renderCard({ tone: 'white' }); FRAME = renderFrame(); place();
