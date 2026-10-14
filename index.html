@@ -497,6 +497,11 @@ self.__siteKitStart = (init, seek) => {
       else { const v = wantV; wantV = null; const s = self.__vary.draw(v); postMessage({ strip: s, v }, [s.data.buffer]); }
     } busy = false; };
   self.onmessage = e => { if ('seek' in e.data) want = e.data.seek; else wantV = e.data.vary; if (!busy) run(); };
+  // the kit lays every pencil and ink stroke on one scratch canvas and draws it onto a layer. A layer
+  // kept in memory would hold a copy of the scratch for every stroke until its pixels are first read,
+  // so it takes each stroke at once instead
+  { const d = OffscreenCanvasRenderingContext2D.prototype.drawImage;
+    OffscreenCanvasRenderingContext2D.prototype.drawImage = function (src, ...a) { d.call(this, src, ...a); if (typeof _SCR !== 'undefined' && src === _SCR && this.getContextAttributes().willReadFrequently) this.getImageData(0, 0, 1, 1); }; }
   (async () => { await init(); await seek(0); const V = self.__vary, bmp = await createImageBitmap(__c); postMessage({ ready: true, bmp, vary: V ? { ...V, draw: undefined } : null }, [bmp]); })().catch(e => postMessage({ err: String(e && e.stack || e) }));
 };
 self.onmessage = e => {
@@ -584,7 +589,10 @@ function grow(el, dir, o = {}) {
 function replay(L, done) {
   cancelAnimationFrame(L.raf); const s0 = performance.now(), g = ++L.gen;
   setT(L, 0);
-  const tick = async () => { const t = Math.min(HERO, (performance.now() - s0) / 1000); await L.h.seek(t); if (L.dead || L.gen !== g) return; setT(L, t); if (t < HERO) L.raf = requestAnimationFrame(tick); else done && done(); };
+  // the build's clock runs with the wall clock but never jumps more than a twelfth of a second a frame:
+  // a slow frame slows the build for a moment instead of skipping part of it
+  let t = 0, last = s0;
+  const tick = async () => { const now = performance.now(); t = Math.min(HERO, t + Math.min(now - last, 1000 / 12) / 1000); last = now; await L.h.seek(t); if (L.dead || L.gen !== g) return; setT(L, t); if (t < HERO) L.raf = requestAnimationFrame(tick); else done && done(); };
   L.raf = requestAnimationFrame(tick);
 }
 function setT(L, t) { if (!L.scrub) return; L.scrub.querySelector('input').value = t; L.scrub.querySelector('.tv').textContent = t.toFixed(1) + ' s'; }
