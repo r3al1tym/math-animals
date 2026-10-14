@@ -1555,7 +1555,7 @@ const LABEL = { x: 645, y: 1130, lines: [
 ] };
 // grown at another wavelength, the label says so (and the spiral's line no longer claims 9.01 r)
 if (GROWN) { LABEL.lines[3] = { text: 'spiral r = a + bθ', size: 12.5 }; LABEL.lines.push({ text: `grown here at λ = ${+BEAD_RATIO.toFixed(2)} r, not ${RP.ratio.toFixed(2)} r`, size: 12.5 }); }
-const drawLabel = (ctx, t) => { const p = clamp((t - 3.95) / 0.55); if (p <= 0) return; labelCard(ctx, { x: LABEL.x, y: LABEL.y, lines: LABEL.lines, prog: ease(p), rot: -0.006, seed: 'label03' }); };
+const drawLabel = (ctx, t) => { const p = clamp((t - 3.95) / 0.55); if (p <= 0 && !self.__labelFirst) return; /* the site types the label before the build */ labelCard(ctx, { x: LABEL.x, y: LABEL.y, lines: LABEL.lines, prog: ease(p), rot: -0.006, seed: 'label03' }); };
 // ---------- the pins the anchor threads are tied to ----------
 // Stainless entomological pins stand 8.5 mm proud of the card; each anchor is tied round its shaft
 // at the web's height. The camera above the drawer's centre sees a little of each shaft, leaning out.

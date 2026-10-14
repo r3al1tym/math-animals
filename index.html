@@ -95,6 +95,9 @@
 
   /* a live plate: the still, then the page computing in place */
   .live { position: relative; overflow: hidden; background: var(--drawer); box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 34px 60px -34px rgba(40,24,8,.6); }
+  /* the plate's label typed out on the empty drawer while it computes (images/labels, tools/labels.mjs) */
+  .live .typing { position: absolute; z-index: 1; background-size: 100% 2400%; background-repeat: no-repeat; }
+  .live.lab-low .grow { left: 5%; transform: none; } /* the chip stands clear of a label typed at the foot of the drawer */
   .live .inner { position: absolute; left: 0; top: 0; width: 720px; height: 900px; transform-origin: 0 0; }
   .live img, .live iframe, .live canvas { position: absolute; inset: 0; width: 720px; height: 900px; border: 0; display: block; }
   .live iframe, .live canvas { opacity: 0; pointer-events: none; }
@@ -504,10 +507,12 @@ self.__siteKitStart = (init, seek) => {
   // so it takes each stroke at once instead
   { const d = OffscreenCanvasRenderingContext2D.prototype.drawImage;
     OffscreenCanvasRenderingContext2D.prototype.drawImage = function (src, ...a) { d.call(this, src, ...a); if (typeof _SCR !== 'undefined' && src === _SCR && this.getContextAttributes().willReadFrequently) this.getImageData(0, 0, 1, 1); }; }
+  // on the site the label is typed while the plate computes, so through the build it stays written
+  if (self.__labelFirst && typeof labelCard === 'function') { const lc = labelCard; labelCard = (ctx, o) => lc(ctx, { ...o, prog: 1 }); }
   (async () => { await init(); await seek(0); const V = self.__vary, bmp = await createImageBitmap(__c); postMessage({ ready: true, bmp, vary: V ? { ...V, draw: undefined } : null }, [bmp]); })().catch(e => postMessage({ err: String(e && e.stack || e) }));
 };
 self.onmessage = e => {
-  __c = new OffscreenCanvas(e.data.w, e.data.h); self.__query = e.data.query || ''; document.scripts = e.data.texts.map(t => ({ src: '', textContent: t }));
+  __c = new OffscreenCanvas(e.data.w, e.data.h); self.__query = e.data.query || ''; self.__labelFirst = !!e.data.labelFirst; document.scripts = e.data.texts.map(t => ({ src: '', textContent: t }));
   try { e.data.urls.forEach((u, i) => { document.currentScript = document.scripts[i]; importScripts(u); }); }
   catch (err) { postMessage({ err: String(err && err.stack || err) }); }
 };`;
@@ -534,7 +539,7 @@ async function workerPlate(dir, el, query = '') {
     w.onmessage = e => { const m = e.data; if (m.ready) { put(m); h.control = m.vary; ok(); } else if (m.err) no(new Error(m.err)); else if ('at' in m) { put(m); waits.splice(0).forEach(f => f()); } else if (m.strip) strips.splice(0).forEach(f => f(m.strip)); };
     w.onerror = e => { e.preventDefault(); no(new Error(e.message || 'worker failed')); };
   });
-  w.postMessage({ w: s.w, h: s.h, texts: s.texts, urls: s.urls, query });
+  w.postMessage({ w: s.w, h: s.h, texts: s.texts, urls: s.urls, query, labelFirst: !query });
   return Object.assign(h, { ready, seek: t => new Promise(f => { waits.push(f); w.postMessage({ seek: t }); }),
     vary: v => new Promise(f => { strips.push(f); w.postMessage({ vary: v }); }),
     stop: () => { w.terminate(); cv.remove(); waits.splice(0).forEach(f => f()); strips.splice(0).forEach(f => f(null)); } });
@@ -557,7 +562,7 @@ async function open(dir, el, query = '') {
 }
 let active = null;
 function stop(L, keep = false) {
-  if (!L) return; L.dead = true; clearInterval(L.clock); cancelAnimationFrame(L.raf);
+  if (!L) return; L.dead = true; clearInterval(L.clock); L.untype && L.untype(); cancelAnimationFrame(L.raf);
   L.el.classList.remove('on', 'busy'); L.h && L.h.stop(); L.el.querySelector('img').src = `images/plates/${L.dir}.jpg`; if (L.scrub) L.scrub.classList.remove('on');
   const lbl = L.el.querySelector('.lbl'); if (lbl) { lbl.textContent = 'Run the model'; L.el.querySelector('.clk').textContent = ''; }
   L.onStop && L.onStop();
@@ -573,6 +578,7 @@ function grow(el, dir, o = {}) {
   const L = active = { el, dir, scrub: o.scrub || null, raf: 0, gen: 0, h: null, dead: false, clock: 0, onStop: o.onStop }, t0 = performance.now();
   const img = el.querySelector('img'), chip = el.querySelector('.grow'), est = (o.ms || 3000) * K / 1000;
   img.src = `images/plates/${dir}-t0.jpg`;
+  if (!o.query) typeLabel(L, el, dir, est);
   const tick = () => { const s = (performance.now() - t0) / 1000, f = s / est;
     chip && chip.style.setProperty('--p', f < 1 ? f * 0.96 : 0.96 + 0.03 * (1 - 1 / f)); o.onTick && o.onTick(left(est - s)); };
   el.classList.add('busy'); tick(); L.clock = setInterval(tick, 100);
@@ -580,13 +586,25 @@ function grow(el, dir, o = {}) {
     if (L.dead) return h.stop();
     const took = (performance.now() - t0) / 1000;
     if (o.ms) { K = Math.min(8, Math.max(0.2, 0.6 * K + 0.4 * took * 1000 / o.ms)); try { localStorage.setItem('ma-speed-2', K.toFixed(3)); } catch (e) {} }
-    L.h = h; clearInterval(L.clock); chip && chip.style.setProperty('--p', 1);
+    L.h = h; clearInterval(L.clock); L.untype && L.untype(); chip && chip.style.setProperty('--p', 1);
     el.classList.remove('busy'); el.classList.add('on');
     o.onLive && o.onLive(took);
     if (L.scrub) { L.scrub.classList.add('on'); bindScrub(L); }
     replay(L, () => { img.src = `images/plates/${dir}.jpg`; o.onDone && o.onDone(L); });
   });
   return L;
+}
+// typeLabel: the plate's label slip laid in the empty drawer and typed out, a strip of its own frames
+// played over about two seconds; the plate's first frame carries the finished label, so it hands over clean
+const LABELS = {"01-honeybee":{"left":56.111,"top":79.704,"width":35.648,"height":10.815,"n":24},"02-sea-urchin":{"left":61.759,"top":82.444,"width":30,"height":10.815,"n":24},"03-dragonfly":{"left":55.741,"top":9.185,"width":36.111,"height":10.963,"n":24},"04-orb-weaver":{"left":58.241,"top":82.519,"width":34.074,"height":10.519,"n":24},"05-nautilus":{"left":59.444,"top":80.593,"width":31.944,"height":10.815,"n":24},"06-camp-pitar":{"left":55.093,"top":82.222,"width":36.481,"height":12.444,"n":24},"07-sea-fan":{"left":61.944,"top":69.63,"width":29.907,"height":10.815,"n":24},"08-cone-shell":{"left":62.963,"top":10.519,"width":28.611,"height":12.444,"n":24},"09-angelfish":{"left":9.815,"top":77.926,"width":30.926,"height":12.444,"n":24},"10-tortoise":{"left":54.63,"top":81.778,"width":36.204,"height":10.815,"n":24}};
+function typeLabel(L, el, dir, est) {
+  const b = LABELS[dir]; if (!b) return;
+  const d = document.createElement('div'), t0 = performance.now(), dur = Math.min(2200, Math.max(900, est * 1000 * 0.6));
+  d.className = 'typing'; Object.assign(d.style, { left: b.left + '%', top: b.top + '%', width: b.width + '%', height: b.height + '%', backgroundImage: `url(images/labels/${dir}.jpg)`, backgroundPosition: '0 0' });
+  el.querySelector('.inner').append(d); el.classList.toggle('lab-low', b.top > 50);
+  const step = () => { const k = Math.min(b.n - 1, Math.max(0, Math.floor((performance.now() - t0 - 300) / dur * (b.n - 1)))); d.style.backgroundPosition = `0 ${(100 * k / (b.n - 1)).toFixed(3)}%`; };
+  const iv = setInterval(step, 40);
+  L.untype = () => { clearInterval(iv); d.remove(); el.classList.remove('lab-low'); L.untype = null; };
 }
 function replay(L, done) {
   cancelAnimationFrame(L.raf); const s0 = performance.now(), g = ++L.gen;

@@ -1740,7 +1740,7 @@ function seek(t) {
   drawGroups(X, t);
   const st = fishState(t); if (st) { fishShadow(st); fishDraw(st); }
   drawGroups(X, t, true);
-  if (t > 3.86) label(t);
+  if (t > 3.86 || self.__labelFirst) label(t); // the site types the label before the build
   X.setTransform(1, 0, 0, 1, 0, 0); X.filter = 'none'; X.globalAlpha = 1; X.globalCompositeOperation = 'source-over';
   X.drawImage(FRAME, 0, 0); lightFalloff(X); glass(X, t);
 }
