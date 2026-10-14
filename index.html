@@ -118,27 +118,37 @@
   .recto .live { width: 100%; aspect-ratio: 4 / 5; }
   .scrub { display: flex; align-items: center; gap: 14px; margin-top: 14px; font: 12px var(--mono); color: var(--ink-3); visibility: hidden; }
   .scrub.on { visibility: visible; }
-  .scrub input { flex: 1; accent-color: var(--red); }
+  .scrub input { flex: 1; }
   .scrub .tv { min-width: 5.5ch; text-align: right; font-variant-numeric: tabular-nums; }
   .scrub button { all: unset; cursor: pointer; font: 600 12px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
   .scrub button:hover { color: var(--ink); }
 
-  /* the model input: a slider over one of the model's own parameters, and the model's output */
-  .vary { margin-top: 30px; }
-  .vary .row { margin-bottom: 14px; }
-  .vary .eq { display: block; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
-  .vary input { width: 100%; margin: 4px 0 0; accent-color: var(--red); }
-  .vary .marks { position: relative; height: 20px; margin: 4px 8px 0; font-size: 12.5px; }
-  .vary .marks button { all: unset; position: absolute; top: 0; transform: translateX(-50%); text-align: center; line-height: 1.25; color: var(--ink-3); cursor: pointer; white-space: nowrap; }
-  .vary .marks button:last-child { transform: translateX(calc(-100% + 8px)); }
+  /* the model input, set in the Model block: the parameter, a printed scale, the model's output */
+  .vary { margin: -10px 0 34px; }
+  .vary .eq { display: block; margin-bottom: 10px; font: italic 400 24px/1 var(--math); white-space: nowrap; cursor: pointer; }
+  .vary .eq output { font-style: normal; font-variant-numeric: tabular-nums; }
+  .vary .eq sub { font-size: .62em; }
+  .vary input, .scrub input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer; }
+  .vary input::-webkit-slider-runnable-track, .scrub input::-webkit-slider-runnable-track { height: 1px; background: var(--ink); }
+  .vary input::-moz-range-track, .scrub input::-moz-range-track { height: 1px; background: var(--ink); }
+  .vary input::-webkit-slider-thumb, .scrub input::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; margin-top: -6px; border-radius: 50%; background: var(--red); border: 2px solid var(--paper); box-shadow: 0 0 0 1px var(--red); }
+  .vary input::-moz-range-thumb, .scrub input::-moz-range-thumb { width: 9px; height: 9px; border-radius: 50%; background: var(--red); border: 2px solid var(--paper); box-shadow: 0 0 0 1px var(--red); }
+  .vary input:focus-visible, .scrub input:focus-visible { outline: none; }
+  .vary input:focus-visible::-webkit-slider-thumb, .scrub input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--red), 0 0 0 5px rgba(184,64,47,.18); }
+  .vary .marks { position: relative; height: 26px; margin: 0 6.5px; }
+  .vary .marks button { all: unset; position: absolute; top: 0; padding-top: 10px; transform: translateX(-50%); font: italic 400 14px/1 var(--serif); color: var(--ink-3); cursor: pointer; white-space: nowrap; }
+  .vary .marks button::before { content: ""; position: absolute; left: 50%; top: 0; width: 1px; height: 6px; background: var(--ink-3); }
+  .vary .marks button:last-child { transform: translateX(-100%); }
+  .vary .marks button:last-child::before { left: 100%; }
   .vary .marks button:hover, .vary .marks .real { color: var(--ink); }
-  .vary canvas { display: block; width: 100%; aspect-ratio: 2; image-rendering: auto; background: #f6eedc; box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 14px 24px -18px rgba(40,24,8,.5); transition: opacity .2s; }
-  .vary.wait canvas { opacity: .4; }
-  .vary .cap { margin: 10px 0 0; font-size: 13px; color: var(--ink-3); }
-  .vary .apply { margin-top: 16px; }
-  .vary .apply[hidden] { display: none; }
+  .vary figure { margin: 16px 0 0; }
+  .vary canvas { display: block; width: 100%; height: auto; background: #f6eedc; box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 12px 22px -16px rgba(40,24,8,.5); transition: opacity .3s; }
+  .vary.wait canvas { opacity: .55; }
+  .vary figcaption { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-top: 10px; min-height: 40px; font: 400 14px/1.45 var(--serif); color: var(--ink-2); }
+  .vary figcaption sub { font-size: .7em; }
+  .vary .apply { flex: none; visibility: hidden; }
+  .vary .apply.show { visibility: visible; }
   .vary .apply sub { font-size: .7em; }
-  .vary input:disabled, .vary button:disabled { opacity: .45; cursor: progress; }
 
   /* the method */
   .method { padding: 120px 0 80px; display: grid; grid-template-columns: minmax(0, 432px) minmax(0, 1fr); gap: 88px; }
@@ -179,8 +189,9 @@
     .hero h1 { line-height: 1.06; }
     .contents .nm { display: none; }
     .contents ol { gap: 10px; }
-    .vary .marks { height: 36px; }
+    .vary .marks { height: 42px; }
     .vary .marks button:nth-child(even) { top: 17px; }
+    .vary figcaption { flex-direction: column; align-items: flex-start; }
   }
 </style>
 </head>
@@ -287,7 +298,11 @@ const P = [
     paper: ['H. Meinhardt and M. Klingler', 'A model for pattern formation on the shells of molluscs', '<i>J. Theor. Biol.</i> 126 (1987)'],
     finding: 'An activator–inhibitor reaction along the shell’s lip, with a hormone that spreads through the whole animal, produces the cone’s cascades of triangles.',
     f: '∂a/∂t = s a² / ((s<sub>b</sub> + b)(1 + s<sub>a</sub>a²)) − r<sub>a</sub> a + D<sub>a</sub> a″', f2: 'the activator a along the lip, held in check by the inhibitor b and a global hormone',
-    built: 'The page runs Meinhardt’s own program for <i>Conus textile</i>, one row per growth step, so the shell’s surface is the reaction’s <b>space-time diagram</b>.' },
+    built: 'The page runs Meinhardt’s own program for <i>Conus textile</i>, one row per growth step, so the shell’s surface is the reaction’s <b>space-time diagram</b>.',
+    vary: { key: 'sb', sym: '<i>s</i><sub>b</sub>', value: 0.1, real: 0.1, min: 0.03, max: 0.6, step: 0.005, w: 260, h: 64,
+      marks: [[0.05, 'zigzags'], [0.1, 'triangles'], [0.22, 'beads'], [0.3, 'stripes'], [0.6, 'blank']],
+      idle: 'Move <i>s</i><sub>b</sub> to run the model along the lip.',
+      cap: (v, real) => `The lip at <i>s</i><sub>b</sub> = ${v}${real ? ', Meinhardt’s value for <i>C. textile</i>' : ''}. One row per growth line, the newest at the foot.` } },
   { d: '09-angelfish', run: 'Growing the skin from 3 to 13 stripes', nm: 'Semicircle angelfish', bin: 'Pomacanthus semicirculatus (Cuvier, 1831)', tx: 'Pomacanthidae',
     paper: ['S. Kondo and R. Asai', 'A reaction–diffusion wave on the skin of the marine angelfish <i>Pomacanthus</i>', '<i>Nature</i> 376 (1995)'],
     finding: 'As the juvenile grows, new stripes open between the old ones, as a Turing pattern on a growing skin predicts.',
@@ -315,6 +330,7 @@ $('plates').innerHTML = P.map((p, i) => `
       <p class="finding">${p.finding}</p>
       <div class="fl">Model</div>
       <div class="formula" style="--fs:${p.f.replace(/<[^>]+>/g, '').length > 44 ? 22 : p.f.replace(/<[^>]+>/g, '').length > 30 ? 26 : 32}px">${p.f}${p.f2 ? `<small>${p.f2}</small>` : ''}</div>
+      ${p.vary ? varyHTML(p) : ''}
       <div class="fl">Implementation</div>
       <p class="built">${p.built}</p>
       <div class="links"><a href="${GH + p.d}/NOTES.md">Notes and sources</a><a href="${GH + p.d}/index.html">Source code</a><a href="${p.d}/index.html?play">Page</a></div>
@@ -322,7 +338,6 @@ $('plates').innerHTML = P.map((p, i) => `
     <div class="recto">
       <div class="live" data-i="${i}"><div class="inner"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt="${p.nm}, rendered in code"><iframe title="${p.nm}, computing live" tabindex="-1"></iframe></div><button class="btn grow"><span class="play" aria-hidden="true"></span><span class="dot"></span><span class="lbl">Run the model</span><span class="clk"></span></button></div>
       <div class="scrub"><button class="again">Replay</button><input type="range" min="0" max="6" step="0.01" value="5.2" aria-label="Time"><span class="tv">5.2 s</span></div>
-      <div class="vary" hidden><div class="fl">Model input</div><div class="row"><span class="eq"><span class="sym"></span> = <span class="val"></span></span><div class="track"><input type="range" min="0" max="1" step="0.001" aria-label="Model input"><div class="marks"></div></div></div><canvas></canvas><p class="cap"></p><button type="button" class="btn apply" hidden></button></div>
     </div>
   </article>`).join('');
 
@@ -399,22 +414,22 @@ async function open(dir, el, query = '') {
 let active = null;
 function stop(L, keep = false) {
   if (!L) return; L.dead = true; clearInterval(L.clock); cancelAnimationFrame(L.raf);
-  L.el.classList.remove('on', 'busy'); L.h && L.h.stop(); if (L.scrub) L.scrub.classList.remove('on'); if (L.vary && !keep) L.vary.hidden = true;
+  L.el.classList.remove('on', 'busy'); L.h && L.h.stop(); L.el.querySelector('img').src = `images/plates/${L.dir}.jpg`; if (L.scrub) L.scrub.classList.remove('on');
   const lbl = L.el.querySelector('.lbl'); if (lbl) { lbl.textContent = 'Run the model'; L.el.querySelector('.clk').textContent = ''; }
   L.onStop && L.onStop();
 }
 // grow(el, dir, o): compute the plate (o.onTick(s) every 0.1 s meanwhile), then play its build
 function grow(el, dir, o = {}) {
   if (active) stop(active, active.el === el);
-  const L = active = { el, scrub: o.scrub || null, vary: o.vary || null, raf: 0, gen: 0, h: null, dead: false, clock: 0, onStop: o.onStop }, t0 = performance.now();
+  const L = active = { el, dir, scrub: o.scrub || null, raf: 0, gen: 0, h: null, dead: false, clock: 0, onStop: o.onStop }, t0 = performance.now();
+  const img = el.querySelector('img'), d = dir; img.src = `images/plates/${d}-t0.jpg`;
   el.classList.add('busy'); o.onTick && o.onTick(0);
   L.clock = setInterval(() => o.onTick && o.onTick((performance.now() - t0) / 1000), 100);
   open(dir, el, o.query).then(h => {
     if (L.dead) return h.stop();
-    L.h = h; clearInterval(L.clock); el.classList.remove('busy'); el.classList.add('on');
+    L.h = h; clearInterval(L.clock); el.classList.remove('busy'); el.classList.add('on'); img.src = `images/plates/${d}.jpg`;
     o.onLive && o.onLive((performance.now() - t0) / 1000);
     if (L.scrub) { L.scrub.classList.add('on'); bindScrub(L); }
-    if (h.control && L.vary) bindVary(L, h.control, o.regrow);
     replay(L, () => o.onDone && o.onDone(L));
   });
   return L;
@@ -432,40 +447,54 @@ function bindScrub(L) {
     if (first) requestAnimationFrame(async () => { const t = pend; pend = null; await L.h.seek(t); }); };
   L.scrub.querySelector('.again').onclick = () => replay(L);
 }
-// bindVary(L, c): the plate's model input, when its page offers one (window.__vary): a slider over
-// c.min to c.max, the trial values marked, and the model's output redrawn as you drag
-function bindVary(L, c, regrow) {
-  const box = L.vary, ap = box.querySelector('.apply'), inp = box.querySelector('input'), cv = box.querySelector('canvas'), out = box.querySelector('.val'), cap = box.querySelector('.cap');
-  const log = c.scale === 'log', lo = log ? Math.log(c.min) : c.min, hi = log ? Math.log(c.max) : c.max;
-  const toV = u => { const x = lo + (hi - lo) * u; return Math.round((log ? Math.exp(x) : x) / c.step) * c.step; };
-  const toU = v => ((log ? Math.log(v) : v) - lo) / (hi - lo);
-  const fmt = v => v.toFixed(c.digits ?? 2);
-  box.dataset.key = c.key;
-  box.querySelector('.sym').innerHTML = c.name.replace(/_(\w+)/, '<sub>$1</sub>');
-  box.querySelector('.marks').innerHTML = c.marks.map(([v, w, real]) => `<button type="button" style="left:${(toU(v) * 100).toFixed(2)}%" data-v="${v}" title="${c.name} = ${fmt(v)}"${real ? ' class="real"' : ''}>${w}${real ? ' ✓' : ''}</button>`).join('');
-  let busy = false, want = null;
+// A plate whose model has an input on the site (P[i].vary) carries it in its Model block: the
+// parameter set into the formula's own line, a printed scale marked at the plate's trial values,
+// and the model's output at that value as a small figure. Moving it runs the plate's model if it
+// has not run; the figure redraws as you move; Grow sends the whole plate round again at it.
+function fmtV(v) { return v.toFixed(Math.round(v * 1000) % 10 ? 3 : 2); }
+function varyHTML(p) {
+  const c = p.vary;
+  return `<div class="vary wait">
+        <div class="vrow"><label class="eq" for="v-${slug(p.d)}">${c.sym} = <output class="val">${fmtV(c.value)}</output></label>
+          <div class="track"><input id="v-${slug(p.d)}" type="range" min="0" max="1" step="0.001"><div class="marks">${c.marks.map(([v, w]) => `<button type="button" data-v="${v}" tabindex="-1"${v === c.value ? ' class="real"' : ''}>${w}</button>`).join('')}</div></div></div>
+        <figure><canvas width="${c.w}" height="${c.h}"></canvas><figcaption><span class="cap">${c.idle}</span><button type="button" class="btn ghost apply"></button></figcaption></figure>
+      </div>`;
+}
+function bindVary(i, el, box, run) {
+  const c = P[i].vary, ap = box.querySelector('.apply'), inp = box.querySelector('input'), cv = box.querySelector('canvas'), out = box.querySelector('.val'), cap = box.querySelector('.cap');
+  const lo = Math.log(c.min), hi = Math.log(c.max);
+  const toV = u => Math.round(Math.exp(lo + (hi - lo) * u) / c.step) * c.step, toU = v => (Math.log(v) - lo) / (hi - lo);
+  box.querySelectorAll('.marks button').forEach(b => { b.style.left = (toU(+b.dataset.v) * 100).toFixed(2) + '%'; b.onclick = () => set(+b.dataset.v); });
+  let grown = c.value, cur = c.value, busy = false, want = null;
+  const live = () => active && active.el === el && active.h && active.h.vary ? active.h : null;
   const draw = async () => {
     busy = true;
-    while (want !== null) {
-      const v = want; want = null; const s = await L.h.vary(v); if (!s || L.dead) break;
-      cv.width = s.w; cv.height = s.h; cv.getContext('2d').putImageData(new ImageData(s.data, s.w, s.h), 0, 0);
-      cap.innerHTML = c.note.replace('{v}', fmt(v)) + (Math.abs(v - c.textile) < 1e-9 ? ', the real shell’s value' : '');
-      box.classList.remove('wait');
+    while (want !== null && live()) {
+      const v = want; want = null; const s = await live().vary(v); if (!s) break;
+      cv.getContext('2d').putImageData(new ImageData(s.data, s.w, s.h), 0, 0);
+      cap.innerHTML = c.cap(fmtV(v), Math.abs(v - c.real) < 1e-9); box.classList.remove('wait');
     }
     busy = false;
   };
-  const set = v => { inp.value = toU(v); out.textContent = fmt(v); want = v; if (!busy) draw();
-    ap.hidden = !regrow || Math.abs(v - c.value) < 1e-9; ap.innerHTML = `<span>Apply ${box.querySelector('.sym').innerHTML} = ${fmt(v)} to the shell</span>`; ap.onclick = () => regrow(v); };
+  const sync = () => { const off = Math.abs(cur - grown) > 1e-9 && !box.classList.contains('held') && !el.classList.contains('busy');
+    ap.classList.toggle('show', off); ap.disabled = !off; if (off) ap.innerHTML = `<span>Grow the shell at ${c.sym} = ${fmtV(cur)}</span>`; };
+  const set = v => {
+    cur = v; inp.value = toU(v); out.textContent = fmtV(v); want = v;
+    if (!el.classList.contains('on') && !el.classList.contains('busy')) run('');
+    sync();
+    if (!busy) draw();
+  };
   inp.oninput = () => set(toV(+inp.value));
-  box.querySelectorAll('.marks button').forEach(b => b.onclick = () => set(+b.dataset.v));
-  inp.disabled = false; box.querySelectorAll('button').forEach(b => b.disabled = false);
-  box.hidden = false; box.classList.add('wait'); set(c.value);
+  ap.onclick = () => { grown = cur; box.classList.add('held'); sync(); run('?' + new URLSearchParams({ [c.key]: +cur.toFixed(3) })); };
+  inp.value = toU(c.value); sync();
+  // the plate calls these as it computes and comes live
+  return { live: () => { box.classList.remove('held'); sync(); want = cur; if (!busy) draw(); }, stop: () => { if (!box.classList.contains('held')) { grown = c.value; sync(); } } };
 }
 document.querySelectorAll('.recto .live').forEach(el => {
-  const i = +el.dataset.i, sc = el.parentElement.querySelector('.scrub'), va = el.parentElement.querySelector('.vary'), lbl = el.querySelector('.lbl'), clk = el.querySelector('.clk');
-  // regrow(v): the whole plate again with its model input at v; the panel waits on the plate's clock
-  const regrow = v => { va.classList.add('wait'); va.querySelector('input').disabled = true; va.querySelectorAll('button').forEach(b => b.disabled = true); run('?' + new URLSearchParams({ [va.dataset.key]: +v.toFixed(3) })); };
-  const run = query => grow(el, P[i].d, { scrub: sc, vary: va, query, regrow, onTick: s => { lbl.textContent = P[i].run; clk.textContent = `· ${s.toFixed(1)} s`; } });
+  const i = +el.dataset.i, art = el.closest('.spread'), sc = art.querySelector('.scrub'), va = art.querySelector('.vary'), lbl = el.querySelector('.lbl'), clk = el.querySelector('.clk');
+  const run = query => grow(el, P[i].d, { scrub: sc, query, onLive: () => V && V.live(), onStop: () => V && V.stop(),
+    onTick: s => { lbl.textContent = P[i].run; clk.textContent = `· ${s.toFixed(1)} s`; } });
+  const V = va ? bindVary(i, el, va, run) : null;
   el.addEventListener('click', () => { if (!el.classList.contains('on') && !el.classList.contains('busy')) run(''); });
 });
 
