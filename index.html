@@ -50,29 +50,49 @@
   .actions { display: flex; gap: 12px; flex-wrap: wrap; }
   .eq { font: italic 400 19px/1.4 var(--math); color: var(--ink); }
 
-  /* the cabinet: the ten plates lead the page, the title set into their grid as two cells */
-  .cabinet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 34px 26px; padding: clamp(48px, 10vh, 112px) 0 80px; align-items: start; }
-  .cabinet .cells { display: contents; }
-  .intro { grid-column: span 2; align-self: stretch; display: flex; flex-direction: column; padding-right: 32px; }
-  .intro h1 { font: 400 clamp(32px, 3.3vw, 50px)/1.08 var(--serif); letter-spacing: -.012em; margin: 18px 0 22px; }
-  .intro .lede { font-size: 17px; line-height: 1.6; color: var(--ink-2); margin: 0 0 26px; max-width: 31em; }
-  .intro .actions { margin-top: auto; }
-  .cell { list-style: none; min-width: 0; }
-  .cell > a { display: block; text-decoration: none; }
-  .cell .thumb { position: relative; aspect-ratio: 4 / 5; background: var(--drawer); box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 20px 34px -22px rgba(40,24,8,.65); transition: transform .45s cubic-bezier(.2,.7,.2,1), box-shadow .45s; }
-  .cell .thumb > img { display: block; width: 100%; height: 100%; }
+  /* the wall: the ten drawers edge to edge across the window, a cabinet of specimens. The title and
+     the byline are cards set into it as merged cells; each drawer carries its label holder, and on
+     hover (always, on touch) the input its model takes. */
+  .wall { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); background: var(--drawer); box-shadow: 0 30px 60px -40px rgba(40,24,8,.8); }
+  .wall .cells { display: contents; }
+  .title-card { grid-column: 1 / span 3; grid-row: 1 / span 2; }
+  .byline { grid-column: 1 / span 2; grid-row: 3; }
+  .title-card, .byline { position: relative; padding: clamp(10px, 1.3vw, 20px); background: linear-gradient(135deg, #4c2f1b, #2e1b0d 55%, #3d2614); box-shadow: inset 0 0 0 1px rgba(255,235,200,.06), inset 0 2px 0 rgba(255,235,200,.08), inset 0 -3px 6px rgba(0,0,0,.5); }
+  .card { height: 100%; display: flex; flex-direction: column; background: #efe8db; box-shadow: inset 0 0 0 1px rgba(60,40,20,.12), inset 0 18px 40px -18px rgba(60,40,20,.35), inset 0 -10px 30px -16px rgba(60,40,20,.25); padding: clamp(24px, 3.6vw, 64px); }
+  /* the cards take the house grain, as the page's ground does */
+  .card { position: relative; isolation: isolate; }
+  .card::before, .card::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-size: var(--grain-tile, 512px); opacity: .32; }
+  .card::before { background-image: url(images/grain-lift.png); mix-blend-mode: plus-lighter; }
+  .card::after { background-image: url(images/grain-drop.png); mix-blend-mode: difference; }
+  .title-card .card { justify-content: center; }
+  .title-card h1 { font: 400 clamp(34px, 4.1vw, 68px)/1.04 var(--serif); letter-spacing: -.015em; margin: 18px 0 22px; max-width: 11em; }
+  .title-card .sub { margin: 0; max-width: 27em; font: italic 400 clamp(16px, 1.35vw, 21px)/1.45 var(--serif); color: var(--ink-2); }
+  .byline .card { justify-content: center; gap: 18px; padding: clamp(20px, 2.4vw, 40px); }
+  .byline p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
+  .byline .note { min-height: 1.2em; font: 12px var(--mono); color: var(--ink-3); }
+  .cell { list-style: none; min-width: 0; position: relative; }
+  .cell > a { display: block; position: relative; text-decoration: none; color: var(--ink); }
+  .cell .thumb { position: relative; aspect-ratio: 4 / 5; overflow: hidden; }
+  .cell .thumb > img { display: block; width: 100%; height: 100%; transition: transform .6s cubic-bezier(.2,.7,.2,1), filter .6s; }
   .cell .thumb .live { position: absolute; inset: 0; box-shadow: none; }
-  .cell > a:hover .thumb { transform: translateY(-4px); box-shadow: 0 2px 3px rgba(0,0,0,.18), 0 30px 44px -24px rgba(40,24,8,.7); }
-  .cell .cap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 13px; }
-  .cell .n { font: 600 11px var(--sans); letter-spacing: .1em; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-  .cell .nm { font: 400 16px/1.25 var(--serif); }
-  /* each cell names the input its model takes, with a small scale whose mark moves on hover */
-  .cell .in { margin-left: auto; display: inline-flex; align-items: center; gap: 9px; font: italic 400 15px/1 var(--math); color: var(--ink-2); white-space: nowrap; }
+  .cell > a:hover .thumb > img { transform: scale(1.035); filter: brightness(1.06); }
+  /* the label holder on the drawer's top rail */
+  .tab { position: absolute; z-index: 3; left: 50%; top: 2.2%; transform: translateX(-50%); display: flex; align-items: baseline; gap: 6px; padding: 3px 9px 4px; background: #eee6d3; border: 1px solid #a3864f; box-shadow: 0 1px 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.4); white-space: nowrap; max-width: 86%; overflow: hidden; }
+  .tab b { font: 600 9.5px var(--sans); letter-spacing: .08em; color: #8b6a3a; }
+  .tab span { font: 400 12.5px/1.1 var(--serif); color: #2a2118; overflow: hidden; text-overflow: ellipsis; }
+  /* the input its model takes: a label card that rises from the drawer's floor */
+  .cell .in { position: absolute; z-index: 3; left: 7%; right: 7%; bottom: 6%; display: flex; align-items: center; gap: 9px; padding: 9px 12px 10px; background: #eee6d3; color: #2a2118; box-shadow: 0 0 0 1px rgba(60,40,20,.16), 0 10px 18px -10px rgba(0,0,0,.7); font: italic 400 15px/1 var(--math); white-space: nowrap; opacity: 0; transform: translateY(8px); transition: opacity .35s, transform .45s cubic-bezier(.2,.7,.2,1); pointer-events: none; }
   .cell .in sub { font-size: .65em; }
-  .knob { position: relative; flex: none; width: 26px; height: 1px; background: var(--ink-3); }
-  .knob::after { content: ""; position: absolute; top: -3px; left: 25%; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: var(--red); transition: left .6s cubic-bezier(.2,.7,.2,1); }
+  .cell .in .go { margin-left: auto; font: 400 12px var(--sans); font-style: normal; color: #6f6252; }
+  .cell > a:hover .in, .cell > a:focus-visible .in { opacity: 1; transform: none; }
+  @media (hover: none) { .cell .in { opacity: 1; transform: none; padding: 6px 9px 7px; font-size: 13px; } .cell .in .go { display: none; } }
+  .cell.busy-cell .in { display: none; }
+  .knob { position: relative; flex: none; width: 26px; height: 1px; background: #8e897f; }
+  .knob::after { content: ""; position: absolute; top: -3px; left: 25%; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: var(--red); transition: left .7s cubic-bezier(.2,.7,.2,1) .1s; }
   .cell > a:hover .knob::after { left: 80%; }
-  .cell .note { margin: 5px 0 0; min-height: 1.3em; font: 12px var(--mono); color: var(--ink-3); }
+  /* one drawer at a time hints, in turn, until the visitor hovers one */
+  .wall:not(.touched) .cell.hint .in { opacity: 1; transform: none; }
+  .wall:not(.touched) .cell.hint .knob::after { left: 80%; }
 
   /* a live plate: the still, then the page computing in place */
   .live { position: relative; overflow: hidden; background: var(--drawer); box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 34px 60px -34px rgba(40,24,8,.6); }
@@ -217,15 +237,18 @@
   @media (max-width: 1080px) {
     .bar ol .nm, .bar ol a[aria-current] .nm { display: none; }
     .bar ol a { padding: 6px 7px; }
-    .cabinet { gap: 28px 20px; }
-    .intro { padding-right: 8px; }
+    .wall { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .title-card { grid-column: 1 / span 2; grid-row: 1 / span 2; }
+    .byline { grid-column: 1 / span 2; grid-row: 3; }
     .spread, .method { grid-template-columns: 1fr; gap: 40px; padding: 72px 0; }
     .recto { max-width: 520px; position: static; order: -1; }
     .nums { grid-template-columns: repeat(2, auto); }
   }
   @media (max-width: 900px) {
-    .cabinet { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 40px; }
-    .intro { padding: 0 0 8px; }
+    .wall { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .title-card { grid-column: 1 / span 2; grid-row: 1; }
+    .byline { grid-column: 1 / span 2; grid-row: 2; }
+    .card { padding: 28px 24px; }
   }
   @media (max-width: 560px) {
     .bar .side { display: none; }
@@ -234,9 +257,8 @@
     .wrap { padding: 0 22px; }
     .verso h2, .method h2 { font-size: 36px; }
     .formula { --fs: 21px !important; }
-    .cabinet { gap: 22px 14px; padding-top: 28px; }
-    .cell .nm { font-size: 14.5px; }
-    .cell .in { margin-left: 0; font-size: 14px; }
+    .tab span { font-size: 11px; }
+    .tab b { display: none; }
     .vary .marks { height: 42px; }
     .vary .marks button:nth-child(even) { top: 17px; }
     .vary figcaption { flex-direction: column; align-items: flex-start; }
@@ -246,17 +268,21 @@
 <body>
 <div class="ground" aria-hidden="true"></div>
 <nav class="bar" id="bar" aria-label="Plates"><div class="wrap"><a class="home" href="#">Math-Animals</a><ol id="barlist"></ol><a class="side" href="#method">Method</a></div></nav>
+<!-- the wall: the ten drawers edge to edge, the title and the byline set into it as merged cells -->
+<header class="wall" id="top">
+  <div class="title-card"><div class="card">
+    <div class="eyebrow">Math-Animals</div>
+    <h1>Ten animals rendered from published models of their form</h1>
+    <p class="sub">Each drawer computes its animal in your browser. Open one and change its model’s input to watch the animal regrow.</p>
+  </div></div>
+  <div class="byline"><div class="card">
+    <p>Claude Code (Opus 5.5) read the source papers, implemented each model in Canvas 2D and rendered each animal from the model’s output, with no image files.</p>
+    <div class="actions"><a class="btn" href="#honeybee">Open plate 1</a><a class="btn ghost" href="#method">Method</a><a class="btn ghost" href="https://github.com/r3al1tym/math-animals">Code</a></div>
+    <p class="note" id="hero-note"></p>
+  </div></div>
+  <ol class="cells" id="toc"></ol>
+</header>
 <div class="wrap">
-  <!-- the cabinet: the ten plates lead, the title set into the grid as one more drawer's worth -->
-  <header class="cabinet" id="top">
-    <div class="intro rise" style="animation-delay:.05s">
-      <div class="eyebrow">Math-Animals</div>
-      <h1>Ten animals rendered from published models of their form</h1>
-      <p class="lede">Claude Code (Opus 5.5) read the source papers, implemented each model in Canvas 2D, and rendered the animal from the model’s output, with no image files. Every plate computes in your browser, and each one lets you change an input of its model and watch the animal regrow.</p>
-      <div class="actions"><a class="btn" href="#honeybee">Open plate 1</a><a class="btn ghost" href="#method">Method</a><a class="btn ghost" href="https://github.com/r3al1tym/math-animals">Code</a></div>
-    </div>
-    <ol class="cells" id="toc"></ol>
-  </header>
 
   <main id="plates"></main>
 
@@ -362,15 +388,22 @@ const P = [
 ];
 const $ = id => document.getElementById(id), slug = d => d.slice(3);
 
-// the cabinet's cells: each plate's still (the dragonfly's drawer computes live), its name, and the
-// input its model takes at the value the plate was grown at
+// the wall's drawers: each plate's still (the dragonfly's drawer computes live), its label holder,
+// and the input its model takes at the value the plate was grown at
 $('toc').innerHTML = P.map((p, i) => {
-  const c = p.vary, inp = c ? `<span class="in">${c.sym} = ${fmtV(c.value, c.step)}${c.unit || ''}<span class="knob" aria-hidden="true"></span></span>` : '';
+  const c = p.vary, inp = c ? `<span class="in">${c.sym} = ${fmtV(c.value, c.step)}${c.unit || ''}<span class="knob" aria-hidden="true"></span><span class="go">Change it</span></span>` : '';
   const thumb = i === 2
     ? `<div class="live" id="hero-live"><div class="inner"><img src="images/plates/${p.d}-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div><div class="grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span><span class="bar"></span></div></div>`
-    : `<img src="images/plates/${p.d}.jpg" width="720" height="900" alt="${p.nm}, rendered in code"${i > 5 ? ' loading="lazy"' : ''}>`;
-  return `<li class="cell rise" style="animation-delay:${(0.12 + i * 0.05).toFixed(2)}s"><a href="#${slug(p.d)}"><div class="thumb">${thumb}</div><div class="cap"><span class="n">${i + 1}</span><span class="nm">${p.nm}</span>${inp}</div>${i === 2 ? '<p class="note" id="hero-note"></p>' : ''}</a></li>`;
+    : `<img src="images/plates/${p.d}.jpg" width="720" height="900" alt="${p.nm}, rendered in code">`;
+  return `<li class="cell${i === 2 ? ' busy-cell' : ''}"><a href="#${slug(p.d)}"><div class="thumb">${thumb}</div><div class="tab"><b>${i + 1}</b><span>${p.nm}</span></div>${inp}</a></li>`;
 }).join('');
+// until the visitor hovers a drawer, one drawer at a time shows its input, in turn
+{
+  const wall = document.querySelector('.wall'), cells = [...wall.querySelectorAll('.cell')];
+  let k = 0; const step = () => { cells.forEach(c => c.classList.remove('hint')); do k = (k + 1) % cells.length; while (cells[k].classList.contains('busy-cell')); cells[k].classList.add('hint'); };
+  const t = matchMedia('(hover: hover)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches ? setInterval(step, 2400) : 0;
+  wall.addEventListener('pointerover', e => { if (e.target.closest('.cell')) { wall.classList.add('touched'); clearInterval(t); } }, { once: false });
+}
 $('plates').innerHTML = P.map((p, i) => `
   <article class="spread" id="${slug(p.d)}">
     <div class="verso">
@@ -399,7 +432,7 @@ $('plates').innerHTML = P.map((p, i) => `
 $('barlist').innerHTML = P.map((p, i) => `<li><a href="#${slug(p.d)}" title="${p.nm}"><b>${i + 1}</b><span class="nm">${p.nm}</span></a></li>`).join('');
 {
   const bar = $('bar'), links = [...bar.querySelectorAll('ol a')];
-  new IntersectionObserver(([e]) => bar.classList.toggle('on', !e.isIntersecting), { rootMargin: '-60px 0px 0px 0px' }).observe(document.querySelector('.intro'));
+  new IntersectionObserver(([e]) => bar.classList.toggle('on', !e.isIntersecting), { rootMargin: '-60px 0px 0px 0px' }).observe(document.querySelector('.title-card'));
   const seen = new Map();
   const io = new IntersectionObserver(es => {
     for (const e of es) seen.set(e.target.id, e.intersectionRatio);
@@ -598,9 +631,9 @@ const still = matchMedia('(prefers-reduced-motion: reduce)').matches, final = ()
 let heroS = 0;
 const heroGo = () => grow(hero, '03-dragonfly', {
   ms: P[2].ms, onTick: t => { cueL.textContent = 'Computing'; cueC.textContent = `· ${t}`; },
-  onLive: s => { heroS = s; }, onDone: () => { note.textContent = `computed in this browser in ${heroS.toFixed(1)} s`; },
+  onLive: s => { heroS = s; hero.closest('.cell').classList.remove('busy-cell'); }, onDone: () => { note.textContent = `Plate 3 computed in this browser in ${heroS.toFixed(1)} s.`; },
 });
-// it starts once the cabinet has risen, unless a plate is already running or the cabinet has scrolled away
+// it starts once the page has settled, unless a plate is already running or the wall has scrolled away
 if (still) final(); else setTimeout(() => { if (!active && hero.getBoundingClientRect().bottom > 0) heroGo(); else final(); }, 900);
 
 // a plate named in the address bar grows when you arrive at it
