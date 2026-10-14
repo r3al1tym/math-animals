@@ -55,7 +55,11 @@
      drawers' own scale. Each drawer shows, on hover (always, on touch), the input its model takes. */
   .wall { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); background: var(--drawer); box-shadow: 0 30px 60px -40px rgba(40,24,8,.8); }
   .wall .cells { display: contents; }
-  .board { grid-column: 1 / span 4; grid-row: 1 / span 2; position: relative; min-width: 0; background: #4a2f1b; box-shadow: inset 0 0 0 var(--rail, 9px) #5d3d24, inset 0 0 0 calc(var(--rail, 9px) + 5px) #2c1b0f; }
+  .wall { grid-auto-flow: dense; }
+  /* two drawers shown large, 2 x 2 so they keep the drawers' 4:5: the live dragonfly beside the title, the nautilus below */
+  .cell.f1 { grid-column: 5 / span 2; grid-row: 1 / span 2; }
+  .cell.f2 { grid-column: 3 / span 2; grid-row: 3 / span 2; }
+  .board { grid-column: 1 / span 4; grid-row: 1 / span 2; aspect-ratio: 8 / 5; position: relative; min-width: 0; background: #4a2f1b; box-shadow: inset 0 0 0 var(--rail, 9px) #5d3d24, inset 0 0 0 calc(var(--rail, 9px) + 5px) #2c1b0f; }
   .board .wood { position: absolute; inset: 0; width: 100%; height: 100%; }
   .floor { position: relative; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--gap, 18px); padding: calc(var(--rail, 9px) + var(--pad, 40px)); transition: opacity .5s; }
   .board:not(.ready) .floor { opacity: 0; }
@@ -140,18 +144,27 @@
 
   /* explain it like I'm five: one switch, on every plate at once, swaps each paragraph for a plain one */
   .frow { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-  .eli { display: inline-flex; align-items: center; gap: 9px; font: 400 13px var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-2); cursor: pointer; user-select: none; }
+  .eli { position: relative; display: inline-flex; align-items: center; gap: 9px; font: 400 13px var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-2); cursor: pointer; user-select: none; }
   .eli input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .eli .sw { position: relative; width: 28px; height: 16px; border-radius: 8px; background: #d8d1c5; transition: background .25s; }
   .eli .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--paper); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .25s cubic-bezier(.2,.7,.2,1); }
-  .eli input:checked + .sw { background: var(--red); }
-  .eli input:checked + .sw::after { transform: translateX(12px); }
-  .eli input:focus-visible + .sw { outline: 2px solid var(--red); outline-offset: 2px; }
+  .eli input:checked ~ .sw { background: var(--red); }
+  .eli input:checked ~ .sw::after { transform: translateX(12px); }
+  .eli input:focus-visible ~ .sw { outline: 2px solid var(--red); outline-offset: 2px; }
   .kid { display: none; }
-  body.eli .kid { display: inline; }
-  body.eli .pro { display: none; }
-  body.eli .formula small { font: 400 16px/1.55 var(--serif); color: var(--ink-2); margin-top: 10px; }
-  body.eli .built { font: 400 17px/1.6 var(--serif); }
+  /* on the bar the switch is a pill: a toy block for an icon, red once it is on */
+  .bar .bar-eli { flex: none; gap: 8px; padding: 6px 8px 6px 10px; border: 1px solid #d3cbbf; border-radius: 999px; background: var(--paper); font: 500 13px var(--sans); color: var(--ink); transition: border-color .2s, background .2s; }
+  .bar .bar-eli:hover { border-color: var(--ink-3); }
+  .bar .bar-eli:has(input:checked) { background: #f7e6e1; border-color: rgba(184,64,47,.5); }
+  .bar .bar-eli .ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; transition: color .2s; }
+  .bar .bar-eli:has(input:checked) .ico { color: var(--red); }
+  .bar .bar-eli .sm { display: none; }
+  .bar .bar-eli:has(input:focus-visible) { outline: 2px solid var(--red); outline-offset: 2px; }
+  .bar .bar-eli input:focus-visible ~ .sw { outline: none; }
+  body.simple .kid { display: inline; }
+  body.simple .pro { display: none; }
+  body.simple .formula small { font: 400 16px/1.55 var(--serif); color: var(--ink-2); margin-top: 10px; }
+  body.simple .built { font: 400 17px/1.6 var(--serif); }
 
   /* the spreads: the paper on the verso, the plate on the recto */
   .spread { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 88px; padding: 112px 0; align-items: start; scroll-margin-top: 0; }
@@ -238,18 +251,30 @@
     .bar ol .nm, .bar ol a[aria-current] .nm { display: none; }
     .bar ol a { padding: 6px 7px; }
     .wall { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .board { grid-column: 1 / span 3; }
+    .board { grid-column: 1 / -1; }
+    .cell.f1 { grid-column: 1 / span 2; grid-row: 3 / span 2; }
+    .cell.f2 { grid-column: 3 / span 2; grid-row: 5 / span 2; }
     .spread, .method { grid-template-columns: 1fr; gap: 40px; padding: 72px 0; }
     .recto { max-width: 520px; position: static; order: -1; }
     .nums { grid-template-columns: repeat(2, auto); }
   }
+  @media (max-width: 860px) {
+    .bar .bar-eli .lg { display: none; }
+    .bar .bar-eli .sm { display: inline; }
+  }
   @media (max-width: 640px) {
     .wall { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .board { grid-column: 1 / -1; grid-row: auto; }
+    .board { grid-column: 1 / -1; grid-row: auto; aspect-ratio: auto; }
+    .cell.f1, .cell.f2 { grid-column: 1 / -1; grid-row: auto; }
   }
   @media (max-width: 560px) {
     .bar .side { display: none; }
     .bar .wrap { gap: 10px; }
+    .bar .bar-eli { gap: 6px; padding: 5px 6px 5px 8px; }
+    .bar .home { font-size: 16px; }
+    .bar ol { flex: 1 1 auto; min-width: 0; margin: 0; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, transparent, #000 8px, #000 calc(100% - 8px), transparent); }
+    .bar ol::-webkit-scrollbar { display: none; }
+    .bar .bar-eli .sm { display: none; }
     .bar ol a { padding: 6px 4px; }
     .wrap { padding: 0 22px; }
     .verso h2, .method h2 { font-size: 36px; }
@@ -267,7 +292,7 @@
 </head>
 <body>
 <div class="ground" aria-hidden="true"></div>
-<nav class="bar" id="bar" aria-label="Plates"><div class="wrap"><a class="home" href="#">Math-Animals</a><ol id="barlist"></ol><a class="side" href="#method">Method</a></div></nav>
+<nav class="bar" id="bar" aria-label="Plates"><div class="wrap"><a class="home" href="#">Math-Animals</a><ol id="barlist"></ol><label class="eli bar-eli" title="Explain it like I’m five: simpler words for every plate"><input type="checkbox" class="eli-t"><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 7h10v10.5h-10zM2.5 7 6 3.5h10L12.5 7M16 3.5v10.5l-3.5 3.5"/><path d="M5.2 15.2 7.5 9.3l2.3 5.9M6 13.1h3" stroke-width="1.3"/></svg><span class="lg">Explain it like I’m five</span><span class="sm">Like I’m five</span><span class="sw" aria-hidden="true"></span></label><a class="side" href="#method">Method</a></div></nav>
 <!-- the wall: the ten drawers edge to edge, the title drawer set into it across several -->
 <header class="wall" id="top">
   <div class="board" id="board">
@@ -394,8 +419,8 @@ $('toc').innerHTML = P.map((p, i) => {
   const c = p.vary, inp = c ? `<span class="in">${c.sym} = ${fmtV(c.value, c.step)}${c.unit || ''}<span class="knob" aria-hidden="true"></span><span class="go">Change it</span></span>` : '';
   const thumb = i === 2
     ? `<div class="live" id="hero-live"><div class="inner"><img src="images/plates/${p.d}-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div><div class="grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span><span class="bar"></span></div></div>`
-    : `<img src="images/plates/${p.d}.jpg" width="720" height="900" alt="${p.nm}, rendered in code">`;
-  return `<li class="cell${i === 2 ? ' busy-cell' : ''}"><a href="#${slug(p.d)}" aria-label="Plate ${i + 1}, ${p.nm}"><div class="thumb">${thumb}</div>${inp}</a></li>`;
+    : `<img src="images/plates/${p.d}${i === 4 ? '@2x' : ''}.jpg" width="720" height="900" alt="${p.nm}, rendered in code">`; // the large drawer gets the full 1080 px still
+  return `<li class="cell${i === 2 ? ' busy-cell f1' : i === 4 ? ' f2' : ''}"><a href="#${slug(p.d)}" aria-label="Plate ${i + 1}, ${p.nm}"><div class="thumb">${thumb}</div>${inp}</a></li>`;
 }).join('');
 // until the visitor hovers a drawer, one drawer at a time shows its input, in turn
 {
@@ -492,6 +517,8 @@ $('barlist').innerHTML = P.map((p, i) => `<li><a href="#${slug(p.d)}" title="${p
     for (const e of es) seen.set(e.target.id, e.intersectionRatio);
     let best = null, r = 0; for (const [id, q] of seen) if (q > r) { r = q; best = id; }
     links.forEach(a => a.getAttribute('href') === '#' + best && r > 0 ? a.setAttribute('aria-current', 'true') : a.removeAttribute('aria-current'));
+    const cur = links.find(a => a.hasAttribute('aria-current')), ol = cur?.closest('ol'); // a narrow bar scrolls its numbers to the plate in view
+    if (cur && ol.scrollWidth > ol.clientWidth) ol.scrollLeft = cur.offsetLeft - ol.offsetLeft - (ol.clientWidth - cur.offsetWidth) / 2;
   }, { threshold: [0, 0.15, 0.3, 0.5, 0.7, 0.9] });
   document.querySelectorAll('.spread').forEach(el => io.observe(el));
 }
@@ -499,7 +526,13 @@ $('barlist').innerHTML = P.map((p, i) => `<li><a href="#${slug(p.d)}" title="${p
 // explain it like I'm five: every switch shows the same state, kept across visits
 {
   const ts = [...document.querySelectorAll('.eli-t')];
-  const set = on => { document.body.classList.toggle('eli', on); ts.forEach(t => t.checked = on); try { localStorage.setItem('ma-eli', on ? '1' : ''); } catch (e) {} };
+  const set = on => {
+    // the explanations change length, so hold the plate in view where it was
+    const a = [...document.querySelectorAll('.spread')].find(el => el.getBoundingClientRect().bottom > 60), y = a?.getBoundingClientRect().top, R = document.documentElement;
+    R.style.overflowAnchor = 'none'; document.body.classList.toggle('simple', on);
+    if (a) scrollBy({ top: a.getBoundingClientRect().top - y, behavior: 'instant' });
+    requestAnimationFrame(() => R.style.overflowAnchor = '');
+    ts.forEach(t => t.checked = on); try { localStorage.setItem('ma-eli', on ? '1' : ''); } catch (e) {} };
   ts.forEach(t => t.onchange = () => set(t.checked));
   set(localStorage.getItem('ma-eli') === '1');
 }
