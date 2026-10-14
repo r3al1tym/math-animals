@@ -49,7 +49,7 @@
   .hero h1 span { display: block; }
   .hero h1 .soft { color: var(--ink-3); }
   .hero p.lede { font-size: 18px; color: var(--ink-2); margin: 0 0 26px; max-width: 30em; }
-  .live-note { display: flex; align-items: center; gap: 10px; font: 13px var(--mono); color: var(--ink-2); margin-bottom: 26px; min-height: 20px; }
+  .live-note { font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 10px; font: 13px var(--mono); color: var(--ink-2); margin-bottom: 26px; min-height: 20px; }
   .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: pulse 1.6s ease-out infinite; }
   .dot.done { animation: none; background: var(--ink-3); }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(184,64,47,.45); } 100% { box-shadow: 0 0 0 10px rgba(184,64,47,0); } }
@@ -62,14 +62,23 @@
   /* a live plate: the still, then the page computing in place */
   .live { position: relative; overflow: hidden; background: var(--drawer); box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 34px 60px -34px rgba(40,24,8,.6); }
   .live .inner { position: absolute; left: 0; top: 0; width: 720px; height: 900px; transform-origin: 0 0; }
-  .live img, .live iframe { position: absolute; inset: 0; width: 720px; height: 900px; border: 0; display: block; }
-  .live iframe { opacity: 0; transition: opacity .3s ease; }
-  .live.on iframe { opacity: 1; }
+  .live img, .live iframe, .live canvas { position: absolute; inset: 0; width: 720px; height: 900px; border: 0; display: block; }
+  .live iframe, .live canvas { opacity: 0; transition: opacity .3s ease; pointer-events: none; }
+  .live.on iframe, .live.on canvas { opacity: 1; }
   .live img { transition: opacity .5s ease; }
+  .live:not(.on) { cursor: pointer; }
   .live.on img { opacity: 0; }
   .live .grow { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 2; opacity: 0; transition: opacity .25s; }
-  .live:hover .grow, .live:focus-within .grow { opacity: 1; }
+  .live:hover .grow, .live:focus-within .grow, .live.busy .grow { opacity: 1; }
+  @media (hover: none) { .live .grow { opacity: 1; } }
   .live.on .grow { display: none; }
+  /* while the model computes, the button becomes its clock */
+  .live.busy .grow { cursor: progress; background: rgba(22,19,15,.82); border-color: rgba(243,239,236,.22); font: 12.5px var(--mono); letter-spacing: 0; gap: 10px; white-space: nowrap; }
+  .live .grow { max-width: calc(100% - 28px); }
+  .live .grow .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .live .grow .clk { flex: none; font-variant-numeric: tabular-nums; }
+  .live .grow .dot { display: none; }
+  .live.busy .grow .dot { display: block; }
 
   /* contents: the ten plates as a table of contents */
   .contents { padding: 40px 0 24px; }
@@ -104,6 +113,7 @@
   .scrub { display: flex; align-items: center; gap: 14px; margin-top: 14px; font: 12px var(--mono); color: var(--ink-3); visibility: hidden; }
   .scrub.on { visibility: visible; }
   .scrub input { flex: 1; accent-color: var(--red); }
+  .scrub .tv { min-width: 5.5ch; text-align: right; font-variant-numeric: tabular-nums; }
   .scrub button { all: unset; cursor: pointer; font: 600 12px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
   .scrub button:hover { color: var(--ink); }
 
@@ -213,52 +223,52 @@ const grainTile = () => {
 grainTile();
 const GH = 'https://github.com/r3al1tym/math-animals/blob/main/', HERO = 5.2;
 const P = [
-  { d: '01-honeybee', nm: 'Honeybee comb', bin: 'Apis mellifera Linnaeus, 1758', tx: 'Hymenoptera',
+  { d: '01-honeybee', run: 'Relaxing wax circles into hexagons', nm: 'Honeybee comb', bin: 'Apis mellifera Linnaeus, 1758', tx: 'Hymenoptera',
     paper: ['T. C. Hales', 'The honeycomb conjecture', '<i>Discrete &amp; Computational Geometry</i> 25 (2001)'],
     finding: 'Of all the ways to divide a plane into cells of equal area, the regular hexagon uses the least wall.',
     f: 'P<sub>n</sub> = √(4n · tan(π/n))', f2: 'wall per unit cell: triangle 4.559, square 4.000, hexagon 3.722',
     built: 'A band of 5.3 mm circles relaxes into hexagons, as warm wax is proposed to flow (Karihaloo, Zhang and Wang, 2013). Each cell is then ray-cast as a prism of wax under a 0.3 mm coping, on a base of three rhombi.' },
-  { d: '02-sea-urchin', nm: 'Edible sea urchin', bin: 'Echinus esculentus Linnaeus, 1758', tx: 'Echinoidea',
+  { d: '02-sea-urchin', run: 'Laying 20 columns of plates', nm: 'Edible sea urchin', bin: 'Echinus esculentus Linnaeus, 1758', tx: 'Echinoidea',
     anatomy: 'From the anatomy of the Echinidae test',
     finding: 'The test is twenty columns of plates in ten double areas: five narrow ambulacra, pierced for the tube feet, alternating with five broad interambulacra.',
     f: 'φ<sub>j</sub> = θ − j · 72°', f2: 'five-fold symmetry: one sector, turned four times, j = 0 … 4',
     built: 'One sector of plates is laid by arc length down a superellipse dome 140 mm across and 108 mm tall, then turned four times about the apex.' },
-  { d: '03-dragonfly', nm: 'Emperor dragonfly', bin: 'Anax imperator Leach, 1815', tx: 'Odonata',
+  { d: '03-dragonfly', run: 'Dividing the wing into 2,611 cells', nm: 'Emperor dragonfly', bin: 'Anax imperator Leach, 1815', tx: 'Odonata',
     paper: ['J. Hoffmann, S. Donoughe, K. Li, M. K. Salcedo and C. H. Rycroft', 'A simple developmental model recapitulates complex insect wing venation patterns', '<i>PNAS</i> 115 (2018)'],
     finding: 'Measuring wing cells across 232 species of dragonflies and damselflies, they found that inhibitory centres spaced evenly between the main veins, with the small veins set where those signals are weakest, reproduce the wings.',
     f: 'p ∈ V<sub>s</sub>  ⇔  |p − s| ≤ |p − o|', f2: 'a point belongs to the cell of its nearest centre s, against every other centre o',
     built: 'The wing divides into <b>2,611 cells</b>, each wall midway between two centres. It is the only plate of the ten that passed blind review.' },
-  { d: '04-orb-weaver', nm: 'Garden orb-weaver', bin: 'Araneus diadematus Clerck, 1757', tx: 'Araneae',
+  { d: '04-orb-weaver', run: 'Solving Rayleigh’s growth rate', nm: 'Garden orb-weaver', bin: 'Araneus diadematus Clerck, 1757', tx: 'Araneae',
     paper: ['Lord Rayleigh', 'On the instability of jets', '<i>Proc. London Math. Soc.</i> 10 (1878)'],
     finding: 'A cylinder of liquid is unstable: it breaks into drops, and the fastest-growing disturbance has a wavelength of about nine radii.',
     f: 'σ² ∝ x(1 − x²) I<sub>1</sub>(x) / I<sub>0</sub>(x)', f2: 'growth rate of a disturbance of wavenumber k on a thread of radius r, x = kr; fastest at x = 0.697',
     built: 'The page solves Rayleigh’s growth rate itself and beads the glue every <b>9.01 radii</b>, 144 µm on a 16 µm coat, along an Archimedean spiral with 31 rays (web geometry from Zschokke, 1993 and 2011).' },
-  { d: '05-nautilus', nm: 'Chambered nautilus', bin: 'Nautilus pompilius Linnaeus, 1758', tx: 'Cephalopoda',
+  { d: '05-nautilus', run: 'Laying 35 septa on the spiral', nm: 'Chambered nautilus', bin: 'Nautilus pompilius Linnaeus, 1758', tx: 'Cephalopoda',
     paper: ['H. Moseley', 'On the geometrical forms of turbinated and discoid shells', '<i>Phil. Trans. R. Soc.</i> 128 (1838)'],
     finding: 'Measured shells widen by the same ratio every whorl, 2.83 to 3.02: the shell is a logarithmic spiral.',
     f: 'r = a e<sup>bθ</sup>', f2: 'b = 0.175, so each whorl widens by W = e<sup>2πb</sup> = 3.00',
     built: 'Thirty-five septa, each the last one scaled and turned 25°. The trial spirals below the shell compare W = 3.00 with the golden spiral’s W = φ⁴ = 6.85; 80 measured shells average <b>2.9</b> (Bartlett, 2018), so the nautilus is not a golden spiral.' },
-  { d: '06-camp-pitar', nm: 'Camp pitar', bin: 'Lioconcha castrensis (Linnaeus, 1758)', tx: 'Bivalvia',
+  { d: '06-camp-pitar', run: 'Running the reaction along the margin', nm: 'Camp pitar', bin: 'Lioconcha castrensis (Linnaeus, 1758)', tx: 'Bivalvia',
     paper: ['H. Meinhardt', 'The Algorithmic Beauty of Sea Shells', 'Springer (1995)'],
     finding: 'The pigment pattern on a shell is the record of a reaction–diffusion system running along the growing edge, one row for each step of growth.',
     f: 'r = r<sub>0</sub> + (1 − r<sub>0</sub>) (1 − e<sup>−ke</sup>) / (1 − e<sup>−kE</sup>)', f2: 'von Bertalanffy growth: the margin r at age e, less any pauses',
     built: 'The valve grows by accretion on that von Bertalanffy curve, fastest while young, with two growth checks. An activator–inhibitor reaction run along the lengthening mantle edge lays down its rows of <b>brown tents</b>.' },
-  { d: '07-sea-fan', nm: 'Common sea fan', bin: 'Gorgonia ventalina Linnaeus, 1758', tx: 'Octocorallia',
+  { d: '07-sea-fan', run: 'Growing toward 4,526 attractors', nm: 'Common sea fan', bin: 'Gorgonia ventalina Linnaeus, 1758', tx: 'Octocorallia',
     paper: ['A. Runions, B. Lane and P. Prusinkiewicz', 'Modeling trees with a space colonization algorithm', '<i>Eurographics Workshop on Natural Phenomena</i> (2007)'],
     finding: 'A branching network grows when every tip advances toward the free space near it, and each point of space is used up once a branch reaches it.',
     f: 'v′ = v + D n̂,   n̂ ∝ Σ (s − v) / |s − v|', f2: 'each tip v steps a distance D toward the attractors s nearest it',
     built: '<b>4,526 attractor points</b> spaced 1.9 mm apart fill the fan’s outline. A fusion rule, which is not in Runions et al., joins branches where they meet and closes the mesh.' },
-  { d: '08-cone-shell', nm: 'Textile cone', bin: 'Conus textile Linnaeus, 1758', tx: 'Gastropoda',
+  { d: '08-cone-shell', run: 'Running 8,521 growth lines of the lip', nm: 'Textile cone', bin: 'Conus textile Linnaeus, 1758', tx: 'Gastropoda',
     paper: ['H. Meinhardt and M. Klingler', 'A model for pattern formation on the shells of molluscs', '<i>J. Theor. Biol.</i> 126 (1987)'],
     finding: 'An activator–inhibitor reaction along the shell’s lip, with a hormone that spreads through the whole animal, produces the cone’s cascades of triangles.',
     f: '∂a/∂t = s a² / ((s<sub>b</sub> + b)(1 + s<sub>a</sub>a²)) − r<sub>a</sub> a + D<sub>a</sub> a″', f2: 'the activator a along the lip, held in check by the inhibitor b and a global hormone',
     built: 'The page runs Meinhardt’s own program for <i>Conus textile</i>, one row per growth step, so the shell’s surface is the reaction’s <b>space-time diagram</b>.' },
-  { d: '09-angelfish', nm: 'Semicircle angelfish', bin: 'Pomacanthus semicirculatus (Cuvier, 1831)', tx: 'Pomacanthidae',
+  { d: '09-angelfish', run: 'Growing the skin from 3 to 13 stripes', nm: 'Semicircle angelfish', bin: 'Pomacanthus semicirculatus (Cuvier, 1831)', tx: 'Pomacanthidae',
     paper: ['S. Kondo and R. Asai', 'A reaction–diffusion wave on the skin of the marine angelfish <i>Pomacanthus</i>', '<i>Nature</i> 376 (1995)'],
     finding: 'As the juvenile grows, new stripes open between the old ones, as a Turing pattern on a growing skin predicts.',
     f: '∂u/∂t = f(u, v) + D<sub>u</sub> ∇²u', f2: 'two substances, u and v, react and diffuse on a skin that grows; with ∂v/∂t = g(u, v) + D<sub>v</sub> ∇²v',
     built: 'The page solves the model once, in the fish’s own outline, and shows the same fish at 20, 40, 60 and 80 mm as the stripe count goes from <b>3 to 13</b>.' },
-  { d: '10-tortoise', nm: 'Radiated tortoise', bin: 'Astrochelys radiata (Shaw, 1802)', tx: 'Testudines',
+  { d: '10-tortoise', run: 'Growing nine rings on each scute', nm: 'Radiated tortoise', bin: 'Astrochelys radiata (Shaw, 1802)', tx: 'Testudines',
     anatomy: 'From how a scute grows',
     finding: 'Keratin is added only at a scute’s edges and never stretches, so every season’s outline stays on the shell as a ring around the hatchling’s own scute.',
     f: 'r<sub>k</sub> = r<sub>0</sub> (1 + 0.352 k)', f2: 'ring k is the areola r<sub>0</sub> scaled about its growth centre',
@@ -285,54 +295,112 @@ $('plates').innerHTML = P.map((p, i) => `
       <div class="links"><a href="${GH + p.d}/NOTES.md">Notes and sources</a><a href="${GH + p.d}/index.html">Source code</a><a href="${p.d}/index.html?play">Page</a></div>
     </div>
     <div class="recto">
-      <div class="live" data-i="${i}"><div class="inner"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt="${p.nm}, rendered in code"><iframe title="${p.nm}, computing live" tabindex="-1"></iframe></div><button class="btn grow">Run the model</button></div>
+      <div class="live" data-i="${i}"><div class="inner"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt="${p.nm}, rendered in code"><iframe title="${p.nm}, computing live" tabindex="-1"></iframe></div><button class="btn grow"><span class="dot"></span><span class="lbl">Run the model</span><span class="clk"></span></button></div>
       <div class="scrub"><button class="again">Replay</button><input type="range" min="0" max="6" step="0.01" value="5.2" aria-label="Time"><span class="tv">5.2 s</span></div>
     </div>
   </article>`).join('');
 
-// one live plate at a time: the still, then the page computing and building in place
+// one live plate at a time: the still, then the page computing and building in place.
+// Each plate runs in its own Worker and draws into a canvas the worker owns, so this page stays
+// live while a model computes. The worker runs the plate page's own scripts against a stub
+// document whose canvases are OffscreenCanvases (the same move the pages' MW kit makes for its
+// bakes). Where that cannot start, the plate page runs in an iframe as before.
 const fit = el => { const k = el.clientWidth / 720; el.querySelector('.inner').style.transform = `scale(${k})`; };
 const lives = [...document.querySelectorAll('.live')];
 addEventListener('resize', () => lives.forEach(fit)); lives.forEach(fit);
+const OFF = typeof Worker === 'function' && typeof OffscreenCanvas === 'function' && 'transferControlToOffscreen' in HTMLCanvasElement.prototype;
+const BOOT = `"use strict";
+self.window = self;
+let __c = null;
+self.document = { scripts: [], currentScript: null, getElementById: () => __c, querySelector: () => __c, createElement: () => new OffscreenCanvas(300, 150) };
+self.__siteKitStart = (init, seek) => {
+  let busy = false, want = null;
+  const run = async () => { busy = true; while (want !== null) { const t = want; want = null; await seek(t); postMessage({ at: t }); } busy = false; };
+  self.onmessage = e => { want = e.data.seek; if (!busy) run(); };
+  (async () => { await init(); await seek(0); postMessage({ ready: true }); })().catch(e => postMessage({ err: String(e && e.stack || e) }));
+};
+self.onmessage = e => {
+  __c = e.data.canvas; document.scripts = e.data.texts.map(t => ({ src: '', textContent: t }));
+  try { e.data.urls.forEach((u, i) => { document.currentScript = document.scripts[i]; importScripts(u); }); }
+  catch (err) { postMessage({ err: String(err && err.stack || err) }); }
+};`;
+const SRC = {}, blob = (t, type = 'text/javascript') => URL.createObjectURL(new Blob([t], { type }));
+// source(dir): the plate page's inline scripts, the last kitStart call handed to the worker's own
+async function source(dir) {
+  if (SRC[dir]) return SRC[dir];
+  const r = await fetch(dir + '/index.html'); if (!r.ok) throw new Error(r.status);
+  const doc = new DOMParser().parseFromString(await r.text(), 'text/html'), c = doc.getElementById('c');
+  const texts = [...doc.scripts].filter(e => !e.src).map(e => e.textContent), last = texts.length - 1, at = texts[last].lastIndexOf('\nkitStart(');
+  if (at < 0) throw new Error('no kitStart');
+  const run = texts.slice(); run[last] = texts[last].slice(0, at) + '\n__siteKitStart(' + texts[last].slice(at + 10);
+  return SRC[dir] = { texts, urls: run.map(t => blob(t)), w: +c.getAttribute('width'), h: +c.getAttribute('height') };
+}
+// a plate: { ready, seek(t), stop() }; seek resolves once frame t (or a later one asked for) is drawn
+async function workerPlate(dir, el) {
+  const s = await source(dir), cv = document.createElement('canvas');
+  cv.width = s.w; cv.height = s.h; el.querySelector('.inner').append(cv);
+  const w = new Worker(BOOT_URL), waits = [];
+  const ready = new Promise((ok, no) => {
+    w.onmessage = e => { const m = e.data; if (m.ready) ok(); else if (m.err) no(new Error(m.err)); else if ('at' in m) waits.splice(0).forEach(f => f()); };
+    w.onerror = e => { e.preventDefault(); no(new Error(e.message || 'worker failed')); };
+  });
+  const off = cv.transferControlToOffscreen();
+  w.postMessage({ canvas: off, texts: s.texts, urls: s.urls }, [off]);
+  return { ready, seek: t => new Promise(f => { waits.push(f); w.postMessage({ seek: t }); }), stop: () => { w.terminate(); cv.remove(); waits.splice(0).forEach(f => f()); } };
+}
+function framePlate(dir, el) {
+  const fr = el.querySelector('iframe'), R = () => { try { return fr.contentWindow && fr.contentWindow.__riso; } catch (e) { return null; } };
+  let poll = 0; fr.src = dir + '/index.html?t=0';
+  const ready = new Promise(ok => { poll = setInterval(() => { const r = R(); if (r && r.ready) { clearInterval(poll); ok(); } }, 60); });
+  return { ready, seek: async t => { const r = R(); r && await r.seek(t); }, stop: () => { clearInterval(poll); fr.src = 'about:blank'; } };
+}
+const BOOT_URL = OFF ? blob(BOOT) : null;
+async function open(dir, el) {
+  if (OFF) {
+    let h = null;
+    try { h = await workerPlate(dir, el); await h.ready; return h; }
+    catch (e) { console.warn(`plate ${dir}: ${e.message}; running it in an iframe`); h && h.stop(); }
+  }
+  const h = framePlate(dir, el); await h.ready; return h;
+}
 let active = null;
 function stop(L) {
-  if (!L) return; clearInterval(L.poll); cancelAnimationFrame(L.raf);
-  L.el.classList.remove('on'); L.fr.src = 'about:blank'; if (L.scrub) L.scrub.classList.remove('on');
+  if (!L) return; L.dead = true; clearInterval(L.clock); cancelAnimationFrame(L.raf);
+  L.el.classList.remove('on', 'busy'); L.h && L.h.stop(); if (L.scrub) L.scrub.classList.remove('on');
+  const lbl = L.el.querySelector('.lbl'); if (lbl) { lbl.textContent = 'Run the model'; L.el.querySelector('.clk').textContent = ''; }
+  L.onStop && L.onStop();
 }
+// grow(el, dir, o): compute the plate (o.onTick(s) every 0.1 s meanwhile), then play its build
 function grow(el, dir, o = {}) {
   if (active && active.el !== el) stop(active);
-  const L = active = { el, fr: el.querySelector('iframe'), scrub: o.scrub || null, poll: 0, raf: 0 };
-  const R = () => { try { return L.fr.contentWindow && L.fr.contentWindow.__riso; } catch (e) { return null; } };
-  L.fr.src = dir + '/index.html?play'; o.onStart && o.onStart();
-  const t0 = performance.now();
-  L.poll = setInterval(() => {
-    const r = R();
-    if (r && r.ready) {
-      clearInterval(L.poll); el.classList.add('on'); o.onLive && o.onLive();
-      setTimeout(() => {
-        if (active !== L) return;
-        if (L.scrub) { L.scrub.classList.add('on'); bindScrub(L, R); }
-        o.onDone && o.onDone(L, R);
-      }, HERO * 1000 + 200);
-    } else if (performance.now() - t0 > 3500) o.onSlow && o.onSlow();
-  }, 60);
+  const L = active = { el, scrub: o.scrub || null, raf: 0, gen: 0, h: null, dead: false, clock: 0, onStop: o.onStop }, t0 = performance.now();
+  el.classList.add('busy'); o.onTick && o.onTick(0);
+  L.clock = setInterval(() => o.onTick && o.onTick((performance.now() - t0) / 1000), 100);
+  open(dir, el).then(h => {
+    if (L.dead) return h.stop();
+    L.h = h; clearInterval(L.clock); el.classList.remove('busy'); el.classList.add('on');
+    o.onLive && o.onLive((performance.now() - t0) / 1000);
+    if (L.scrub) { L.scrub.classList.add('on'); bindScrub(L); }
+    replay(L, () => o.onDone && o.onDone(L));
+  });
   return L;
 }
-function replay(L, R, done) {
-  const r = R(); if (!r) return; const s0 = performance.now();
-  const tick = async () => { const t = Math.min(HERO, (performance.now() - s0) / 1000); await r.seek(t); setT(L, t); if (t < HERO) L.raf = requestAnimationFrame(tick); else done && done(); };
-  tick();
+function replay(L, done) {
+  cancelAnimationFrame(L.raf); const s0 = performance.now(), g = ++L.gen;
+  setT(L, 0);
+  const tick = async () => { const t = Math.min(HERO, (performance.now() - s0) / 1000); await L.h.seek(t); if (L.dead || L.gen !== g) return; setT(L, t); if (t < HERO) L.raf = requestAnimationFrame(tick); else done && done(); };
+  L.raf = requestAnimationFrame(tick);
 }
 function setT(L, t) { if (!L.scrub) return; L.scrub.querySelector('input').value = t; L.scrub.querySelector('.tv').textContent = t.toFixed(1) + ' s'; }
-function bindScrub(L, R) {
+function bindScrub(L) {
   const inp = L.scrub.querySelector('input'); let pend = null;
-  inp.oninput = () => { const first = pend === null; pend = +inp.value; L.scrub.querySelector('.tv').textContent = pend.toFixed(1) + ' s';
-    if (first) requestAnimationFrame(async () => { const t = pend; pend = null; const r = R(); r && await r.seek(t); }); };
-  L.scrub.querySelector('.again').onclick = () => { cancelAnimationFrame(L.raf); replay(L, R); };
+  inp.oninput = () => { cancelAnimationFrame(L.raf); L.gen++; const first = pend === null; pend = +inp.value; L.scrub.querySelector('.tv').textContent = pend.toFixed(1) + ' s';
+    if (first) requestAnimationFrame(async () => { const t = pend; pend = null; await L.h.seek(t); }); };
+  L.scrub.querySelector('.again').onclick = () => replay(L);
 }
 document.querySelectorAll('.recto .live').forEach(el => {
-  const i = +el.dataset.i, sc = el.parentElement.querySelector('.scrub');
-  const go = () => { if (!el.classList.contains('on')) grow(el, P[i].d, { scrub: sc }); };
+  const i = +el.dataset.i, sc = el.parentElement.querySelector('.scrub'), lbl = el.querySelector('.lbl'), clk = el.querySelector('.clk');
+  const go = () => { if (!el.classList.contains('on') && !el.classList.contains('busy')) grow(el, P[i].d, { scrub: sc, onTick: s => { lbl.textContent = P[i].run; clk.textContent = `· ${s.toFixed(1)} s`; } }); };
   el.addEventListener('click', go);
 });
 
@@ -341,13 +409,14 @@ const hero = $('hero-live'), note = $('hero-note'), dot = $('hero-dot'), rb = $(
 fit(hero);
 const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 if (still) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; note.textContent = 'Plate 3, final frame.'; dot.classList.add('done'); rb.disabled = false; }
-let heroT0 = 0, heroMs = 0;
-const heroGo = () => (heroT0 = performance.now(), grow(hero, '03-dragonfly', {
-  onSlow: () => { note.textContent = 'Computing plate 3: 2,611 Voronoi cells…'; },
-  onLive: () => { heroMs = performance.now() - heroT0; note.textContent = `Model computed in ${(heroMs / 1000).toFixed(1)} s. Rendering frames 0 to 5.2 s.`; hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; },
-  onDone: (L, R) => { note.textContent = `Plate 3 computed in this browser in ${(heroMs / 1000).toFixed(1)} s.`; dot.classList.add('done'); rb.disabled = false;
-    rb.onclick = () => { if (active !== L) return heroGo(); rb.disabled = true; dot.classList.remove('done'); replay(L, R, () => { rb.disabled = false; dot.classList.add('done'); }); }; },
-}));
+let heroS = 0;
+const heroGo = () => grow(hero, '03-dragonfly', {
+  onTick: s => { note.textContent = `Computing 2,611 wing cells · ${s.toFixed(1)} s`; },
+  onLive: s => { heroS = s; note.textContent = `Model computed in ${s.toFixed(1)} s. Drawing the build.`; hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; },
+  onStop: () => { if (rb.disabled) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; note.textContent = 'Plate 3, final frame.'; dot.classList.add('done'); rb.disabled = false; rb.onclick = heroGo; } },
+  onDone: L => { note.textContent = `Plate 3 computed in this browser in ${heroS.toFixed(1)} s.`; dot.classList.add('done'); rb.disabled = false;
+    rb.onclick = () => { if (active !== L) return heroGo(); rb.disabled = true; dot.classList.remove('done'); replay(L, () => { rb.disabled = false; dot.classList.add('done'); }); }; },
+});
 if (!still) setTimeout(heroGo, 900); else rb.onclick = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly-t0.jpg'; dot.classList.remove('done'); rb.disabled = true; heroGo(); };
 
 // a plate named in the address bar grows when you arrive at it
