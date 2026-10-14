@@ -50,36 +50,35 @@
   .actions { display: flex; gap: 12px; flex-wrap: wrap; }
   .eq { font: italic 400 19px/1.4 var(--math); color: var(--ink); }
 
-  /* the wall: the ten drawers edge to edge across the window, a cabinet of specimens. The title and
-     the byline are cards set into it as merged cells; each drawer carries its label holder, and on
-     hover (always, on touch) the input its model takes. */
+  /* the wall: the ten drawers edge to edge across the window, a cabinet of specimens. The title
+     drawer spans several: its oak and its typed labels are drawn by the kit (board.js), at the
+     drawers' own scale. Each drawer shows, on hover (always, on touch), the input its model takes. */
   .wall { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); background: var(--drawer); box-shadow: 0 30px 60px -40px rgba(40,24,8,.8); }
   .wall .cells { display: contents; }
-  .title-card { grid-column: 1 / span 3; grid-row: 1 / span 2; }
-  .byline { grid-column: 1 / span 2; grid-row: 3; }
-  .title-card, .byline { position: relative; padding: clamp(10px, 1.3vw, 20px); background: linear-gradient(135deg, #4c2f1b, #2e1b0d 55%, #3d2614); box-shadow: inset 0 0 0 1px rgba(255,235,200,.06), inset 0 2px 0 rgba(255,235,200,.08), inset 0 -3px 6px rgba(0,0,0,.5); }
-  .card { height: 100%; display: flex; flex-direction: column; background: #efe8db; box-shadow: inset 0 0 0 1px rgba(60,40,20,.12), inset 0 18px 40px -18px rgba(60,40,20,.35), inset 0 -10px 30px -16px rgba(60,40,20,.25); padding: clamp(24px, 3.6vw, 64px); }
-  /* the cards take the house grain, as the page's ground does */
-  .card { position: relative; isolation: isolate; }
-  .card::before, .card::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-size: var(--grain-tile, 512px); opacity: .32; }
-  .card::before { background-image: url(images/grain-lift.png); mix-blend-mode: plus-lighter; }
-  .card::after { background-image: url(images/grain-drop.png); mix-blend-mode: difference; }
-  .title-card .card { justify-content: center; }
-  .title-card h1 { font: 400 clamp(34px, 4.1vw, 68px)/1.04 var(--serif); letter-spacing: -.015em; margin: 18px 0 22px; max-width: 11em; }
-  .title-card .sub { margin: 0; max-width: 27em; font: italic 400 clamp(16px, 1.35vw, 21px)/1.45 var(--serif); color: var(--ink-2); }
-  .byline .card { justify-content: center; gap: 18px; padding: clamp(20px, 2.4vw, 40px); }
-  .byline p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
-  .byline .note { min-height: 1.2em; font: 12px var(--mono); color: var(--ink-3); }
-  .cell { list-style: none; min-width: 0; position: relative; }
+  .board { grid-column: 1 / span 4; grid-row: 1 / span 2; position: relative; min-width: 0; background: #4a2f1b; box-shadow: inset 0 0 0 var(--rail, 9px) #5d3d24, inset 0 0 0 calc(var(--rail, 9px) + 5px) #2c1b0f; }
+  .board .wood { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .floor { position: relative; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--gap, 18px); padding: calc(var(--rail, 9px) + var(--pad, 40px)); transition: opacity .5s; }
+  .board:not(.ready) .floor { opacity: 0; }
+  /* a slip: a label typed on buff stock. Until the kit has typed it, the text sits on a plain slip */
+  .slip { margin: 0; display: block; background: #efe3c8; color: #2a2520; padding: 10px 14px; font: 400 13px/1.7 var(--mono); max-width: 100%; box-shadow: 1px 1px 0 rgba(30,18,8,.5); text-decoration: none; }
+  .slip.title { font-size: 26px; line-height: 1.35; }
+  .slip .t { display: block; margin: 0; }
+  .slip.typed { background: none; padding: 0; box-shadow: none; line-height: 0; }
+  .slip.typed .t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .slip canvas { display: block; }
+  .board .actions { gap: var(--bgap, 14px); }
+  a.slip { cursor: pointer; transition: transform .25s cubic-bezier(.2,.7,.2,1), filter .25s; }
+  a.slip:hover { transform: translate(-1px, -2px); filter: brightness(1.05); }
+  a.slip:focus-visible { outline: 2px solid #f2e9da; outline-offset: 3px; }
+  .board .note { margin: 0; min-height: 1.2em; font: 12px var(--mono); color: rgba(242,233,218,.62); }
+  .cell { list-style: none; min-width: 0; position: relative; container-type: inline-size; }
+  /* a narrow drawer keeps only the input and the clock */
+  @container (max-width: 230px) { .cell .in .go, .cell .grow .lbl { display: none; } .cell .grow .clk::before { content: none !important; } .cell .in { overflow: hidden; } }
   .cell > a { display: block; position: relative; text-decoration: none; color: var(--ink); }
   .cell .thumb { position: relative; aspect-ratio: 4 / 5; overflow: hidden; }
   .cell .thumb > img { display: block; width: 100%; height: 100%; transition: transform .6s cubic-bezier(.2,.7,.2,1), filter .6s; }
   .cell .thumb .live { position: absolute; inset: 0; box-shadow: none; }
   .cell > a:hover .thumb > img { transform: scale(1.035); filter: brightness(1.06); }
-  /* the label holder on the drawer's top rail */
-  .tab { position: absolute; z-index: 3; left: 50%; top: 2.2%; transform: translateX(-50%); display: flex; align-items: baseline; gap: 6px; padding: 3px 9px 4px; background: #eee6d3; border: 1px solid #a3864f; box-shadow: 0 1px 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.4); white-space: nowrap; max-width: 86%; overflow: hidden; }
-  .tab b { font: 600 9.5px var(--sans); letter-spacing: .08em; color: #8b6a3a; }
-  .tab span { font: 400 12.5px/1.1 var(--serif); color: #2a2118; overflow: hidden; text-overflow: ellipsis; }
   /* the input its model takes: a label card that rises from the drawer's floor */
   .cell .in { position: absolute; z-index: 3; left: 7%; right: 7%; bottom: 6%; display: flex; align-items: center; gap: 9px; padding: 9px 12px 10px; background: #eee6d3; color: #2a2118; box-shadow: 0 0 0 1px rgba(60,40,20,.16), 0 10px 18px -10px rgba(0,0,0,.7); font: italic 400 15px/1 var(--math); white-space: nowrap; opacity: 0; transform: translateY(8px); transition: opacity .35s, transform .45s cubic-bezier(.2,.7,.2,1); pointer-events: none; }
   .cell .in sub { font-size: .65em; }
@@ -114,6 +113,7 @@
   .live.busy .grow { cursor: progress; font: 400 12.5px/1 var(--mono); color: #3b3024; white-space: nowrap; padding: 11px 16px 12px; }
   .live .grow .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .live .grow .clk { flex: none; font-variant-numeric: tabular-nums; color: #6f6252; }
+  .live .grow .clk:not(:empty)::before { content: "· "; }
   .live .grow .dot { display: none; width: 6px; height: 6px; }
   .live.busy .grow .dot { display: block; }
   .live .grow .bar { position: absolute; left: 0; bottom: 0; width: 100%; height: 2px; background: var(--red); transform-origin: 0 50%; transform: scaleX(var(--p, 0)); opacity: 0; transition: transform .12s linear; }
@@ -238,17 +238,14 @@
     .bar ol .nm, .bar ol a[aria-current] .nm { display: none; }
     .bar ol a { padding: 6px 7px; }
     .wall { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .title-card { grid-column: 1 / span 2; grid-row: 1 / span 2; }
-    .byline { grid-column: 1 / span 2; grid-row: 3; }
+    .board { grid-column: 1 / span 3; }
     .spread, .method { grid-template-columns: 1fr; gap: 40px; padding: 72px 0; }
     .recto { max-width: 520px; position: static; order: -1; }
     .nums { grid-template-columns: repeat(2, auto); }
   }
-  @media (max-width: 900px) {
+  @media (max-width: 640px) {
     .wall { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .title-card { grid-column: 1 / span 2; grid-row: 1; }
-    .byline { grid-column: 1 / span 2; grid-row: 2; }
-    .card { padding: 28px 24px; }
+    .board { grid-column: 1 / -1; grid-row: auto; }
   }
   @media (max-width: 560px) {
     .bar .side { display: none; }
@@ -257,9 +254,12 @@
     .wrap { padding: 0 22px; }
     .verso h2, .method h2 { font-size: 36px; }
     .formula { --fs: 21px !important; }
-    .tab span { font-size: 11px; }
-    .tab b { display: none; }
     .vary .marks { height: 42px; }
+    .vary .vhead { flex-direction: column; align-items: flex-start; gap: 6px; }
+    .vary .hint { text-align: left; max-width: none; }
+    .cell .grow .lbl { display: none; }
+    .cell .grow .clk::before { content: none !important; }
+    .cell .live.busy .grow { padding: 8px 10px 9px; gap: 7px; }
     .vary .marks button:nth-child(even) { top: 17px; }
     .vary figcaption { flex-direction: column; align-items: flex-start; }
   }
@@ -268,18 +268,18 @@
 <body>
 <div class="ground" aria-hidden="true"></div>
 <nav class="bar" id="bar" aria-label="Plates"><div class="wrap"><a class="home" href="#">Math-Animals</a><ol id="barlist"></ol><a class="side" href="#method">Method</a></div></nav>
-<!-- the wall: the ten drawers edge to edge, the title and the byline set into it as merged cells -->
+<!-- the wall: the ten drawers edge to edge, the title drawer set into it across several -->
 <header class="wall" id="top">
-  <div class="title-card"><div class="card">
-    <div class="eyebrow">Math-Animals</div>
-    <h1>Ten animals rendered from published models of their form</h1>
-    <p class="sub">Each drawer computes its animal in your browser. Open one and change its model’s input to watch the animal regrow.</p>
-  </div></div>
-  <div class="byline"><div class="card">
-    <p>Claude Code (Opus 5.5) read the source papers, implemented each model in Canvas 2D and rendered each animal from the model’s output, with no image files.</p>
-    <div class="actions"><a class="btn" href="#honeybee">Open plate 1</a><a class="btn ghost" href="#method">Method</a><a class="btn ghost" href="https://github.com/r3al1tym/math-animals">Code</a></div>
-    <p class="note" id="hero-note"></p>
-  </div></div>
+  <div class="board" id="board">
+    <canvas class="wood" aria-hidden="true"></canvas>
+    <div class="floor">
+      <div class="slip tag" data-seed="hero-tag"><span class="t">Math-Animals</span></div>
+      <h1 class="slip title" data-seed="hero-title"><span class="t">Ten animals rendered from published models of their form</span></h1>
+      <div class="slip body" data-seed="hero-body"><p class="t">Each drawer computes its animal in your browser. Open one and change its model’s input to watch the animal regrow.</p><p class="t">Claude Code (Opus 5.5) read the source papers, implemented each model in Canvas 2D and rendered each animal from the model’s output, with no image files.</p></div>
+      <nav class="actions" aria-label="Start"><a class="slip btn" data-seed="hero-b1" href="#honeybee"><span class="t">Open plate 1</span></a><a class="slip btn" data-seed="hero-b2" href="#method"><span class="t">Method</span></a><a class="slip btn" data-seed="hero-b3" href="https://github.com/r3al1tym/math-animals"><span class="t">Code</span></a></nav>
+      <p class="note" id="hero-note"></p>
+    </div>
+  </div>
   <ol class="cells" id="toc"></ol>
 </header>
 <div class="wrap">
@@ -388,14 +388,14 @@ const P = [
 ];
 const $ = id => document.getElementById(id), slug = d => d.slice(3);
 
-// the wall's drawers: each plate's still (the dragonfly's drawer computes live), its label holder,
-// and the input its model takes at the value the plate was grown at
+// the wall's drawers: each plate's still (the dragonfly's drawer computes live) and the input its
+// model takes at the value the plate was grown at
 $('toc').innerHTML = P.map((p, i) => {
   const c = p.vary, inp = c ? `<span class="in">${c.sym} = ${fmtV(c.value, c.step)}${c.unit || ''}<span class="knob" aria-hidden="true"></span><span class="go">Change it</span></span>` : '';
   const thumb = i === 2
     ? `<div class="live" id="hero-live"><div class="inner"><img src="images/plates/${p.d}-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div><div class="grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span><span class="bar"></span></div></div>`
     : `<img src="images/plates/${p.d}.jpg" width="720" height="900" alt="${p.nm}, rendered in code">`;
-  return `<li class="cell${i === 2 ? ' busy-cell' : ''}"><a href="#${slug(p.d)}"><div class="thumb">${thumb}</div><div class="tab"><b>${i + 1}</b><span>${p.nm}</span></div>${inp}</a></li>`;
+  return `<li class="cell${i === 2 ? ' busy-cell' : ''}"><a href="#${slug(p.d)}" aria-label="Plate ${i + 1}, ${p.nm}"><div class="thumb">${thumb}</div>${inp}</a></li>`;
 }).join('');
 // until the visitor hovers a drawer, one drawer at a time shows its input, in turn
 {
@@ -403,6 +403,60 @@ $('toc').innerHTML = P.map((p, i) => {
   let k = 0; const step = () => { cells.forEach(c => c.classList.remove('hint')); do k = (k + 1) % cells.length; while (cells[k].classList.contains('busy-cell')); cells[k].classList.add('hint'); };
   const t = matchMedia('(hover: hover)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches ? setInterval(step, 2400) : 0;
   wall.addEventListener('pointerover', e => { if (e.target.closest('.cell')) { wall.classList.add('touched'); clearInterval(t); } }, { once: false });
+}
+// the title drawer: the kit draws its oak and types its labels in a worker (board.js), sized to the
+// drawer and at the drawers' own scale; the text stays in the page under the typed slips
+{
+  const B = $('board'), wall = B.parentNode, wood = B.querySelector('.wood'), floor = B.querySelector('.floor');
+  const slips = [...B.querySelectorAll('.slip')], txt = el => [...el.querySelectorAll('.t')].map(t => t.textContent);
+  let wk = null, n = 0, gen = 0, lastW = 0, lastH = 0, tm = 0; const P2 = {};
+  try { if (!self.OffscreenCanvas) throw 0; wk = new Worker('board.js'); wk.onmessage = e => { P2[e.data.id]?.(e.data); delete P2[e.data.id]; }; wk.onerror = () => { wk = null; B.classList.add('ready'); }; } catch { B.classList.add('ready'); }
+  const ask = q => new Promise(r => { q.id = ++n; P2[n] = r; wk.postMessage(q); });
+  const wrap = (str, cols) => { const out = []; let l = ''; for (const w of str.split(' ')) { if (l && (l + ' ' + w).length > cols) { out.push(l); l = w; } else l = l ? l + ' ' + w : w; } if (l) out.push(l); return out; };
+  const slipH = (k, size, pad, lead) => pad + size * 1.05 + (k - 1) * size * lead + size * 0.42 + pad;
+  const paintWood = async g => {
+    const r = B.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), cols = getComputedStyle(wall).gridTemplateColumns.split(' ').length, cell = wall.clientWidth / cols;
+    lastH = r.height; const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+    const { bmp } = await ask({ kind: 'wood', w, h, s: cell * dpr / 1080 }); if (g !== gen) return;
+    wood.width = w; wood.height = h; wood.getContext('2d').drawImage(bmp, 0, 0);
+  };
+  const lay = async () => {
+    const g = ++gen, dpr = Math.min(2, devicePixelRatio || 1), cols = getComputedStyle(wall).gridTemplateColumns.split(' ').length, cell = wall.clientWidth / cols, r = B.getBoundingClientRect();
+    const auto = cols === 2, rail = 64 * cell / 1080, pad = Math.max(18, Math.min(56, cell * 0.16));
+    B.style.setProperty('--rail', rail.toFixed(1) + 'px'); B.style.setProperty('--pad', pad.toFixed(1) + 'px'); lastW = r.width;
+    const FW = r.width - 2 * (rail + pad), AH = r.height - 2 * (rail + pad);
+    let plan;
+    for (let k = 1; k > 0.55; k *= 0.94) {
+      const Tc = Math.min(46, Math.max(auto ? 20 : 18, FW * 0.04)) * k, Bc = Math.min(15, Math.max(10, FW * 0.0145)) * Math.max(k, 0.8), gap = Bc * 1.5;
+      const spec = el => {
+        const kind = el.classList.contains('title') ? 'title' : el.classList.contains('body') ? 'body' : 'one', size = kind === 'title' ? Tc : Bc;
+        const sp = kind === 'title' ? size * 0.72 : size * 1.15, lead = kind === 'title' ? 1.45 : 1.75, maxC = kind === 'title' ? 30 : 64;
+        const cols = Math.max(8, Math.min(maxC, Math.floor((FW - 2 * sp - 6) / (0.6 * size))));
+        const raw = txt(el), lines = kind === 'body' ? raw.flatMap((t, i) => (i ? [''] : []).concat(wrap(t, cols))) : raw.flatMap(t => wrap(t, cols));
+        const chars = Math.max(...lines.map(l => l.length)), w = chars * 0.6 * size + 2 * sp + 6;
+        return { el, size, pad: sp, lead, lines: el.matches('a') ? lines.map(l => `*{${l}}`) : lines, w, h: slipH(lines.length, size, sp, lead) };
+      };
+      const S = slips.map(spec), btn = S.filter(q => q.el.matches('a'));
+      let rows = 1, x = 0; for (const q of btn) { if (x && x + gap + q.w > FW) { rows++; x = q.w; } else x += (x ? gap : 0) + q.w; }
+      const total = S.filter(q => !q.el.matches('a')).reduce((a, q) => a + q.h, 0) + rows * btn[0].h + (rows - 1) * gap * 0.8 + Bc * 1.6 + 4 * gap;
+      plan = { S, gap }; if (auto || total <= AH) break;
+    }
+    B.style.setProperty('--gap', plan.gap.toFixed(1) + 'px'); B.style.setProperty('--bgap', (plan.gap * 0.8).toFixed(1) + 'px');
+    const got = await Promise.all(plan.S.map(q => ask({ lines: q.lines, size: q.size * dpr, pad: q.pad * dpr, lead: q.lead, seed: q.el.dataset.seed, w: Math.round(q.w * dpr) })));
+    if (g !== gen) return;
+    got.forEach(({ bmp, m }, i) => {
+      const el = plan.S[i].el; let c = el.querySelector('canvas'); if (!c) { c = document.createElement('canvas'); c.setAttribute('aria-hidden', 'true'); el.append(c); }
+      c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
+      Object.assign(c.style, { width: bmp.width / dpr + 'px', height: bmp.height / dpr + 'px', margin: -m / dpr + 'px' });
+      el.classList.add('typed');
+    });
+    B.classList.add('ready');
+    await new Promise(requestAnimationFrame); paintWood(g);
+  };
+  if (wk) {
+    lay(); setTimeout(() => B.classList.add('ready'), 2500);
+    new ResizeObserver(() => { clearTimeout(tm); tm = setTimeout(() => { const r = B.getBoundingClientRect(); if (Math.abs(r.width - lastW) > 1) lay(); else if (Math.abs(r.height - lastH) > 1) paintWood(gen); }, 150); }).observe(B);
+  }
 }
 $('plates').innerHTML = P.map((p, i) => `
   <article class="spread" id="${slug(p.d)}">
@@ -432,7 +486,7 @@ $('plates').innerHTML = P.map((p, i) => `
 $('barlist').innerHTML = P.map((p, i) => `<li><a href="#${slug(p.d)}" title="${p.nm}"><b>${i + 1}</b><span class="nm">${p.nm}</span></a></li>`).join('');
 {
   const bar = $('bar'), links = [...bar.querySelectorAll('ol a')];
-  new IntersectionObserver(([e]) => bar.classList.toggle('on', !e.isIntersecting), { rootMargin: '-60px 0px 0px 0px' }).observe(document.querySelector('.title-card'));
+  new IntersectionObserver(([e]) => bar.classList.toggle('on', !e.isIntersecting), { rootMargin: '-60px 0px 0px 0px' }).observe($('board'));
   const seen = new Map();
   const io = new IntersectionObserver(es => {
     for (const e of es) seen.set(e.target.id, e.intersectionRatio);
@@ -618,7 +672,7 @@ function bindVary(i, el, box, run) {
 document.querySelectorAll('.recto .live').forEach(el => {
   const i = +el.dataset.i, art = el.closest('.spread'), sc = art.querySelector('.scrub'), va = art.querySelector('.vary'), lbl = el.querySelector('.lbl'), clk = el.querySelector('.clk');
   const run = query => grow(el, P[i].d, { scrub: sc, query, onLive: () => V && V.live(), onStop: () => V && V.stop(),
-    ms: P[i].ms * (query ? 1.2 : 1), onTick: t => { lbl.textContent = P[i].run; clk.textContent = `· ${t}`; } });
+    ms: P[i].ms * (query ? 1.2 : 1), onTick: t => { lbl.textContent = P[i].run; clk.textContent = t; } });
   const V = va ? bindVary(i, el, va, run) : null;
   el.addEventListener('click', () => { if (!el.classList.contains('on') && !el.classList.contains('busy')) run(''); });
 });
@@ -630,7 +684,7 @@ fit(hero);
 const still = matchMedia('(prefers-reduced-motion: reduce)').matches, final = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; };
 let heroS = 0;
 const heroGo = () => grow(hero, '03-dragonfly', {
-  ms: P[2].ms, onTick: t => { cueL.textContent = 'Computing'; cueC.textContent = `· ${t}`; },
+  ms: P[2].ms, onTick: t => { cueL.textContent = 'Computing'; cueC.textContent = t; },
   onLive: s => { heroS = s; hero.closest('.cell').classList.remove('busy-cell'); }, onDone: () => { note.textContent = `Plate 3 computed in this browser in ${heroS.toFixed(1)} s.`; },
 });
 // it starts once the page has settled, unless a plate is already running or the wall has scrolled away
