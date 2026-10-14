@@ -1,0 +1,58 @@
+<!doctype html><meta charset="utf-8"><title>title drawer</title>
+<script>
+// Renders the site's title drawer with the kit itself: the specimen drawers' card, walls, oak, light
+// and glass at the title drawer's own size, its title lettered in ink and its note in pencil on the
+// card, and the links as typed label slips. tools/title.mjs drives it and writes images/title/.
+window.render = async (shape) => {
+  const [w, h] = shape === 'wide' ? [2160, 1350] : [2160, 2700];
+  let src = await (await fetch('../kit/kit.js')).text();
+  const patch = (a, b) => { if (!src.includes(a)) throw new Error('kit patch: ' + a); src = src.split(a).join(b); };
+  patch('const W = 1080, H = 1350', `const W = ${w}, H = ${h}`);
+  patch('createLinearGradient(40, 300, 1060, 700)', 'createLinearGradient(40 * W / 1080, 300 * H / 1350, 1060 * W / 1080, 700 * H / 1350)');
+  patch('createLinearGradient(0, -200, 0, 1250)', 'createLinearGradient(0, -200, 0, H - 100)');
+  patch('mk(SW, 1450)', 'mk(SW, H + 100)'); patch('fillRect(0, 0, SW, 1450)', 'fillRect(0, 0, SW, H + 100)'); patch('fillRect(-SW / 2, -200, SW, 1450)', 'fillRect(-SW / 2, -200, SW, H + 100)');
+  patch('cc.translate(948 + 160,', 'cc.translate(W - 132 + 160,');
+  const out = {};
+  await new Promise(r => { const s = document.createElement('script'); s.src = URL.createObjectURL(new Blob([src + `
+;(() => {
+  const wide = ${JSON.stringify(shape)} === 'wide', T = wide
+    ? { m: 120, eye: 44, title: ['Ten animals rendered from', 'published models of their form'], tmax: 96, body: ['Each drawer computes its animal in your browser:', 'open one and change its input to regrow it.', 'Claude Code (Opus 5.5) built each from its paper', 'in Canvas 2D, with no image files.'], bs: 44, ss: 42 }
+    : { m: 150, eye: 64, title: ['Ten animals', 'rendered from', 'published models', 'of their form'], tmax: 150, body: ['Each drawer computes its', 'animal in your browser:', 'open one and change its', 'input to regrow it.', '', 'Claude Code (Opus 5.5)', 'built each from its paper', 'in Canvas 2D, with no', 'image files.'], bs: 70, ss: 66 };
+  const miss = [...new Set([...T.title.join(''), ...T.body.join(''), ...'Math-Animals'].filter(c => c !== ' ' && !HAND[c]))];
+  const CARD = renderCard({ seed: 'title' }), FRAME = renderFrame(), c = mk(W, H), X = c.getContext('2d');
+  X.drawImage(CARD, 0, 0);
+  const x0 = TX0 + T.m, avail = TX1 - TX0 - 2 * T.m, room = TY1 - TY0 - 2 * T.m;
+  // set the title as large as the card allows, then shrink everything together until it all fits
+  let k = 1, ts, plan;
+  for (;;) {
+    ts = Math.min(T.tmax, avail * 0.97 / Math.max(...T.title.map(t => measureText(t, 1)))) * k;
+    const eye = T.eye * k, bs = T.bs * k, ss = T.ss * k, slipH = ss * 1.47 + 2 * ss;
+    const h = eye + eye * 1.2 + ts * 1.1 + (T.title.length - 1) * ts * 1.3 + ts * 0.6 + bs * 1.6 + (T.body.length - 1) * bs * 1.62 + bs * 0.4 + bs * 1.5 + slipH;
+    plan = { eye, bs, ss, slipH, h }; if (h <= room || k < 0.5) break; k *= 0.96;
+  }
+  const { eye, bs, ss, slipH } = plan; let y = TY0 + T.m + (room - plan.h) * 0.42 + eye;
+  letterText(X, 'Math-Animals', x0, y, { size: eye, medium: 'pencil', seed: 'title:eye', tone: 1.6 });
+  y += eye * 1.2 + ts * 1.1;
+  T.title.forEach((t, i) => { letterText(X, t, x0, y, { size: ts, medium: 'ink', seed: 'title:' + i }); if (i < T.title.length - 1) y += ts * 1.3; });
+  y += ts * 0.6 + bs * 1.6;
+  T.body.forEach((t, i) => { if (t) letterText(X, t, x0, y, { size: bs, medium: 'pencil', seed: 'title:b' + i, tone: 1.6 }); if (i < T.body.length - 1) y += bs * 1.62; });
+  y += bs * 0.4 + bs * 1.5;
+  // the links: typed slips laid on the card in a row under the note
+  const fall = mk(W, H), fx = fall.getContext('2d'); fx.fillStyle = '#fff'; fx.fillRect(0, 0, W, H); lightFalloff(fx);
+  const slips = []; let sx = x0; const pad = ss, sy = y - bs * 1.5 + bs * 0.9;
+  ['Open plate 1', 'Method', 'Code'].forEach((t, i) => {
+    const sw = Math.round(measureText(t, ss, { face: 'type' }) + 2 * pad + 6), M = Math.ceil(ss * 0.9) + 6, s = mk(sw + 2 * M, Math.round(slipH) + 2 * M), sc = s.getContext('2d');
+    const b = labelCard(sc, { x: M, y: M, w: sw, lines: [{ text: '*{' + t + '}', size: ss }], typeSize: ss, pad, seed: 'title:slip' + i, rot: (i - 1) * 0.006, lift: ss * 0.5 });
+    const f = fx.getImageData(Math.round(sx + sw / 2), Math.round(sy + b.h / 2), 1, 1).data, im = sc.getImageData(0, 0, s.width, s.height), D = im.data;
+    for (let q = 0; q < D.length; q += 4) { D[q] *= f[0] / 255; D[q + 1] *= f[1] / 255; D[q + 2] *= f[2] / 255; }
+    sc.putImageData(im, 0, 0);
+    slips.push({ png: s.toDataURL('image/png'), x: sx - M, y: sy - M, w: s.width, h: s.height });
+    sx += sw + ss * 1.1;
+  });
+  const L = { m: T.m }; y = sy + slipH;
+  X.drawImage(FRAME, 0, 0); lightFalloff(X); glass(X, HERO);
+  window.__out = { w: W, h: H, ts, end: y, slipTop: sy, miss, jpg: c.toDataURL('image/png'), slips };
+})();`], { type: 'text/javascript' })); s.onload = r; document.head.append(s); });
+  return window.__out;
+};
+</script>

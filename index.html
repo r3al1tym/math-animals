@@ -51,29 +51,25 @@
   .eq { font: italic 400 19px/1.4 var(--math); color: var(--ink); }
 
   /* the wall: the ten drawers edge to edge across the window, a cabinet of specimens. The title
-     drawer spans several: its oak and its typed labels are drawn by the kit (board.js), at the
-     drawers' own scale. Each drawer shows, on hover (always, on touch), the input its model takes. */
+     drawer spans two. Each drawer shows, on hover (always, on touch), the input its model takes. */
   .wall { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); background: var(--drawer); box-shadow: 0 30px 60px -40px rgba(40,24,8,.8); }
   .wall .cells { display: contents; }
   .wall { grid-auto-flow: dense; }
   /* two drawers shown large, 2 x 2 so they keep the drawers' 4:5: the live dragonfly beside the title, the nautilus below */
   .cell.f1 { grid-column: 3 / span 2; grid-row: 1 / span 2; }
   .cell.f2 { grid-column: 5 / span 2; grid-row: 2 / span 2; }
-  .board { grid-column: 1 / span 2; grid-row: 1; aspect-ratio: 8 / 5; position: relative; min-width: 0; background: #4a2f1b; box-shadow: inset 0 0 0 var(--rail, 9px) #5d3d24, inset 0 0 0 calc(var(--rail, 9px) + 5px) #2c1b0f; }
-  .board .wood { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .floor { position: relative; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--gap, 18px); padding: calc(var(--rail, 9px) + var(--pad, 40px)); transition: opacity .5s; }
-  .board:not(.ready) .floor { opacity: 0; }
-  /* a slip: a label typed on buff stock. Until the kit has typed it, the text sits on a plain slip */
-  .slip { margin: 0; display: block; background: #efe3c8; color: #2a2520; padding: 10px 14px; font: 400 13px/1.7 var(--mono); max-width: 100%; box-shadow: 1px 1px 0 rgba(30,18,8,.5); text-decoration: none; }
-  .slip .t { display: block; margin: 0; font: inherit; }
-  .slip.typed { background: none; padding: 0; box-shadow: none; line-height: 0; }
-  .slip.typed .t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .slip canvas { display: block; }
-  .board .actions { gap: var(--bgap, 14px); }
-  a.slip { cursor: pointer; transition: transform .25s cubic-bezier(.2,.7,.2,1), filter .25s; }
-  a.slip:hover { transform: translate(-1px, -2px); filter: brightness(1.05); }
-  a.slip:focus-visible { outline: 2px solid #f2e9da; outline-offset: 3px; }
-  .board .note { margin: 0; min-height: 1.2em; font: 12px var(--mono); color: rgba(242,233,218,.62); }
+  /* the title drawer is a specimen drawer: the kit's card, walls, oak, light and glass, the title in
+     ink and the note in pencil on the card, rendered by tools/title.mjs. The links are typed label
+     slips laid on the card; picked up, a slip lifts off it. */
+  .board { grid-column: 1 / span 2; grid-row: 1; aspect-ratio: 8 / 5; position: relative; min-width: 0; overflow: hidden; background: #e9e4d8; }
+  .board > picture img { display: block; width: 100%; height: 100%; }
+  .board .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .board .slip { position: absolute; display: block; transition: transform .3s cubic-bezier(.2,.7,.2,1), filter .3s; }
+  .board .slip img { display: block; width: 100%; height: auto; }
+  .board .slip:hover { transform: translate(-1px, -3px) rotate(-.4deg); filter: drop-shadow(2px 4px 3px rgba(44,30,20,.28)); }
+  .board .slip:active { transform: translate(0, -1px); filter: drop-shadow(1px 1px 1px rgba(44,30,20,.3)); transition-duration: .08s; }
+  .board .slip:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+  .board .s1 { left: 7.546%; top: 66.616%; width: 22.222%; } .board .s2 { left: 27.833%; top: 66.616%; width: 15.231%; } .board .s3 { left: 41.13%; top: 66.616%; width: 12.917%; }
   .cell { list-style: none; min-width: 0; position: relative; container-type: inline-size; }
   /* a narrow drawer keeps only the input and the clock */
   @container (max-width: 230px) { .cell .in .go, .cell .grow .lbl { display: none; } .cell .grow .clk::before { content: none !important; } .cell .in { overflow: hidden; } }
@@ -113,6 +109,7 @@
   .live .grow .play { flex: none; width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 8px; border-color: transparent transparent transparent var(--red); }
   .live.busy .grow .play { display: none; }
   .live.on .grow { display: none; }
+  .live.timed .grow { font: 400 12.5px/1 var(--mono); color: #3b3024; white-space: nowrap; padding: 11px 16px 12px; }
   .live.busy .grow { cursor: progress; font: 400 12.5px/1 var(--mono); color: #3b3024; white-space: nowrap; padding: 11px 16px 12px; }
   .live .grow .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .live .grow .clk { flex: none; font-variant-numeric: tabular-nums; color: #6f6252; }
@@ -123,7 +120,8 @@
   .live.busy .grow .bar { opacity: .8; }
   /* the hero computes on its own, so its cue shows only while it computes */
   .live .cue { display: none; pointer-events: none; }
-  .live.busy .cue { display: inline-flex; }
+  .live.busy .cue, .live.timed .cue { display: inline-flex; }
+  .live.timed .cue .dot { animation: none; background: var(--ink-3); }
   .live-note.wait { visibility: hidden; }
 
   /* the bar: once past the hero, the ten plates stay one click away and the current one is named */
@@ -250,6 +248,7 @@
     .bar ol a { padding: 6px 7px; }
     .wall { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .board { grid-column: 1 / span 2; grid-row: 1 / span 2; aspect-ratio: 4 / 5; }
+    .board .s1 { left: 8.148%; top: 78.686%; width: 31.852%; } .board .s2 { left: 37.449%; top: 78.686%; width: 21.713%; } .board .s3 { left: 56.612%; top: 78.686%; width: 18.333%; }
     .cell.f1 { grid-column: 3 / span 2; grid-row: 1 / span 2; }
     .cell.f2 { grid-column: 3 / span 2; grid-row: 4 / span 2; }
     .spread, .method { grid-template-columns: 1fr; gap: 40px; padding: 72px 0; }
@@ -262,7 +261,7 @@
   }
   @media (max-width: 640px) {
     .wall { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .board { grid-column: 1 / -1; grid-row: auto; aspect-ratio: auto; }
+    .board { grid-column: 1 / -1; grid-row: auto; }
     .cell.f1, .cell.f2 { grid-column: 1 / -1; grid-row: auto; }
   }
   @media (max-width: 560px) {
@@ -294,12 +293,9 @@
 <!-- the wall: the ten drawers edge to edge, the title drawer set into it across several -->
 <header class="wall" id="top">
   <div class="board" id="board">
-    <canvas class="wood" aria-hidden="true"></canvas>
-    <div class="floor">
-      <div class="slip label" data-seed="hero-label"><span class="t" data-u>Math-Animals</span><h1 class="t" data-gap>Ten animals rendered from published models of their form</h1><p class="t">Each drawer computes its animal in your browser; open one to change its model’s input</p><p class="t">Claude Code (Opus 5.5) built each from its source paper in Canvas 2D, with no image files</p></div>
-      <nav class="actions" aria-label="Start"><a class="slip btn" data-seed="hero-b1" href="#honeybee"><span class="t">Open plate 1</span></a><a class="slip btn" data-seed="hero-b2" href="#method"><span class="t">Method</span></a><a class="slip btn" data-seed="hero-b3" href="https://github.com/r3al1tym/math-animals"><span class="t">Code</span></a></nav>
-      <p class="note" id="hero-note"></p>
-    </div>
+    <picture><source media="(max-width: 1080px)" srcset="images/title/tall.jpg"><img src="images/title/wide.jpg" width="1440" height="900" alt="" fetchpriority="high"></picture>
+    <div class="vh"><span>Math-Animals</span><h1>Ten animals rendered from published models of their form</h1><p>Each drawer computes its animal in your browser: open one and change its input to regrow it.</p><p>Claude Code (Opus 5.5) built each from its paper in Canvas 2D, with no image files.</p></div>
+    <a class="slip s1" href="#honeybee"><picture><source media="(max-width: 1080px)" srcset="images/title/tall-1.png"><img src="images/title/wide-1.png" alt="Open plate 1"></picture></a><a class="slip s2" href="#method"><picture><source media="(max-width: 1080px)" srcset="images/title/tall-2.png"><img src="images/title/wide-2.png" alt="Method"></picture></a><a class="slip s3" href="https://github.com/r3al1tym/math-animals"><picture><source media="(max-width: 1080px)" srcset="images/title/tall-3.png"><img src="images/title/wide-3.png" alt="Code"></picture></a>
   </div>
   <ol class="cells" id="toc"></ol>
 </header>
@@ -424,60 +420,6 @@ $('toc').innerHTML = P.map((p, i) => {
   let k = 0; const step = () => { cells.forEach(c => c.classList.remove('hint')); do k = (k + 1) % cells.length; while (cells[k].classList.contains('busy-cell')); cells[k].classList.add('hint'); };
   const t = matchMedia('(hover: hover)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches ? setInterval(step, 2400) : 0;
   wall.addEventListener('pointerover', e => { if (e.target.closest('.cell')) { wall.classList.add('touched'); clearInterval(t); } }, { once: false });
-}
-// the title drawer: the kit draws its oak and types its labels in a worker (board.js), sized to the
-// drawer and at the drawers' own scale; the text stays in the page under the typed slips
-{
-  const B = $('board'), wall = B.parentNode, wood = B.querySelector('.wood'), floor = B.querySelector('.floor');
-  const slips = [...B.querySelectorAll('.slip')], txt = el => [...el.querySelectorAll('.t')].map(t => t.textContent);
-  let wk = null, n = 0, gen = 0, lastW = 0, lastH = 0, tm = 0; const P2 = {};
-  try { if (!self.OffscreenCanvas) throw 0; wk = new Worker('board.js'); wk.onmessage = e => { P2[e.data.id]?.(e.data); delete P2[e.data.id]; }; wk.onerror = () => { wk = null; B.classList.add('ready'); }; } catch { B.classList.add('ready'); }
-  const ask = q => new Promise(r => { q.id = ++n; P2[n] = r; wk.postMessage(q); });
-  const wrap = (str, cols) => { const out = []; let l = ''; for (const w of str.split(' ')) { if (l && (l + ' ' + w).length > cols) { out.push(l); l = w; } else l = l ? l + ' ' + w : w; } if (l) out.push(l); return out; };
-  const slipH = (k, size, pad, lead) => pad + size * 1.05 + (k - 1) * size * lead + size * 0.42 + pad;
-  const paintWood = async g => {
-    const r = B.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), cols = getComputedStyle(wall).gridTemplateColumns.split(' ').length, cell = wall.clientWidth / cols;
-    lastH = r.height; const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
-    const { bmp } = await ask({ kind: 'wood', w, h, s: cell * dpr / 1080 }); if (g !== gen) return;
-    wood.width = w; wood.height = h; wood.getContext('2d').drawImage(bmp, 0, 0);
-  };
-  const lay = async () => {
-    const g = ++gen, dpr = Math.min(2, devicePixelRatio || 1), cols = getComputedStyle(wall).gridTemplateColumns.split(' ').length, cell = wall.clientWidth / cols, r = B.getBoundingClientRect();
-    const auto = cols === 2, rail = 64 * cell / 1080, pad = Math.max(14, Math.min(40, cell * 0.1));
-    B.style.setProperty('--rail', rail.toFixed(1) + 'px'); B.style.setProperty('--pad', pad.toFixed(1) + 'px'); lastW = r.width;
-    const FW = r.width - 2 * (rail + pad), AH = r.height - 2 * (rail + pad);
-    let plan;
-    for (let k = 1; k > 0.6; k *= 0.94) {
-      // one machine, one size, as the plates' labels: the name underlined, then the title and the note
-      const sz = Math.min(15, Math.max(10, FW * 0.03)) * k, gap = sz * 1.4;
-      const spec = el => {
-        const btn = el.matches('a'), sp = sz * (btn ? 0.8 : 1.2), lead = 1.75, ts = [...el.querySelectorAll('.t')];
-        const cols = Math.max(8, Math.min(60, Math.floor((FW - 2 * sp - 6) / (0.6 * sz))));
-        const rows = ts.flatMap(t => wrap(t.textContent, cols).map(l => ({ l, u: btn || t.hasAttribute('data-u') })).concat(t.hasAttribute('data-gap') ? [{ l: '' }] : [])); // a blank line after the title
-        const w = Math.max(...rows.map(r => r.l.length)) * 0.6 * sz + 2 * sp + 6;
-        return { el, size: sz, pad: sp, lead, lines: rows.map(r => r.u ? `*{${r.l}}` : r.l), w, h: slipH(rows.length, sz, sp, lead) };
-      };
-      const S = slips.map(spec), btn = S.filter(q => q.el.matches('a'));
-      let rows = 1, x = 0; for (const q of btn) { if (x && x + gap * 0.6 + q.w > FW) { rows++; x = q.w; } else x += (x ? gap * 0.6 : 0) + q.w; }
-      const total = S.filter(q => !q.el.matches('a')).reduce((a, q) => a + q.h, 0) + rows * btn[0].h + (rows - 1) * gap * 0.6 + sz * 1.6 + 2 * gap;
-      plan = { S, gap }; if (auto || total <= AH) break;
-    }
-    B.style.setProperty('--gap', plan.gap.toFixed(1) + 'px'); B.style.setProperty('--bgap', (plan.gap * 0.6).toFixed(1) + 'px');
-    const got = await Promise.all(plan.S.map(q => ask({ lines: q.lines, size: q.size * dpr, pad: q.pad * dpr, lead: q.lead, seed: q.el.dataset.seed, w: Math.round(q.w * dpr) })));
-    if (g !== gen) return;
-    got.forEach(({ bmp, m }, i) => {
-      const el = plan.S[i].el; let c = el.querySelector('canvas'); if (!c) { c = document.createElement('canvas'); c.setAttribute('aria-hidden', 'true'); el.append(c); }
-      c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
-      Object.assign(c.style, { width: bmp.width / dpr + 'px', height: bmp.height / dpr + 'px', margin: -m / dpr + 'px' });
-      el.classList.add('typed');
-    });
-    B.classList.add('ready');
-    await new Promise(requestAnimationFrame); paintWood(g);
-  };
-  if (wk) {
-    lay(); setTimeout(() => B.classList.add('ready'), 2500);
-    new ResizeObserver(() => { clearTimeout(tm); tm = setTimeout(() => { const r = B.getBoundingClientRect(); if (Math.abs(r.width - lastW) > 1) lay(); else if (Math.abs(r.height - lastH) > 1) paintWood(gen); }, 150); }).observe(B);
-  }
 }
 $('plates').innerHTML = P.map((p, i) => `
   <article class="spread" id="${slug(p.d)}">
@@ -707,14 +649,14 @@ document.querySelectorAll('.recto .live').forEach(el => {
 });
 
 // the dragonfly's drawer computes on arrival: its clock on the plate, the time it took under it
-const hero = $('hero-live'), note = $('hero-note');
+const hero = $('hero-live');
 const cueL = hero.querySelector('.cue .lbl'), cueC = hero.querySelector('.cue .clk');
 fit(hero);
 const still = matchMedia('(prefers-reduced-motion: reduce)').matches, final = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; };
 let heroS = 0;
 const heroGo = () => grow(hero, '03-dragonfly', {
   ms: P[2].ms, onTick: t => { cueL.textContent = 'Computing'; cueC.textContent = t; },
-  onLive: s => { heroS = s; hero.closest('.cell').classList.remove('busy-cell'); }, onDone: () => { note.textContent = `Plate 3 computed in this browser in ${heroS.toFixed(1)} s.`; },
+  onLive: s => { heroS = s; hero.closest('.cell').classList.remove('busy-cell'); }, onDone: () => { cueL.textContent = 'Computed here'; cueC.textContent = heroS.toFixed(1) + ' s'; hero.classList.add('timed'); setTimeout(() => hero.classList.remove('timed'), 6000); },
 });
 // it starts once the page has settled, unless a plate is already running or the wall has scrolled away
 if (still) final(); else setTimeout(() => { if (!active && hero.getBoundingClientRect().bottom > 0) heroGo(); else final(); }, 900);
