@@ -43,23 +43,36 @@
   .btn.ghost:hover { border-color: var(--ink); }
   .btn[disabled] { opacity: .35; cursor: default; }
 
-  /* the hero: one plate at monumental scale, computing as you arrive */
-  .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 64px; align-items: center; padding: 30px 0 26px; }
-  .hero .copy { align-self: end; padding-bottom: 7vh; max-width: 580px; }
-  .hero h1 { font: 400 clamp(34px, 3.7vw, 54px)/1.1 var(--serif); letter-spacing: -.012em; margin: 20px 0 26px; }
-  .hero h1 span { display: block; }
-  .hero h1 .soft { color: var(--ink-3); }
-  .hero p.lede { font-size: 18px; color: var(--ink-2); margin: 0 0 26px; max-width: 30em; }
   .live-note { font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 10px; font: 13px var(--mono); color: var(--ink-2); margin-bottom: 26px; min-height: 20px; }
   .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: pulse 1.6s ease-out infinite; }
   .dot.done { animation: none; background: var(--ink-3); }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(184,64,47,.45); } 100% { box-shadow: 0 0 0 10px rgba(184,64,47,0); } }
   .actions { display: flex; gap: 12px; flex-wrap: wrap; }
-  .hero figure { margin: 0; }
-  /* the plate leaves room under it for the contents row, so the first screen shows all ten */
-  .hero-plate { height: clamp(380px, calc(100vh - 300px), 860px); aspect-ratio: 4 / 5; }
-  .hero figcaption { margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline; gap: 24px; font-size: 13.5px; color: var(--ink-2); }
   .eq { font: italic 400 19px/1.4 var(--math); color: var(--ink); }
+
+  /* the cabinet: the ten plates lead the page, the title set into their grid as two cells */
+  .cabinet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 34px 26px; padding: clamp(48px, 10vh, 112px) 0 80px; align-items: start; }
+  .cabinet .cells { display: contents; }
+  .intro { grid-column: span 2; align-self: stretch; display: flex; flex-direction: column; padding-right: 32px; }
+  .intro h1 { font: 400 clamp(32px, 3.3vw, 50px)/1.08 var(--serif); letter-spacing: -.012em; margin: 18px 0 22px; }
+  .intro .lede { font-size: 17px; line-height: 1.6; color: var(--ink-2); margin: 0 0 26px; max-width: 31em; }
+  .intro .actions { margin-top: auto; }
+  .cell { list-style: none; min-width: 0; }
+  .cell > a { display: block; text-decoration: none; }
+  .cell .thumb { position: relative; aspect-ratio: 4 / 5; background: var(--drawer); box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 20px 34px -22px rgba(40,24,8,.65); transition: transform .45s cubic-bezier(.2,.7,.2,1), box-shadow .45s; }
+  .cell .thumb > img { display: block; width: 100%; height: 100%; }
+  .cell .thumb .live { position: absolute; inset: 0; box-shadow: none; }
+  .cell > a:hover .thumb { transform: translateY(-4px); box-shadow: 0 2px 3px rgba(0,0,0,.18), 0 30px 44px -24px rgba(40,24,8,.7); }
+  .cell .cap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 13px; }
+  .cell .n { font: 600 11px var(--sans); letter-spacing: .1em; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .cell .nm { font: 400 16px/1.25 var(--serif); }
+  /* each cell names the input its model takes, with a small scale whose mark moves on hover */
+  .cell .in { margin-left: auto; display: inline-flex; align-items: center; gap: 9px; font: italic 400 15px/1 var(--math); color: var(--ink-2); white-space: nowrap; }
+  .cell .in sub { font-size: .65em; }
+  .knob { position: relative; flex: none; width: 26px; height: 1px; background: var(--ink-3); }
+  .knob::after { content: ""; position: absolute; top: -3px; left: 25%; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: var(--red); transition: left .6s cubic-bezier(.2,.7,.2,1); }
+  .cell > a:hover .knob::after { left: 80%; }
+  .cell .note { margin: 5px 0 0; min-height: 1.3em; font: 12px var(--mono); color: var(--ink-3); }
 
   /* a live plate: the still, then the page computing in place */
   .live { position: relative; overflow: hidden; background: var(--drawer); box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 34px 60px -34px rgba(40,24,8,.6); }
@@ -105,16 +118,20 @@
   .bar ol a[aria-current] .nm { display: inline; }
   .bar .side { font-size: 13px; color: var(--ink-2); white-space: nowrap; }
 
-  /* contents: the ten plates as a table of contents */
-  .contents { padding: 0 0 24px; }
-  .contents .head { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; padding-top: 16px; border-top: 1px solid var(--hair); }
-  .contents .head p { margin: 0; font-size: 14px; color: var(--ink-3); }
-  .contents ol { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 14px; }
-  .contents a { display: block; text-decoration: none; }
-  .contents img { width: 100%; height: auto; aspect-ratio: 4 / 5; display: block; box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 10px 20px -14px rgba(0,0,0,.45); transition: transform .4s cubic-bezier(.2,.7,.2,1); }
-  .contents a:hover img { transform: translateY(-4px); }
-  .contents .n { display: block; margin-top: 9px; font: 600 11px var(--sans); letter-spacing: .12em; color: var(--ink-3); }
-  .contents .nm { display: block; font: 400 15px/1.25 var(--serif); }
+  /* explain it like I'm five: one switch, on every plate at once, swaps each paragraph for a plain one */
+  .frow { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .eli { display: inline-flex; align-items: center; gap: 9px; font: 400 13px var(--sans); letter-spacing: 0; text-transform: none; color: var(--ink-2); cursor: pointer; user-select: none; }
+  .eli input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .eli .sw { position: relative; width: 28px; height: 16px; border-radius: 8px; background: #d8d1c5; transition: background .25s; }
+  .eli .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--paper); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .25s cubic-bezier(.2,.7,.2,1); }
+  .eli input:checked + .sw { background: var(--red); }
+  .eli input:checked + .sw::after { transform: translateX(12px); }
+  .eli input:focus-visible + .sw { outline: 2px solid var(--red); outline-offset: 2px; }
+  .kid { display: none; }
+  body.eli .kid { display: inline; }
+  body.eli .pro { display: none; }
+  body.eli .formula small { font: 400 16px/1.55 var(--serif); color: var(--ink-2); margin-top: 10px; }
+  body.eli .built { font: 400 17px/1.6 var(--serif); }
 
   /* the spreads: the paper on the verso, the plate on the recto */
   .spread { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 88px; padding: 112px 0; align-items: start; scroll-margin-top: 0; }
@@ -148,7 +165,10 @@
 
   /* the model input, set in the Model block: the parameter, a printed scale, the model's output */
   .vary { margin: -10px 0 34px; }
-  .vary .eq { display: block; margin-bottom: 10px; font: italic 400 24px/1 var(--math); white-space: nowrap; cursor: pointer; }
+  .vary .vhead { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; margin-bottom: 10px; }
+  .vary .hint { font-size: 13px; line-height: 1.35; color: var(--ink-3); max-width: 19em; text-align: right; transition: opacity .4s; }
+  .vary.touched .hint { opacity: 0; }
+  .vary .eq { display: block; font: italic 400 24px/1 var(--math); white-space: nowrap; cursor: pointer; }
   .vary .eq output { font-style: normal; font-variant-numeric: tabular-nums; }
   .vary .eq sub { font-size: .62em; }
   .vary input, .scrub input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer; }
@@ -165,7 +185,7 @@
   .vary .marks button:last-child::before { left: 100%; }
   .vary .marks button:hover, .vary .marks .real { color: var(--ink); }
   .vary figure { margin: 16px 0 0; }
-  .vary canvas { display: block; width: 100%; height: auto; background: #f6eedc; box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 12px 22px -16px rgba(40,24,8,.5); transition: opacity .3s; }
+  .vary canvas { display: block; width: 100%; height: auto; background: #f6eedc 0 0 / 100% 100% no-repeat; box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 12px 22px -16px rgba(40,24,8,.5); transition: opacity .3s; }
   .vary.wait canvas { opacity: .55; }
   .vary figcaption { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-top: 10px; min-height: 40px; font: 400 14px/1.45 var(--serif); color: var(--ink-2); }
   .vary figcaption sub { font-size: .7em; }
@@ -194,29 +214,18 @@
   @keyframes rise { to { opacity: 1; filter: blur(0); transform: none; } }
   @media (prefers-reduced-motion: reduce) { .rise { animation: none; opacity: 1; filter: none; transform: none; } html { scroll-behavior: auto; } }
 
-  /* short screens: a tighter hero so the row of ten still shows */
-  @media (max-height: 820px) and (min-width: 901px) {
-    .hero { padding: 22px 0 18px; }
-    .hero h1 { font-size: clamp(30px, 3.1vw, 44px); margin: 14px 0 16px; }
-    .hero p.lede { font-size: 16px; margin-bottom: 16px; }
-    .live-note { margin-bottom: 14px; }
-    .hero .copy { padding-bottom: 2vh; }
-  }
   @media (max-width: 1080px) {
     .bar ol .nm, .bar ol a[aria-current] .nm { display: none; }
     .bar ol a { padding: 6px 7px; }
-    .hero { gap: 40px; }
-    .hero figcaption { flex-direction: column; gap: 4px; }
-    .contents ol { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .cabinet { gap: 28px 20px; }
+    .intro { padding-right: 8px; }
     .spread, .method { grid-template-columns: 1fr; gap: 40px; padding: 72px 0; }
     .recto { max-width: 520px; position: static; order: -1; }
     .nums { grid-template-columns: repeat(2, auto); }
   }
   @media (max-width: 900px) {
-    .hero { grid-template-columns: 1fr; gap: 28px; padding-top: 28px; }
-    .hero .copy { align-self: auto; padding-bottom: 0; }
-    .hero figure { order: -1; }
-    .hero-plate { height: min(60svh, calc((100vw - 80px) * 1.25)); width: auto; max-width: 100%; margin: 0 auto; }
+    .cabinet { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 40px; }
+    .intro { padding: 0 0 8px; }
   }
   @media (max-width: 560px) {
     .bar .side { display: none; }
@@ -225,14 +234,9 @@
     .wrap { padding: 0 22px; }
     .verso h2, .method h2 { font-size: 36px; }
     .formula { --fs: 21px !important; }
-    .hero figure { order: -1; }
-    .hero h1 { line-height: 1.06; }
-    /* the plate leaves the title and a row of the other nine in the first screen */
-    .hero-plate { height: min(54svh, calc((100vw - 44px) * 1.25)); width: auto; max-width: 100%; margin: 0 auto; }
-    .hero figcaption { display: none; }
-    .contents .head p { display: none; }
-    .contents ol { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 12px -22px 0; padding: 0 22px 8px; scrollbar-width: none; }
-    .contents li { flex: 0 0 27%; scroll-snap-align: start; }
+    .cabinet { gap: 22px 14px; padding-top: 28px; }
+    .cell .nm { font-size: 14.5px; }
+    .cell .in { margin-left: 0; font-size: 14px; }
     .vary .marks { height: 42px; }
     .vary .marks button:nth-child(even) { top: 17px; }
     .vary figcaption { flex-direction: column; align-items: flex-start; }
@@ -243,28 +247,16 @@
 <div class="ground" aria-hidden="true"></div>
 <nav class="bar" id="bar" aria-label="Plates"><div class="wrap"><a class="home" href="#">Math-Animals</a><ol id="barlist"></ol><a class="side" href="#method">Method</a></div></nav>
 <div class="wrap">
-  <header class="hero">
-    <div class="copy">
-      <div class="eyebrow rise" style="animation-delay:.05s">Math-Animals</div>
-      <h1 class="rise" style="animation-delay:.15s">Ten animals rendered from published models of their form</h1>
-      <p class="lede rise" style="animation-delay:.45s">Claude Code (Opus 5.5) read the source papers, implemented each model in Canvas 2D, and rendered the animal from the model’s output. The pages use no image files. Each plate draws its construction next to the form, and its notes cite every parameter.</p>
-      <div class="live-note rise wait" id="hero-line" style="animation-delay:.6s"><span class="dot done" id="hero-dot"></span><span id="hero-note"></span></div>
-      <div class="actions rise" style="animation-delay:.7s">
-        <a class="btn" href="#plates">Plates</a>
-        <button class="btn ghost" id="hero-replay" disabled>Replay</button>
-        <a class="btn ghost" href="https://github.com/r3al1tym/math-animals">Code</a>
-      </div>
+  <!-- the cabinet: the ten plates lead, the title set into the grid as one more drawer's worth -->
+  <header class="cabinet" id="top">
+    <div class="intro rise" style="animation-delay:.05s">
+      <div class="eyebrow">Math-Animals</div>
+      <h1>Ten animals rendered from published models of their form</h1>
+      <p class="lede">Claude Code (Opus 5.5) read the source papers, implemented each model in Canvas 2D, and rendered the animal from the model’s output, with no image files. Every plate computes in your browser, and each one lets you change an input of its model and watch the animal regrow.</p>
+      <div class="actions"><a class="btn" href="#honeybee">Open plate 1</a><a class="btn ghost" href="#method">Method</a><a class="btn ghost" href="https://github.com/r3al1tym/math-animals">Code</a></div>
     </div>
-    <figure class="rise" style="animation-delay:.1s">
-      <div class="live hero-plate" id="hero-live"><div class="inner"><img src="images/plates/03-dragonfly-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div><div class="grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span><span class="bar"></span></div></div>
-      <figcaption><span>Plate 3. Emperor dragonfly, after Hoffmann et al., <i>PNAS</i> (2018)</span><span class="eq">p ∈ V<sub>s</sub> ⇔ |p − s| ≤ |p − o|</span></figcaption>
-    </figure>
+    <ol class="cells" id="toc"></ol>
   </header>
-
-  <nav class="contents" aria-label="Plates">
-    <div class="head"><div class="eyebrow">Ten plates</div><p>Each plate computes in your browser. Open one to run its model, then change its input.</p></div>
-    <ol id="toc"></ol>
-  </nav>
 
   <main id="plates"></main>
 
@@ -304,49 +296,49 @@ const grainTile = () => {
 grainTile();
 const GH = 'https://github.com/r3al1tym/math-animals/blob/main/', HERO = 5.2;
 const P = [
-  { d: '01-honeybee', ms: 2400, run: "Ray-casting the wax cells", nm: 'Honeybee comb', bin: 'Apis mellifera Linnaeus, 1758', tx: 'Hymenoptera',
+  { d: '01-honeybee', ms: 2400, run: "Ray-casting the wax cells", eli: {"finding": "Say you want to split a flat surface into rooms of equal size and use as little wall as possible. Hexagons win, which is why bees save wax by building them. Thomas Hales proved it in 2001.", "model": "The formula gives how much wall each shape needs around a room of the same size: triangles need the most, squares less, hexagons the least.", "built": "The page starts with a crowd of round wax cells packed side by side. Like soap bubbles, they push on each other until their walls go straight and the circles turn into hexagons. Then it lights each cell as a little tube of wax."}, nm: 'Honeybee comb', bin: 'Apis mellifera Linnaeus, 1758', tx: 'Hymenoptera',
     paper: ['T. C. Hales', 'The honeycomb conjecture', '<i>Discrete &amp; Computational Geometry</i> 25 (2001)'],
     finding: 'Of all the ways to divide a plane into cells of equal area, the regular hexagon uses the least wall.',
     f: 'P<sub>n</sub> = √(4n · tan(π/n))', f2: 'wall per unit cell: triangle 4.559, square 4.000, hexagon 3.722',
     built: 'A band of 5.3 mm circles relaxes into hexagons, as warm wax is proposed to flow (Karihaloo, Zhang and Wang, 2013). Each cell is then ray-cast as a prism of wax under a 0.3 mm coping, on a base of three rhombi.',
     vary: {"key": "angle", "sym": "<i>α</i>", "value": 120, "real": 120, "min": 60, "max": 120, "step": 30, "scale": "lin", "w": 480, "h": 160, "marks": [[60, "triangles"], [90, "squares"], [120, "hexagons"]], "noun": "comb", "idle": "Move <i>α</i>, the cell’s corner angle in degrees, to tile the plane with other cells.", "cap": "Cells of the worker cell’s area with corners of <i>α</i> = {v}°{real}, at 1.5 x: walls in pencil, and in grey the corners their circles leave.", "realNote": ", the bees’ hexagons", "unit": "°"} },
-  { d: '02-sea-urchin', ms: 3200, run: "Laying plates down each column", nm: 'Edible sea urchin', bin: 'Echinus esculentus Linnaeus, 1758', tx: 'Echinoidea',
+  { d: '02-sea-urchin', ms: 3200, run: "Laying plates down each column", eli: {"finding": "A sea urchin’s shell is built from small plates in 20 columns, which come in 10 pairs: five narrow pairs with holes for the urchin’s tube feet, and five wide pairs in between.", "model": "Draw one slice of the shell, then copy it around the circle, turning it 72° each time, the way you would cut a pie into five pieces.", "built": "The page lays out the plates of one slice down a dome, then turns that slice four more times to close the shell."}, nm: 'Edible sea urchin', bin: 'Echinus esculentus Linnaeus, 1758', tx: 'Echinoidea',
     anatomy: 'From the anatomy of the Echinidae test',
     finding: 'The test is twenty columns of plates in ten double areas: five narrow ambulacra, pierced for the tube feet, alternating with five broad interambulacra.',
     f: 'φ<sub>j</sub> = θ − j · 72°', f2: 'five-fold symmetry: one sector, turned four times, j = 0 … 4',
     built: 'One sector of plates is laid by arc length down a superellipse dome 140 mm across and 108 mm tall, then turned four times about the apex.',
     vary: {"key": "n", "sym": "<i>n</i>", "value": 5, "real": 5, "min": 3, "max": 8, "step": 1, "scale": "lin", "w": 440, "h": 110, "marks": [[4, "four"], [5, "five"], [6, "six"], [7, "seven"]], "noun": "test", "idle": "Move <i>n</i> to lay the plates in another number of sectors.", "cap": "The test peeled flat at <i>n</i> = {v}: each row a circle of latitude, from under the apical disc to the ambitus, as long as that circle is.", "realNote": ", as in <i>Echinus</i>"} },
-  { d: '03-dragonfly', ms: 2300, run: "Scattering the wings' seeds", nm: 'Emperor dragonfly', bin: 'Anax imperator Leach, 1815', tx: 'Odonata',
+  { d: '03-dragonfly', ms: 2300, run: "Scattering the wings' seeds", eli: {"finding": "The tiny cells on a dragonfly’s wing are not random. Scientists measured 232 species and found the pattern comes from “seed” points spread out evenly, with a wall wherever two seeds’ territories meet.", "model": "Every point on the wing belongs to whichever seed is closest. Do that for every point and you get cells, each one the patch nearest its seed.", "built": "The page scatters seeds over the wing and gives each one the patch closest to it, which makes 2,611 cells. Every wall sits exactly halfway between two seeds."}, nm: 'Emperor dragonfly', bin: 'Anax imperator Leach, 1815', tx: 'Odonata',
     paper: ['J. Hoffmann, S. Donoughe, K. Li, M. K. Salcedo and C. H. Rycroft', 'A simple developmental model recapitulates complex insect wing venation patterns', '<i>PNAS</i> 115 (2018)'],
     finding: 'Measuring wing cells across 232 species of dragonflies and damselflies, they found that inhibitory centres spaced evenly between the main veins, with the small veins set where those signals are weakest, reproduce the wings.',
     f: 'p ∈ V<sub>s</sub>  ⇔  |p − s| ≤ |p − o|', f2: 'a point belongs to the cell of its nearest centre s, against every other centre o',
     built: 'The wing divides into <b>2,611 cells</b>, each wall midway between two centres. It is the only plate of the ten that passed blind review.',
     vary: {"key": "ex", "sym": "<i>d</i><sub>min</sub>/<i>d</i>", "value": 1, "real": 1, "min": 0, "max": 1, "step": 0.05, "scale": "lin", "w": 480, "h": 160, "marks": [[0, "random"], [1, "spaced"]], "noun": "wings", "idle": "Move <i>d</i><sub>min</sub> to run the model.", "cap": "A 16 mm patch of membrane whose cells shrink from root to tip, its seeds kept at least {v} <i>d</i> apart{real}, at the wing’s own density; each cell is the region nearest its seed.", "realNote": ", the minimum spacing of Hoffmann et al.’s model"} },
-  { d: '04-orb-weaver', ms: 2300, run: "Beading every capture turn", nm: 'Garden orb-weaver', bin: 'Araneus diadematus Clerck, 1757', tx: 'Araneae',
+  { d: '04-orb-weaver', ms: 2300, run: "Beading every capture turn", eli: {"finding": "A thin tube of liquid cannot stay smooth: it breaks up into drops, like water dripping from a tap. The drops end up about nine times the tube’s radius apart.", "model": "The formula says how fast each size of wobble grows on the thread. The fastest wobble wins, and it sets how far apart the drops end up.", "built": "The page works out that fastest wobble, then sets beads of glue about nine radii apart along the spider’s sticky spiral, the spacing you see on a real web."}, nm: 'Garden orb-weaver', bin: 'Araneus diadematus Clerck, 1757', tx: 'Araneae',
     paper: ['Lord Rayleigh', 'On the instability of jets', '<i>Proc. London Math. Soc.</i> 10 (1878)'],
     finding: 'A cylinder of liquid is unstable: it breaks into drops, and the fastest-growing disturbance has a wavelength of about nine radii.',
     f: 'σ² ∝ x(1 − x²) I<sub>1</sub>(x) / I<sub>0</sub>(x)', f2: 'growth rate of a disturbance of wavenumber k on a thread of radius r, x = kr; fastest at x = 0.697',
     built: 'The page solves Rayleigh’s growth rate itself and beads the glue every <b>9.01 radii</b>, 144 µm on a 16 µm coat, along an Archimedean spiral with 31 rays (web geometry from Zschokke, 1993 and 2011).',
     vary: {"key": "lam", "sym": "<i>λ</i>/<i>r</i>", "value": 9.01, "real": 9.01, "min": 4, "max": 30, "step": 0.01, "scale": "log", "w": 480, "h": 120, "marks": [[5, "stable"], [9.01, "fastest"], [18, "long"]], "noun": "web", "idle": "Move <i>λ</i> to run the model.", "cap": "1.3 mm of the glue coat at ×100, <i>r</i> = 16 µm, broken into beads every {v} <i>r</i>{real}; below 2π <i>r</i> it stays smooth.", "realNote": ", the fastest-growing ripple of the Rayleigh–Plateau instability"} },
-  { d: '05-nautilus', ms: 2600, run: "Sealing septa along the spiral", nm: 'Chambered nautilus', bin: 'Nautilus pompilius Linnaeus, 1758', tx: 'Cephalopoda',
+  { d: '05-nautilus', ms: 2600, run: "Sealing septa along the spiral", eli: {"finding": "A nautilus shell is a spiral that grows by the same amount every turn, so each turn is about three times as wide as the one inside it.", "model": "The spiral’s distance from the centre grows by the same factor every turn. For the nautilus, that factor is 3.", "built": "The shell’s 35 inner walls are all one shape, each a little bigger than the last and turned 25°. Despite the popular story, it is not a golden spiral, which would grow almost seven times every turn."}, nm: 'Chambered nautilus', bin: 'Nautilus pompilius Linnaeus, 1758', tx: 'Cephalopoda',
     paper: ['H. Moseley', 'On the geometrical forms of turbinated and discoid shells', '<i>Phil. Trans. R. Soc.</i> 128 (1838)'],
     finding: 'Measured shells widen by the same ratio every whorl, 2.83 to 3.02: the shell is a logarithmic spiral.',
     f: 'r = a e<sup>bθ</sup>', f2: 'b = 0.175, so each whorl widens by W = e<sup>2πb</sup> = 3.00',
     built: 'Thirty-five septa, each the last one scaled and turned 25°. The trial spirals below the shell compare W = 3.00 with the golden spiral’s W = φ⁴ = 6.85; 80 measured shells average <b>2.9</b> (Bartlett, 2018), so the nautilus is not a golden spiral.',
     vary: {"key": "W", "sym": "<i>W</i>", "value": 3, "real": 3, "min": 1.8, "max": 8, "step": 0.01, "scale": "log", "w": 440, "h": 220, "marks": [[2, "overlap"], [3, "touch"], [5, "open"], [6.85, "golden"]], "noun": "shell", "idle": "Move <i>W</i> to run the model.", "cap": "The half shell in section at <i>W</i> = {v}: the same first chamber grown to the same adult aperture, septa every 25°, only <i>W</i> changed.", "realNote": ", the rate measured on real shells"} },
-  { d: '06-camp-pitar', ms: 1900, run: "Writing tents along the margin", nm: 'Camp pitar', bin: 'Lioconcha castrensis (Linnaeus, 1758)', tx: 'Bivalvia',
+  { d: '06-camp-pitar', ms: 1900, run: "Writing tents along the margin", eli: {"finding": "The pattern on a shell is a recording. The clam adds shell along its edge one strip at a time, and two chemicals reacting along that edge decide where the brown goes.", "model": "This formula gives the clam’s size at each age: it grows fast while young and slows down as it gets older.", "built": "The page grows the shell outward from its tip, fast at first, with two pauses. As the edge moves, the reaction along it paints the brown “tents” row by row."}, nm: 'Camp pitar', bin: 'Lioconcha castrensis (Linnaeus, 1758)', tx: 'Bivalvia',
     paper: ['H. Meinhardt', 'The Algorithmic Beauty of Sea Shells', 'Springer (1995)'],
     finding: 'The pigment pattern on a shell is the record of a reaction–diffusion system running along the growing edge, one row for each step of growth.',
     f: 'r = r<sub>0</sub> + (1 − r<sub>0</sub>) (1 − e<sup>−ke</sup>) / (1 − e<sup>−kE</sup>)', f2: 'von Bertalanffy growth: the margin r at age e, less any pauses',
     built: 'The valve grows by accretion on that von Bertalanffy curve, fastest while young, with two growth checks. An activator–inhibitor reaction run along the lengthening mantle edge lays down its rows of <b>brown tents</b>.',
     vary: {"key": "k", "sym": "<i>k</i>", "value": 0.92, "real": 0.92, "min": 0.1, "max": 3, "step": 0.01, "scale": "log", "w": 440, "h": 200, "marks": [[0.1, "steady"], [0.92, "plate"], [3, "crowded"]], "noun": "valve", "idle": "Move <i>k</i> to run the model.", "cap": "The valve at <i>k</i> = {v}, a growth line every twelfth of its life and the two checks heavier, beside its growth curve, r against age.", "realNote": ", the curve this valve was grown on"} },
-  { d: '07-sea-fan', ms: 2300, run: "Growing 156 steps of branches", nm: 'Common sea fan', bin: 'Gorgonia ventalina Linnaeus, 1758', tx: 'Octocorallia',
+  { d: '07-sea-fan', ms: 2300, run: "Growing 156 steps of branches", eli: {"finding": "A branching shape like a sea fan grows when every branch tip reaches toward the empty space near it. Once a branch gets to a spot, that spot is used up.", "model": "At each step, a tip moves a little toward the free points around it.", "built": "The page fills the fan’s outline with 4,526 points. Branches grow toward them and use them up, and where two branches touch they join, which closes the net."}, nm: 'Common sea fan', bin: 'Gorgonia ventalina Linnaeus, 1758', tx: 'Octocorallia',
     paper: ['A. Runions, B. Lane and P. Prusinkiewicz', 'Modeling trees with a space colonization algorithm', '<i>Eurographics Workshop on Natural Phenomena</i> (2007)'],
     finding: 'A branching network grows when every tip advances toward the free space near it, and each point of space is used up once a branch reaches it.',
     f: 'v′ = v + D n̂,   n̂ ∝ Σ (s − v) / |s − v|', f2: 'each tip v steps a distance D toward the attractors s nearest it',
     built: '<b>4,526 attractor points</b> spaced 1.9 mm apart fill the fan’s outline. A fusion rule, which is not in Runions et al., joins branches where they meet and closes the mesh.',
     vary: {"key": "a", "sym": "<i>a</i>", "value": 1.9, "real": 1.9, "min": 0.8, "max": 7, "step": 0.1, "scale": "log", "w": 320, "h": 130, "marks": [[0.8, "blade"], [1.9, "net"], [7, "tree"]], "noun": "fan", "idle": "Move <i>a</i> to run the model.", "cap": "A small half-fan grown by the same rule with attractors <i>a</i> = {v} mm apart{real}, pencilled at true size and thickness.", "realNote": ", the spacing the specimen on the plate is grown at", "unit": " mm"} },
-  { d: '08-cone-shell', ms: 2900, run: 'Running 8,521 growth lines of the lip', nm: 'Textile cone', bin: 'Conus textile Linnaeus, 1758', tx: 'Gastropoda',
+  { d: '08-cone-shell', ms: 2900, run: 'Running 8,521 growth lines of the lip', eli: {"finding": "The triangles on this cone shell come from two chemicals racing along the shell’s growing edge, plus a third substance that the whole animal shares.", "model": "One chemical switches itself on; another one holds it back. Their tug-of-war makes waves that run sideways along the edge.", "built": "The page runs the scientists’ own program, one row for each growth step. Each wave leaves a slanted brown line, and when two waves crash into each other they close a triangle. The shell’s surface is the record of every row."}, nm: 'Textile cone', bin: 'Conus textile Linnaeus, 1758', tx: 'Gastropoda',
     paper: ['H. Meinhardt and M. Klingler', 'A model for pattern formation on the shells of molluscs', '<i>J. Theor. Biol.</i> 126 (1987)'],
     finding: 'An activator–inhibitor reaction along the shell’s lip, with a hormone that spreads through the whole animal, produces the cone’s cascades of triangles.',
     f: '∂a/∂t = s a² / ((s<sub>b</sub> + b)(1 + s<sub>a</sub>a²)) − r<sub>a</sub> a + D<sub>a</sub> a″', f2: 'the activator a along the lip, held in check by the inhibitor b and a global hormone',
@@ -355,13 +347,13 @@ const P = [
       marks: [[0.05, 'zigzags'], [0.1, 'triangles'], [0.22, 'beads'], [0.3, 'stripes'], [0.6, 'blank']],
       idle: 'Move <i>s</i><sub>b</sub> to run the model along the lip.', noun: 'shell',
       cap: 'The lip at <i>s</i><sub>b</sub> = {v}. One row per growth line, the newest at the foot.', realNote: ', Meinhardt’s value for <i>C. textile</i>' } },
-  { d: '09-angelfish', ms: 4200, run: "Growing the skin to 120 mm", nm: 'Semicircle angelfish', bin: 'Pomacanthus semicirculatus (Cuvier, 1831)', tx: 'Pomacanthidae',
+  { d: '09-angelfish', ms: 4200, run: "Growing the skin to 120 mm", eli: {"finding": "A young angelfish gets more stripes as it grows: new stripes appear in the gaps between the old ones, as Alan Turing’s maths of reacting chemicals predicts.", "model": "Two chemicals react and spread out through the skin. One switches stripes on; the other spreads faster and keeps the stripes apart.", "built": "The page runs the chemistry once, on the fish’s own outline, while the fish grows. It shows the same fish at four sizes as its stripes go from 3 to 13."}, nm: 'Semicircle angelfish', bin: 'Pomacanthus semicirculatus (Cuvier, 1831)', tx: 'Pomacanthidae',
     paper: ['S. Kondo and R. Asai', 'A reaction–diffusion wave on the skin of the marine angelfish <i>Pomacanthus</i>', '<i>Nature</i> 376 (1995)'],
     finding: 'As the juvenile grows, new stripes open between the old ones, as a Turing pattern on a growing skin predicts.',
     f: '∂u/∂t = f(u, v) + D<sub>u</sub> ∇²u', f2: 'two substances, u and v, react and diffuse on a skin that grows; with ∂v/∂t = g(u, v) + D<sub>v</sub> ∇²v',
     built: 'The page solves the model once, in the fish’s own outline, and shows the same fish at 20, 40, 60 and 80 mm as the stripe count goes from <b>3 to 13</b>.',
     vary: {"key": "alpha", "sym": "<i>α</i>", "value": 3, "real": 3, "min": 1, "max": 6, "step": 0.1, "scale": "lin", "w": 516, "h": 180, "marks": [[1, "labyrinth"], [3, "semicircles"]], "noun": "fish", "idle": "Move <i>α</i> to run the model.", "cap": "The same reaction at <i>α</i> = {v} on the fish grown from 20 to 60 mm, shown at 29, 42 and 60 mm at true size{real}.", "realNote": ", the page’s own assumption, which gives the juvenile’s semicircles"} },
-  { d: '10-tortoise', ms: 4300, run: "Growing nine rings per scute", nm: 'Radiated tortoise', bin: 'Astrochelys radiata (Shaw, 1802)', tx: 'Testudines',
+  { d: '10-tortoise', ms: 4300, run: "Growing nine rings per scute", eli: {"finding": "A tortoise’s shell plates grow only at their edges, and they never stretch. So every season leaves a ring, and the baby’s first plate stays in the middle.", "model": "Each new ring is the baby plate, scaled up a little more than the ring before.", "built": "The page draws the middle of each plate as the hatchling’s plate, adds nine rings around it, and lays the star pattern over the top."}, nm: 'Radiated tortoise', bin: 'Astrochelys radiata (Shaw, 1802)', tx: 'Testudines',
     anatomy: 'From how a scute grows',
     finding: 'Keratin is added only at a scute’s edges and never stretches, so every season’s outline stays on the shell as a ring around the hatchling’s own scute.',
     f: 'r<sub>k</sub> = r<sub>0</sub> (1 + 0.352 k)', f2: 'ring k is the areola r<sub>0</sub> scaled about its growth centre',
@@ -370,7 +362,15 @@ const P = [
 ];
 const $ = id => document.getElementById(id), slug = d => d.slice(3);
 
-$('toc').innerHTML = P.map((p, i) => `<li><a href="#${slug(p.d)}"><img src="images/plates/${p.d}.jpg" width="720" height="900" loading="lazy" alt=""><span class="n">PLATE ${i + 1}</span><span class="nm">${p.nm}</span></a></li>`).join('');
+// the cabinet's cells: each plate's still (the dragonfly's drawer computes live), its name, and the
+// input its model takes at the value the plate was grown at
+$('toc').innerHTML = P.map((p, i) => {
+  const c = p.vary, inp = c ? `<span class="in">${c.sym} = ${fmtV(c.value, c.step)}${c.unit || ''}<span class="knob" aria-hidden="true"></span></span>` : '';
+  const thumb = i === 2
+    ? `<div class="live" id="hero-live"><div class="inner"><img src="images/plates/${p.d}-t0.jpg" alt="An empty specimen drawer, about to draw an emperor dragonfly"><iframe title="Plate 3, computing live" tabindex="-1"></iframe></div><div class="grow cue" role="status"><span class="dot"></span><span class="lbl"></span><span class="clk"></span><span class="bar"></span></div></div>`
+    : `<img src="images/plates/${p.d}.jpg" width="720" height="900" alt="${p.nm}, rendered in code"${i > 5 ? ' loading="lazy"' : ''}>`;
+  return `<li class="cell rise" style="animation-delay:${(0.12 + i * 0.05).toFixed(2)}s"><a href="#${slug(p.d)}"><div class="thumb">${thumb}</div><div class="cap"><span class="n">${i + 1}</span><span class="nm">${p.nm}</span>${inp}</div>${i === 2 ? '<p class="note" id="hero-note"></p>' : ''}</a></li>`;
+}).join('');
 $('plates').innerHTML = P.map((p, i) => `
   <article class="spread" id="${slug(p.d)}">
     <div class="verso">
@@ -380,13 +380,13 @@ $('plates').innerHTML = P.map((p, i) => `
       <div class="fl">Source</div>
       ${p.paper ? `<div class="paper"><div class="who">${p.paper[0]}</div><div class="ttl">${p.paper[1]}</div><div class="src">${p.paper[2]}</div></div>`
                 : `<div class="paper anatomy"><div class="ttl">${p.anatomy}</div></div>`}
-      <div class="fl">Finding</div>
-      <p class="finding">${p.finding}</p>
+      <div class="fl frow"><span>Finding</span><label class="eli"><input type="checkbox" class="eli-t"><span class="sw" aria-hidden="true"></span>Explain it like I’m five</label></div>
+      <p class="finding"><span class="pro">${p.finding}</span><span class="kid">${p.eli.finding}</span></p>
       <div class="fl">Model</div>
-      <div class="formula" style="--fs:${p.f.replace(/<[^>]+>/g, '').length > 44 ? 22 : p.f.replace(/<[^>]+>/g, '').length > 30 ? 26 : 32}px">${p.f}${p.f2 ? `<small>${p.f2}</small>` : ''}</div>
+      <div class="formula" style="--fs:${p.f.replace(/<[^>]+>/g, '').length > 44 ? 22 : p.f.replace(/<[^>]+>/g, '').length > 30 ? 26 : 32}px">${p.f}<small><span class="pro">${p.f2 || ''}</span><span class="kid">${p.eli.model}</span></small></div>
       ${p.vary ? varyHTML(p) : ''}
       <div class="fl">Implementation</div>
-      <p class="built">${p.built}</p>
+      <p class="built"><span class="pro">${p.built}</span><span class="kid">${p.eli.built}</span></p>
       <div class="links"><a href="${GH + p.d}/NOTES.md">Notes and sources</a><a href="${GH + p.d}/index.html">Source code</a><a href="${p.d}/index.html?play">Page</a></div>
     </div>
     <div class="recto">
@@ -399,7 +399,7 @@ $('plates').innerHTML = P.map((p, i) => `
 $('barlist').innerHTML = P.map((p, i) => `<li><a href="#${slug(p.d)}" title="${p.nm}"><b>${i + 1}</b><span class="nm">${p.nm}</span></a></li>`).join('');
 {
   const bar = $('bar'), links = [...bar.querySelectorAll('ol a')];
-  new IntersectionObserver(([e]) => bar.classList.toggle('on', !e.isIntersecting), { rootMargin: '-60px 0px 0px 0px' }).observe(document.querySelector('.hero'));
+  new IntersectionObserver(([e]) => bar.classList.toggle('on', !e.isIntersecting), { rootMargin: '-60px 0px 0px 0px' }).observe(document.querySelector('.intro'));
   const seen = new Map();
   const io = new IntersectionObserver(es => {
     for (const e of es) seen.set(e.target.id, e.intersectionRatio);
@@ -407,6 +407,14 @@ $('barlist').innerHTML = P.map((p, i) => `<li><a href="#${slug(p.d)}" title="${p
     links.forEach(a => a.getAttribute('href') === '#' + best && r > 0 ? a.setAttribute('aria-current', 'true') : a.removeAttribute('aria-current'));
   }, { threshold: [0, 0.15, 0.3, 0.5, 0.7, 0.9] });
   document.querySelectorAll('.spread').forEach(el => io.observe(el));
+}
+
+// explain it like I'm five: every switch shows the same state, kept across visits
+{
+  const ts = [...document.querySelectorAll('.eli-t')];
+  const set = on => { document.body.classList.toggle('eli', on); ts.forEach(t => t.checked = on); try { localStorage.setItem('ma-eli', on ? '1' : ''); } catch (e) {} };
+  ts.forEach(t => t.onchange = () => set(t.checked));
+  set(localStorage.getItem('ma-eli') === '1');
 }
 
 // one live plate at a time: the still, then the page computing and building in place.
@@ -535,10 +543,10 @@ function bindScrub(L) {
 function fmtV(v, step) { const d = Math.max(0, Math.ceil(-Math.log10(step) - 1e-9)); let t = v.toFixed(d); if (d > 2 && t.endsWith('0')) t = t.slice(0, -1); return t; }
 function varyHTML(p) {
   const c = p.vary;
-  return `<div class="vary wait">
-        <div class="vrow"><label class="eq" for="v-${slug(p.d)}">${c.sym} = <output class="val">${fmtV(c.value, c.step)}${c.unit || ''}</output></label>
+  return `<div class="vary">
+        <div class="vrow"><div class="vhead"><label class="eq" for="v-${slug(p.d)}">${c.sym} = <output class="val">${fmtV(c.value, c.step)}${c.unit || ''}</output></label><span class="hint">Drag the scale or pick a mark: the preview redraws, then grow the plate at that value.</span></div>
           <div class="track"><input id="v-${slug(p.d)}" type="range" min="0" max="1" step="0.001"><div class="marks">${c.marks.map(([v, w]) => `<button type="button" data-v="${v}" tabindex="-1"${v === c.real ? ' class="real"' : ''}>${w}</button>`).join('')}</div></div></div>
-        <figure><canvas width="${c.w}" height="${c.h}"></canvas><figcaption><span class="cap">${c.idle}</span><button type="button" class="btn ghost apply"></button></figcaption></figure>
+        <figure><canvas width="${c.w}" height="${c.h}" style="background-image: url(images/vary/${p.d}.jpg)"></canvas><figcaption><span class="cap"></span><button type="button" class="btn ghost apply"></button></figcaption></figure>
       </div>`;
 }
 function bindVary(i, el, box, run) {
@@ -562,7 +570,7 @@ function bindVary(i, el, box, run) {
   const sync = () => { const off = Math.abs(cur - grown) > 1e-9 && !box.classList.contains('held') && !el.classList.contains('busy');
     ap.classList.toggle('show', off); ap.disabled = !off; if (off) ap.innerHTML = `<span>Grow the ${c.noun || 'plate'} at ${c.sym} = ${fmt(cur)}${unit}</span>`; };
   const set = v => {
-    cur = v; inp.value = toU(v); out.textContent = fmt(v) + unit; want = v;
+    cur = v; inp.value = toU(v); out.textContent = fmt(v) + unit; want = v; box.classList.add('touched'); if (!live()) box.classList.add('wait');
     if (!el.classList.contains('on') && !el.classList.contains('busy')) run('');
     sync();
     if (!busy) draw();
@@ -570,7 +578,7 @@ function bindVary(i, el, box, run) {
   inp.oninput = () => set(toV(+inp.value));
   // one column: the plate sits above its text, so bring it into view to watch it regrow
   ap.onclick = () => { grown = cur; box.classList.add('held'); sync(); if (matchMedia('(max-width: 1080px)').matches) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); run(Math.abs(cur - c.value) < c.step / 2 ? '' : '?' + new URLSearchParams({ [c.key]: fmt(cur) })); };
-  inp.value = toU(c.value); sync();
+  inp.value = toU(c.value); cap.innerHTML = capOf(c.value); sync();
   // the plate calls these as it computes and comes live
   return { live: () => { box.classList.remove('held'); sync(); want = cur; if (!busy) draw(); }, stop: () => { if (!box.classList.contains('held')) { grown = c.value; sync(); } } };
 }
@@ -582,23 +590,18 @@ document.querySelectorAll('.recto .live').forEach(el => {
   el.addEventListener('click', () => { if (!el.classList.contains('on') && !el.classList.contains('busy')) run(''); });
 });
 
-// the hero computes on arrival
-const hero = $('hero-live'), line = $('hero-line'), note = $('hero-note'), dot = $('hero-dot'), rb = $('hero-replay');
+// the dragonfly's drawer computes on arrival: its clock on the plate, the time it took under it
+const hero = $('hero-live'), note = $('hero-note');
 const cueL = hero.querySelector('.cue .lbl'), cueC = hero.querySelector('.cue .clk');
-const said = text => { note.textContent = text; line.classList.remove('wait'); };
 fit(hero);
-const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-if (still) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; said('Plate 3, final frame.'); rb.disabled = false; }
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches, final = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; };
 let heroS = 0;
 const heroGo = () => grow(hero, '03-dragonfly', {
-  ms: P[2].ms, onTick: t => { cueL.textContent = 'Computing 2,611 wing cells'; cueC.textContent = `· ${t}`; },
-  onLive: s => { heroS = s; },
-  onStop: () => { if (rb.disabled) { hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg'; said('Plate 3, final frame.'); rb.disabled = false; rb.onclick = heroGo; } },
-  onDone: L => { said(`Plate 3 computed in this browser in ${heroS.toFixed(1)} s.`); rb.disabled = false;
-    rb.onclick = () => { if (active !== L) return heroGo(); rb.disabled = true; dot.classList.remove('done'); replay(L, () => { rb.disabled = false; dot.classList.add('done'); }); }; },
+  ms: P[2].ms, onTick: t => { cueL.textContent = 'Computing'; cueC.textContent = `· ${t}`; },
+  onLive: s => { heroS = s; }, onDone: () => { note.textContent = `computed in this browser in ${heroS.toFixed(1)} s`; },
 });
-// it starts after the copy has risen, unless a plate is already running or the hero has scrolled away
-if (!still) setTimeout(() => { if (!active && hero.getBoundingClientRect().bottom > 0) heroGo(); else said('Plate 3, final frame.'), hero.querySelector('img').src = 'images/plates/03-dragonfly.jpg', rb.disabled = false, rb.onclick = heroGo; }, 900); else rb.onclick = () => { hero.querySelector('img').src = 'images/plates/03-dragonfly-t0.jpg'; rb.disabled = true; heroGo(); };
+// it starts once the cabinet has risen, unless a plate is already running or the cabinet has scrolled away
+if (still) final(); else setTimeout(() => { if (!active && hero.getBoundingClientRect().bottom > 0) heroGo(); else final(); }, 900);
 
 // a plate named in the address bar grows when you arrive at it
 const h = location.hash.slice(1), hi = P.findIndex(p => slug(p.d) === h);
